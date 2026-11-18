@@ -1,48 +1,48 @@
 @echo off
-REM WiFi Analyzer Pro - Windows 11 Install & Run
-REM Run this as Administrator
+setlocal
+REM WiFi Analyzer Pro — Windows source installer and launcher.
 
+cd /d "%~dp0"
 echo.
-echo  WiFi Analyzer Pro - Windows Setup
-echo  ===================================
-echo.
+echo  WiFi Analyzer Pro setup
+ echo =======================
 
-REM Check Python
-python --version >nul 2>&1
-IF ERRORLEVEL 1 (
-    echo [!] Python not found. Install from https://python.org or run:
-    echo     winget install Python.Python.3
-    pause
-    exit /b 1
+where node >nul 2>&1
+if errorlevel 1 (
+  echo [!] Node.js 22 or newer is required: https://nodejs.org/
+  exit /b 1
+)
+where py >nul 2>&1
+if errorlevel 1 (
+  echo [!] Python 3 is required: https://python.org/
+  exit /b 1
 )
 
-REM Check Node
-node --version >nul 2>&1
-IF ERRORLEVEL 1 (
-    echo [!] Node.js not found. Install from https://nodejs.org or run:
-    echo     winget install OpenJS.NodeJS
-    pause
-    exit /b 1
+for /f "tokens=1 delims=." %%v in ('node -p "process.versions.node"') do set NODE_MAJOR=%%v
+if %NODE_MAJOR% LSS 22 (
+  echo [!] Node.js 22 or newer is required. Current major: %NODE_MAJOR%
+  exit /b 1
 )
 
-echo [*] Installing npm dependencies...
-cd /d "%~dp0.."
-call npm install
+echo [1/4] Installing frontend dependencies...
+call npm ci --no-audit --no-fund
+if errorlevel 1 exit /b 1
 
-echo [*] Building frontend...
+echo [2/4] Building the frontend...
 call npm run build
+if errorlevel 1 exit /b 1
 
-echo [*] Copying dist to backend folder...
-xcopy /E /I /Y dist wifi_analyzer_backend\dist
+echo [3/4] Creating an isolated Python environment...
+if not exist "wifi_analyzer_backend\.venv\Scripts\python.exe" py -3 -m venv "wifi_analyzer_backend\.venv"
+call "wifi_analyzer_backend\.venv\Scripts\python.exe" -m pip install --upgrade pip
+call "wifi_analyzer_backend\.venv\Scripts\python.exe" -m pip install -r "wifi_analyzer_backend\requirements.txt"
+if errorlevel 1 exit /b 1
 
-echo [*] Installing Python dependencies...
-pip install psutil --quiet
+if exist "wifi_analyzer_backend\dist" rmdir /s /q "wifi_analyzer_backend\dist"
+xcopy /E /I /Y "dist" "wifi_analyzer_backend\dist" >nul
+if errorlevel 1 exit /b 1
 
-echo.
-echo [OK] Setup complete!
-echo [OK] Starting WiFi Analyzer Pro on http://localhost:199
-echo [OK] Open your browser to: http://localhost:199
-echo.
-
-python wifi_analyzer_backend\server.py
-pause
+echo [4/4] Starting WiFi Analyzer Pro...
+echo Open http://127.0.0.1:199 in your browser.
+echo Press Ctrl+C in this window to stop the local service.
+"wifi_analyzer_backend\.venv\Scripts\python.exe" "wifi_analyzer_backend\server.py"

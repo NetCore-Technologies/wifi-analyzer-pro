@@ -1,4 +1,4 @@
-name: Release
+name: Release binaries and container
 
 on:
   push:
@@ -7,18 +7,480 @@ on:
 
 permissions:
   contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
+    name: Build ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            os: ubuntu-24.04
+            binary: wifi-analyzer-pro
+            separator: ':'
+          - target: linux-arm64
+            os: ubuntu-24.04-arm
+            binary: wifi-analyzer-pro
+            separator: ':'
+          - target: macos-arm64
+            os: macos-15
+            binary: wifi-analyzer-pro
+            separator: ':'
+          - target: macos-x64
+            os: macos-15-intel
+            binary: wifi-analyzer-pro
+            separator: ':'
+          - target: windows-x64
+            os: windows-latest
+            binary: wifi-analyzer-pro.exe
+            separator: ';'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify release tag matches application version
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(node -p "JSON.parse(require('fs').readFileSync('package.json')).version")"
+          actual="${GITHUB_REF_NAME#v}"
+          test "$expected" = "$actual" || {
+            echo "Tag $actual does not match package.json version $expected"
+            exit 1
+          }
+      - name: Build production frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - name: Install backend packaging tools
+        run: python -m pip install -r wifi_analyzer_backend/requirements.txt pyinstaller
+      - name: Build standalone backend with embedded UI
+        shell: bash
+        env:
+          BINARY: ${{ matrix.binary }}
+          SEP: ${{ matrix.separator }}
+        run: |
+          set -euo pipefail
+          cd wifi_analyzer_backend
+          rm -rf dist build release-out
+          cp -R ../dist ./dist
+          mkdir -p build/binary release-out
+          pyinstaller --clean --noconfirm --onefile \
+            --name wifi-analyzer-pro \
+            --distpath build/binary \
+            --workpath build/work \
+            --specpath build \
+            --add-data "dist${SEP}dist" \
+            server.py
+          test -s "build/binary/${BINARY}"
+          chmod +x "build/binary/${BINARY}"
+      - name: Package macOS app bundle, DMG and portable archive
+        if: startsWith(matrix.target, 'macos-')
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ github.ref_name }}
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_P12_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd wifi_analyzer_backend
+          APP="build/staging/WiFi Analyzer Pro.app"
+          CONTENTS="$APP/Contents"
+          mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
+          cp build/binary/wifi-analyzer-pro "$CONTENTS/Resources/wifi-analyzer-pro"
+          cat > "$CONTENTS/MacOS/launch" <<'LAUNCHER'
+          #!/bin/bash
+          set -euo pipefail
+          ROOT="$(cd "$(dirname "$0")/../Resources" && pwd)"
+          APP_SUPPORT="$HOME/Library/Application Support/WiFi Analyzer Pro"
+          LOG_DIR="$HOME/Library/Logs"
+          mkdir -p "$APP_SUPPORT" "$LOG_DIR"
+          if ! curl -fsS http://127.0.0.1:199/health >/dev/null 2>&1; then
+            nohup "$ROOT/wifi-analyzer-pro" > "$LOG_DIR/WiFi Analyzer Pro.log" 2>&1 &
+            echo $! > "$APP_SUPPORT/server.pid"
+          fi
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:199/health >/dev/null 2>&1; then
+              open http://127.0.0.1:199
+              exit 0
+            fi
+            sleep 0.5
+          done
+          osascript -e 'display alert "WiFi Analyzer Pro did not start" message "Review ~/Library/Logs/WiFi Analyzer Pro.log for details."'
+          exit 1
+          LAUNCHER
+          chmod +x "$CONTENTS/MacOS/launch" "$CONTENTS/Resources/wifi-analyzer-pro"
+          cat > "$CONTENTS/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleName</key><string>WiFi Analyzer Pro</string>
+            <key>CFBundleDisplayName</key><string>WiFi Analyzer Pro</string>
+            <key>CFBundleIdentifier</key><string>com.netcoretechnologies.wifianalyzerpro</string>
+            <key>CFBundleVersion</key><string>${VERSION#v}</string>
+            <key>CFBundleShortVersionString</key><string>${VERSION#v}</string>
+            <key>CFBundleExecutable</key><string>launch</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          PLIST
+          APP_VERSION="${VERSION#v}"
+          APP_VERSION="${APP_VERSION%%-*}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $APP_VERSION" "$CONTENTS/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$CONTENTS/Info.plist"
+          if [[ -n "${APPLE_CERTIFICATE_P12_BASE64:-}" ]]; then
+            test -n "${APPLE_CERTIFICATE_P12_PASSWORD:-}" || { echo "APPLE_CERTIFICATE_P12_PASSWORD is required with the certificate"; exit 1; }
+            KEYCHAIN_PATH="$RUNNER_TEMP/wifi-analyzer-build.keychain-db"
+            KEYCHAIN_PASSWORD="$(openssl rand -hex 20)"
+            CERT_PATH="$RUNNER_TEMP/wifi-analyzer-developer-id.p12"
+            trap 'security delete-keychain "$KEYCHAIN_PATH" >/dev/null 2>&1 || true; rm -f "$CERT_PATH"' EXIT
+            security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$CERT_PATH"
+            security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$APPLE_CERTIFICATE_P12_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+            IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk -F '"' '/Developer ID Application/{print $2; exit}')"
+            test -n "$IDENTITY" || { echo "No Developer ID Application identity found in certificate"; exit 1; }
+            codesign --force --deep --options runtime --timestamp --sign "$IDENTITY" "$APP"
+            echo "[+] Signed app with Developer ID Application certificate"
+          else
+            # Ad-hoc signing is for local testing only; it is not Developer ID signing or notarisation.
+            codesign --force --deep --sign - "$APP"
+            echo "[!] No Apple Developer ID certificate configured; this DMG will not be notarised."
+          fi
+          cp ../README.md ../LICENSE build/staging/
+          tar -czf "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.tar.gz" -C build/staging "WiFi Analyzer Pro.app" README.md LICENSE
+          DMG="release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.dmg"
+          hdiutil create -volname "WiFi Analyzer Pro" -srcfolder "$APP" -ov -format UDZO "$DMG"
+          if [[ -n "${APPLE_ID:-}" || -n "${APPLE_TEAM_ID:-}" || -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" ]]; then
+            test -n "${APPLE_ID:-}" && test -n "${APPLE_TEAM_ID:-}" && test -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" || {
+              echo "APPLE_ID, APPLE_TEAM_ID and APPLE_APP_SPECIFIC_PASSWORD must all be set for notarisation"; exit 1;
+            }
+            test -n "${APPLE_CERTIFICATE_P12_BASE64:-}" || { echo "Notarisation requires a Developer ID signed app"; exit 1; }
+            xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" --wait
+            xcrun stapler staple "$DMG"
+            echo "[+] Apple notarisation accepted and ticket stapled"
+          fi
+      - name: Package Linux AppImage, DEB, ELF, installer and tarball
+        if: startsWith(matrix.target, 'linux-')
+        shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          cd wifi_analyzer_backend
+          STAGE="build/staging"
+          mkdir -p "$STAGE/appdir/usr/bin" "$STAGE/appdir/usr/share/applications" "$STAGE/deb/DEBIAN" "$STAGE/deb/usr/bin" "$STAGE/deb/usr/share/applications"
+          cp build/binary/wifi-analyzer-pro "$STAGE/appdir/usr/bin/wifi-analyzer-pro"
+          cp build/binary/wifi-analyzer-pro "$STAGE/deb/usr/bin/wifi-analyzer-pro"
+          cat > "$STAGE/launcher" <<'LAUNCHER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          BIN="$(cd "$(dirname "$0")" && pwd)/wifi-analyzer-pro"
+          if curl -fsS http://127.0.0.1:199/health >/dev/null 2>&1; then
+            xdg-open http://127.0.0.1:199 >/dev/null 2>&1 || true
+            exit 0
+          fi
+          "$BIN" "$@" &
+          PID=$!
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:199/health >/dev/null 2>&1; then
+              xdg-open http://127.0.0.1:199 >/dev/null 2>&1 || true
+              wait "$PID"
+              exit $?
+            fi
+            sleep 0.5
+          done
+          echo "WiFi Analyzer Pro failed to start; inspect the service output." >&2
+          wait "$PID"
+          LAUNCHER
+          chmod +x "$STAGE/launcher" "$STAGE/appdir/usr/bin/wifi-analyzer-pro" "$STAGE/deb/usr/bin/wifi-analyzer-pro"
+          cat > "$STAGE/appdir/wifi-analyzer-pro.desktop" <<'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=WiFi Analyzer Pro
+          Comment=Local-first wireless and network diagnostics
+          Exec=wifi-analyzer-pro
+          Terminal=false
+          Categories=Network;System;Utility;
+          DESKTOP
+          cp "$STAGE/launcher" "$STAGE/appdir/usr/bin/wifi-analyzer-pro-launcher"
+          cp "$STAGE/launcher" "$STAGE/deb/usr/bin/wifi-analyzer-pro-launcher"
+          sed -i 's/Exec=wifi-analyzer-pro/Exec=wifi-analyzer-pro-launcher/' "$STAGE/appdir/wifi-analyzer-pro.desktop"
+          cp "$STAGE/appdir/wifi-analyzer-pro.desktop" "$STAGE/deb/usr/share/applications/"
+          cp "$STAGE/appdir/wifi-analyzer-pro.desktop" "$STAGE/appdir/usr/share/applications/"
+          cat > "$STAGE/appdir/AppRun" <<'APPRUN'
+          #!/usr/bin/env bash
+          HERE="$(cd "$(dirname "$0")" && pwd)"
+          exec "$HERE/usr/bin/wifi-analyzer-pro-launcher" "$@"
+          APPRUN
+          chmod +x "$STAGE/appdir/AppRun" "$STAGE/appdir/usr/bin/wifi-analyzer-pro-launcher" "$STAGE/deb/usr/bin/wifi-analyzer-pro-launcher"
+          if [[ "$TARGET" == "linux-arm64" ]]; then
+            APPIMAGE_ARCH=aarch64
+            DEB_ARCH=arm64
+          else
+            APPIMAGE_ARCH=x86_64
+            DEB_ARCH=amd64
+          fi
+          curl -fsSL -o "$STAGE/appimagetool.AppImage" \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${APPIMAGE_ARCH}.AppImage"
+          chmod +x "$STAGE/appimagetool.AppImage"
+          APPIMAGE_EXTRACT_AND_RUN=1 ARCH="$APPIMAGE_ARCH" "$STAGE/appimagetool.AppImage" "$STAGE/appdir" \
+            "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.AppImage"
+          cat > "$STAGE/deb/DEBIAN/control" <<CONTROL
+          Package: wifi-analyzer-pro
+          Version: ${VERSION#v}
+          Section: net
+          Priority: optional
+          Architecture: ${DEB_ARCH}
+          Maintainer: NetCore Technologies
+          Description: Local-first Wi-Fi analysis and network diagnostics
+          CONTROL
+          dpkg-deb --build "$STAGE/deb" "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.deb"
+          cp build/binary/wifi-analyzer-pro "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.elf"
+          cat > "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.sh" <<'INSTALLER'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          VERSION="${WIFI_ANALYZER_VERSION:-__VERSION__}"
+          PREFIX="${WIFI_ANALYZER_PREFIX:-$HOME/.local/opt/wifi-analyzer-pro/$VERSION}"
+          BIN="$HOME/.local/bin"
+          TARGET="${WIFI_ANALYZER_TARGET:-__TARGET__}"
+          URL="https://github.com/NetCore-Technologies/wifi-analyzer-pro/releases/download/$VERSION/wifi-analyzer-pro-$VERSION-$TARGET.tar.gz"
+          TMP="$(mktemp -d)"
+          trap 'rm -rf "$TMP"' EXIT
+          curl -fsSL "$URL" -o "$TMP/package.tar.gz"
+          mkdir -p "$PREFIX" "$BIN"
+          tar -xzf "$TMP/package.tar.gz" -C "$PREFIX"
+          ln -sfn "$PREFIX/wifi-analyzer-pro" "$BIN/wifi-analyzer-pro"
+          echo "Installed WiFi Analyzer Pro to $PREFIX"
+          echo "Run: $BIN/wifi-analyzer-pro"
+          INSTALLER
+          sed -i "s/__VERSION__/${VERSION}/g" "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.sh"
+          sed -i "s/__TARGET__/${TARGET}/g" "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.sh"
+          chmod +x "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.sh"
+          cp ../README.md ../LICENSE build/staging/
+          cp build/binary/wifi-analyzer-pro build/staging/wifi-analyzer-pro
+          tar -czf "release-out/wifi-analyzer-pro-${VERSION}-${TARGET}.tar.gz" \
+            -C build/staging wifi-analyzer-pro README.md LICENSE
+          rm -f "$STAGE/appimagetool.AppImage" "release-out/wifi-analyzer-pro"
+      - name: Package Windows EXE, MSI, PowerShell and batch launchers
+        if: matrix.target == 'windows-x64'
+        shell: pwsh
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = 'wifi_analyzer_backend/build/staging'
+          $out = 'wifi_analyzer_backend/release-out'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          $exe = Join-Path $stage 'wifi-analyzer-pro.exe'
+          Copy-Item 'wifi_analyzer_backend/build/binary/wifi-analyzer-pro.exe' $exe
+          @'
+          @echo off
+          setlocal
+          set "APP=%~dp0wifi-analyzer-pro.exe"
+          if not exist "%APP%" exit /b 1
+          start "" /B powershell.exe -NoProfile -WindowStyle Hidden -Command "$u='http://127.0.0.1:199/health'; for($i=0;$i -lt 40;$i++){try{$r=Invoke-WebRequest -UseBasicParsing $u -TimeoutSec 1;if($r.StatusCode -eq 200){Start-Process 'http://127.0.0.1:199';exit}}catch{};Start-Sleep -Milliseconds 500}"
+          "%APP%" %*
+          exit /b %ERRORLEVEL%
+          '@ | Set-Content "$stage/wifi-analyzer-pro.bat" -Encoding ascii
+          @'
+          $ErrorActionPreference = 'Stop'
+          $app = Join-Path $PSScriptRoot 'wifi-analyzer-pro.exe'
+          if (-not (Test-Path $app)) { throw 'WiFi Analyzer Pro executable not found.' }
+          Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @('-NoProfile','-Command','for ($i=0; $i -lt 40; $i++) { try { Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:199/health" -TimeoutSec 1 | Out-Null; Start-Process "http://127.0.0.1:199"; exit } catch { Start-Sleep -Milliseconds 500 } }')
+          & $app @args
+          exit $LASTEXITCODE
+          '@ | Set-Content "$stage/wifi-analyzer-pro.ps1" -Encoding utf8
+          $tagVersion = $env:VERSION -replace '^v',''
+          $msiVersion = ($tagVersion -split '-', 2)[0]
+          $wixVersion = [version]$msiVersion
+          dotnet tool install --global wix --version 5.0.2
+          $env:PATH += ";$env:USERPROFILE\.dotnet\tools"
+          $wxs = @"
+          <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+            <Package Name="WiFi Analyzer Pro" Manufacturer="NetCore Technologies" Version="$wixVersion" UpgradeCode="7d1d7e2a-2b6c-4a62-83b2-f2f5f26e9a31" Scope="perUser">
+              <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+              <MediaTemplate EmbedCab="yes" />
+              <Feature Id="Main">
+                <ComponentRef Id="ApplicationFiles" />
+              </Feature>
+              <StandardDirectory Id="LocalAppDataFolder">
+                <Directory Id="INSTALLFOLDER" Name="Programs\WiFi Analyzer Pro">
+                  <Component Id="ApplicationFiles" Guid="*">
+                    <File Id="ApplicationExecutable" Source="$stage\wifi-analyzer-pro.exe" KeyPath="yes" />
+                    <File Id="ApplicationLauncher" Source="$stage\wifi-analyzer-pro.bat" />
+                    <File Id="PowerShellLauncher" Source="$stage\wifi-analyzer-pro.ps1" />
+                  </Component>
+                </Directory>
+              </StandardDirectory>
+            </Package>
+          </Wix>
+          "@
+          Set-Content 'wifi-analyzer-pro.wxs' $wxs -Encoding utf8
+          wix build wifi-analyzer-pro.wxs -arch x64 -o "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.msi"
+          Copy-Item $exe "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.exe"
+          Copy-Item "$stage/wifi-analyzer-pro.bat" "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.bat"
+          Copy-Item "$stage/wifi-analyzer-pro.ps1" "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.ps1"
+      - name: Smoke test standalone server (Linux)
+        if: startsWith(matrix.target, 'linux-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd wifi_analyzer_backend
+          ./build/binary/wifi-analyzer-pro > "$RUNNER_TEMP/wifi-analyzer-pro.log" 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:199/health >/dev/null; then ready=1; break; fi
+            sleep 0.5
+          done
+          test "$ready" -eq 1 || { cat "$RUNNER_TEMP/wifi-analyzer-pro.log"; exit 1; }
+          curl -fsS http://127.0.0.1:199/ | grep -q 'WiFi Analyzer Pro'
+      - name: Smoke test standalone server (macOS)
+        if: startsWith(matrix.target, 'macos-')
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="wifi_analyzer_backend/build/staging/WiFi Analyzer Pro.app/Contents/Resources/wifi-analyzer-pro"
+          "$BIN" > "$RUNNER_TEMP/wifi-analyzer-pro.log" 2>&1 &
+          pid=$!
+          cleanup() { kill "$pid" 2>/dev/null || true; wait "$pid" 2>/dev/null || true; }
+          trap cleanup EXIT
+          ready=0
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:199/health >/dev/null; then ready=1; break; fi
+            sleep 0.5
+          done
+          test "$ready" -eq 1 || { cat "$RUNNER_TEMP/wifi-analyzer-pro.log"; exit 1; }
+          curl -fsS http://127.0.0.1:199/ | grep -q 'WiFi Analyzer Pro'
+      - name: Smoke test standalone server (Windows)
+        if: matrix.target == 'windows-x64'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $exe = 'wifi_analyzer_backend/build/binary/wifi-analyzer-pro.exe'
+          $process = Start-Process -FilePath $exe -PassThru -NoNewWindow
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 40; $i++) {
+              try {
+                $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:199/health' -TimeoutSec 1
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch { Start-Sleep -Milliseconds 500 }
+            }
+            if (-not $ready) { throw 'Standalone Windows server did not become healthy.' }
+            $home = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:199/' -TimeoutSec 5
+            if ($home.StatusCode -ne 200 -or $home.Content -notmatch 'WiFi Analyzer Pro') { throw 'Embedded web UI smoke test failed.' }
+          } finally {
+            if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit() }
+          }
+      - name: Generate platform SHA-256 manifest
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          cd wifi_analyzer_backend/release-out
+          if [[ "${{ runner.os }}" == macOS ]]; then
+            shasum -a 256 * > "SHA256SUMS-${TARGET}.txt"
+          elif [[ "${{ runner.os }}" == Linux ]]; then
+            sha256sum * > "SHA256SUMS-${TARGET}.txt"
+          else
+            python - <<'PY'
+          import hashlib, pathlib
+          files = sorted(p for p in pathlib.Path('.').iterdir() if p.is_file() and not p.name.startswith('SHA256SUMS'))
+          pathlib.Path('SHA256SUMS-windows-x64.txt').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
+          PY
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: wifi_analyzer_backend/release-out/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish checksummed GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+      - name: Generate master SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd release-assets
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS*' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          test -s SHA256SUMS
+      - name: Attest release asset provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: 'release-assets/*'
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-assets/*
+
+  container:
+    name: Publish multi-architecture GHCR image
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Build zip
-        run: |
-          zip -r wifi-analyzer-pro-${{ github.ref_name }}.zip index.html package.json tailwind.config.js vite.config.js src/ wifi_analyzer_backend/ install_windows.bat README.md CHANGELOG.md
-
-      - name: Upload to release
-        uses: softprops/action-gh-release@v2
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
-          files: wifi-analyzer-pro-${{ github.ref_name }}.zip
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/netcore-technologies/wifi-analyzer-pro
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+      - uses: docker/build-push-action@v6
+        id: image
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          sbom: true
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign published container digest with GitHub OIDC
+        env:
+          IMAGE: ghcr.io/netcore-technologies/wifi-analyzer-pro
+          DIGEST: ${{ steps.image.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"

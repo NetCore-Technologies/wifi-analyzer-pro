@@ -1,22 +1,11 @@
-#!/bin/bash
-# WiFi Analyzer Pro - Run pre-built ARM64 binary
-# Usage: sudo bash run_arm64.sh
-# This script runs the pre-compiled standalone binary.
-# Build it first with:  bash build_arm64_binary.sh
-
+#!/usr/bin/env bash
+# Run the standalone Linux binary built by build_arm64_binary.sh.
+set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BINARY="$SCRIPT_DIR/dist/server"
-
-if [ "$EUID" -ne 0 ]; then
-  echo "[*] Re-running with sudo..."
-  exec sudo bash "$0" "$@"
-fi
-
-if [ ! -f "$BINARY" ]; then
-  echo "[!] Binary not found at $BINARY"
-  echo "[!] Run build_arm64_binary.sh first to compile the binary."
+BINARY="$SCRIPT_DIR/build/binary/wifi-analyzer-pro"
+if [[ ! -x "$BINARY" ]]; then
+  echo "[!] Binary not found: $BINARY"
+  echo "[!] Run: bash $SCRIPT_DIR/build_arm64_binary.sh"
   exit 1
 fi
-
-echo "[✓] Starting WiFi Analyzer Pro (ARM64 binary) on port 199..."
-exec "$BINARY"
+exec "$BINARY" "$@"

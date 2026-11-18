@@ -1,45 +1,36 @@
-#!/bin/bash
-# WiFi Analyzer Pro - Build standalone ARM64 binary using PyInstaller
-# Run this on your Raspberry Pi (arm64) or any Linux arm64 machine.
-# After building, copy 'dist/server' to any arm64 device and run:
-#   sudo ./server
-# No Python required on the target machine.
-
-set -e
+#!/usr/bin/env bash
+# Build a standalone Linux binary for the current Linux CPU architecture.
+set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo ""
-echo "╔══════════════════════════════════════╗"
-echo "║  WiFi Analyzer Pro - ARM64 Builder   ║"
-echo "╚══════════════════════════════════════╝"
-echo ""
-
-# ── 1. Check arch ─────────────────────────────────────────────────────────────
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 ARCH="$(uname -m)"
-echo "[i] Architecture: $ARCH"
-if [[ "$ARCH" != "aarch64" && "$ARCH" != "arm64" ]]; then
-  echo "[!] Warning: Not running on arm64 ($ARCH). Binary will match host arch."
-fi
+case "$ARCH" in
+  aarch64|arm64|x86_64) ;;
+  *) echo "[!] Unsupported architecture: $ARCH"; exit 1 ;;
+esac
 
-# ── 2. Install PyInstaller ────────────────────────────────────────────────────
-echo "[*] Installing PyInstaller and dependencies..."
-pip3 install pyinstaller psutil --quiet
+command -v node >/dev/null 2>&1 || { echo "[!] Install Node.js 22+"; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "[!] Install Python 3"; exit 1; }
+NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
+(( NODE_MAJOR >= 22 )) || { echo "[!] Node.js 22+ is required"; exit 1; }
 
-# ── 3. Build standalone binary ────────────────────────────────────────────────
-echo "[*] Compiling server.py into standalone binary..."
+cd "$ROOT_DIR"
+npm install --no-audit --no-fund
+npm run build
 cd "$SCRIPT_DIR"
-pyinstaller --onefile --name server server.py
+rm -rf dist build
+cp -R "$ROOT_DIR/dist" "$SCRIPT_DIR/dist"
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt pyinstaller
+.venv/bin/pyinstaller --clean --noconfirm --onefile \
+  --name wifi-analyzer-pro \
+  --distpath build/binary \
+  --workpath build/work \
+  --specpath build \
+  --add-data "dist:dist" \
+  server.py
 
-# ── 4. Copy dist folder next to binary ───────────────────────────────────────
-if [ -d "$SCRIPT_DIR/dist_web" ]; then
-  echo "[*] Copying web dist into binary dist folder..."
-  cp -r "$SCRIPT_DIR/dist_web" "$SCRIPT_DIR/dist/dist"
-fi
-
-echo ""
-echo "[✓] Binary built at: $SCRIPT_DIR/dist/server"
-echo "[✓] Copy the entire dist/ folder to your ARM64 device and run:"
-echo "      sudo ./server"
-echo ""
-echo "[i] Tip: place your compiled React app (npm run build output) as dist/dist/ next to the binary."
-echo ""
+echo "[+] Built: $SCRIPT_DIR/build/binary/wifi-analyzer-pro"
+echo "[+] The executable includes the web UI and Python runtime."
+echo "[+] Run ./build/binary/wifi-analyzer-pro and browse to http://127.0.0.1:199"

@@ -2,252 +2,48 @@
 
 All notable changes to WiFi Analyzer Pro are documented here.
 
----
+## [1.0.7] — Release foundation
 
-## [1.0.5] — 2026-07-16 — The Monster Release
+### Build, test and delivery
+- Add repeatable frontend build and lint checks plus Python regression tests across Python 3.10–3.13. CI, releases and source installers use npm ci against the committed lockfile.
+- Add Dependabot update groups for npm production/development packages, pip dependencies and GitHub Actions.
+- Add dependency review for pull requests.
+- Build standalone Linux x64 and ARM64, macOS ARM64, macOS Intel x64 and Windows x64 binaries.
+- Package macOS app bundles as DMG and tar.gz, Linux as AppImage/DEB/ELF/installer/tar.gz, and Windows as EXE/MSI/PowerShell/batch launchers.
+- Generate platform-specific SHA-256 manifests and a combined release checksum file.
+- Publish multi-architecture Linux container images to GHCR.
+- Add a WiFi Analyzer Pro product website with release-aware download links and GitHub Pages deployment.
+- Upgrade the React/Vite integration to `@vitejs/plugin-react` 6 for the Oxc-based Vite 8 build path.
+- Add GitHub release artifact provenance attestations, container SBOM/build provenance and keyless Cosign signing.
+- Support optional Developer ID signing and Apple notarisation when repository secrets are configured.
 
-### 🎨 UI — Complete Overhaul
-- Rewritten from scratch: animated dark theme with cyan/purple design system
-- Animated radar sweep in header during live scanning
-- Staggered card entrance animations on tab switch (Framer Motion)
-- Pulsing live status indicators with breathing glow
-- Scanning ripple animation with expanding rings
-- Animated RSSI bars with smooth width transitions
-- Smooth sidebar collapse/expand with icon-only mode
-- Toast notification system (slide-in, auto-dismiss)
-- Animated number counters on first render
-- Full mobile-responsive layout (works on phones/tablets)
-- Dark/light theme toggle (persisted to localStorage)
-- Custom accent color picker (6 presets)
-- Drag-and-drop dashboard widget layout
-- Full-screen kiosk mode (F11 or button)
-- Keyboard shortcuts (?, /, R, S, esc)
+### Dashboard fixes
+- Remove the duplicate `tips` declaration that prevented the React dashboard from compiling.
+- Connect the primary Scan action to the local scan API instead of returning a hard-coded network count.
+- Fix the live refresh closure so polling continues after the backend is detected.
+- Use the current host for local API requests rather than assuming `localhost` from a remote browser.
 
-### 📡 Wireless Analysis (new features)
-- Hidden SSID detection — finds cloaked networks via probe responses
-- DFS channel detection and warnings
-- Captive portal detection via HTTP probe
-- Mesh network detection — identifies mesh backhaul APs
-- Multi-AP grouping by BSSID prefix
-- Duplicate SSID detection
-- Rogue AP detection with Evil Twin warning
-- SSID and BSSID history tracking
-- Roaming detection and AP uptime estimation
-- Band steering analysis
-- Vendor identification via OUI lookup
-- Client count estimation
-- Beacon interval and DTIM period display
-- WPA3 SAE and WPA3 Enterprise detection
-- WiFi 7 (EHT) capability detection
-- 6 GHz band full support
+### Notes
+- The backend now avoids fabricated live observations and defaults to loopback, but it still has no built-in user authentication. Remote access must use a VPN or authenticated reverse proxy.
+- macOS builds are not Apple-notarised unless signing credentials are configured in a future release.
 
-### 📈 Signal Analytics (new features)
-- Live RSSI graph (real-time, last 60 samples)
-- Historical RSSI storage (up to 24h)
-- Packet loss graph over time
-- Latency and jitter graphs
-- Throughput graph
-- Link rate graph
-- AI signal prediction (next 10 samples)
-- Connection stability score (0–100)
-- Signal quality score (0–100)
-- Reliability score (0–100)
-- Overall health score (0–100)
+## [1.0.6] — 2026-07-16
+- Full live-data dashboard API integration for scans, system data, PHY, link statistics, diagnostics, devices and speed tests.
 
-### 🌐 Network Diagnostics (new features)
-- Full traceroute with route visualisation
-- IPv6 connectivity analysis
-- DNS benchmarking (compares multiple resolvers)
-- MTU path discovery
-- Bufferbloat testing under load
-- Per-hop latency breakdown
-
-### ⚡ Speed Testing (new features)
-- Bufferbloat testing (A/B/C/D grade)
-- Multi-server selection (global Ookla nodes)
-- Scheduled speed tests (cron-style)
-- Historical speed graphs (7/30/90 day)
-- Export results to CSV/JSON
-
-### 🖥️ System Monitoring (new features)
-- Per-core CPU graph
-- Temperature monitoring (lm-sensors / hwmon)
-- USB device enumeration
-- WiFi adapter info (chipset, driver, firmware)
-- Kernel version and OS information
-- Process monitor (top N by CPU/RAM)
-
-### 📡 PHY Information (new features)
-- MCS index and modulation scheme display
-- NSS spatial streams
-- Short guard interval detection
-- TX power and regulatory limits
-- RX sensitivity
-- Antenna chain visualisation
-
-### 🔌 Interface Monitoring (new features)
-- Per-interface RX/TX packet counts
-- Error and drop counters with trend
-- Retry counter with graph
-- Collision statistics
-- Real-time per-interface throughput graph
-
-### 🏠 Router Support (new)
-- OpenWrt LuCI API integration
-- DD-WRT remote management
-- pfSense XML-RPC integration
-- OPNsense API
-- UniFi Controller API
-- MikroTik RouterOS API
-- TP-Link Omada API
-- ASUSWRT-Merlin integration
-- GL.iNet API
-- Tomato via SSH
-
-### 📱 Device Discovery (new features)
-- OS fingerprinting via TTL and TCP stack analysis
-- IP history tracking
-- Device activity timeline
-- Signal per device (RSSI from AP)
-- Per-device bandwidth usage
-- Online/offline state change alerts
-
-### 📊 Visualization (new)
-- Coverage heatmap (signal strength overlay)
-- Channel utilisation heatmap (2.4/5/6 GHz)
-- Device relationship topology graph
-- Geographic map support (if coordinates provided)
-- Real-time animated charts everywhere
-
-### 📁 Export & Reporting (new)
-- PDF report generation (ReportLab)
-- HTML report export
-- Scheduled automated reports (email delivery)
-- Screenshot export (canvas capture)
-- Configuration backup/restore
-- Session history logging
-
-### 🔔 Alerts (new)
-- Rogue AP / Evil Twin detected
-- Weak signal threshold alert
-- High packet loss (configurable threshold)
-- High latency alert
-- New device joined / device left
-- Internet down detection
-- DNS failure alert
-- Discord webhook
-- Slack webhook
-- Email notifications (SMTP)
-- MQTT publish on events
-
-### 🤖 AI Features (new)
-- AI network health summary (LLM-powered, runs locally via API)
-- Automatic troubleshooting suggestions
-- Best channel recommendation with explanation
-- Network optimisation tips
-- Device naming suggestions
-- Connection quality prediction
-
-### 🌍 Remote Monitoring (new)
-- Multi-site monitoring dashboard
-- Raspberry Pi agent (lightweight, runs headless)
-- Remote dashboard with secure API key auth
-- Role-based access control (admin/viewer)
-- Optional cloud sync (self-hosted backend)
-- Secure WebSocket tunnel
-
-### 🧰 Advanced Networking (new)
-- Wake-on-LAN (send magic packet to any device)
-- ARP table viewer with vendor lookup
-- DHCP lease table (from router API or local)
-- DNS cache viewer
-- TCP/UDP connectivity tests
-- Service detection (HTTP, SSH, FTP, etc.)
-- SSL certificate information and expiry checker
-- Port scanning (authorised systems only — requires confirmation)
-
-### 🔌 API & Integrations (new)
-- Full REST API (OpenAPI 3.0 spec)
-- Interactive API docs at `/docs`
-- WebSocket live stream at `ws://host:199/ws/live`
-- Prometheus metrics exporter at `/metrics`
-- Grafana dashboard JSON (pre-built)
-- Home Assistant MQTT integration
-- Node-RED flow templates
-- Webhook support (any HTTP endpoint)
-- Plugin SDK (build custom panels)
-
-### 📱 Mobile App (new, beta)
-- iOS and Android companion app (React Native)
-- Live dashboard synced with backend
-- Push notifications for alerts
-- Remote scan trigger
-- Offline cached data
-
-### 🔧 Backend
-- Migrated to async FastAPI (from Flask)
-- WebSocket live push replacing polling
-- All endpoints now return structured JSON with metadata
-- Improved error handling and logging
-- Auto-reconnect logic for router APIs
-- OUI database updated (July 2026)
-
-### 🐛 Bug Fixes
-- Fixed macOS 14+ SSID permission issue
-- Fixed Windows 11 23H2 WiFi scan regression
-- Fixed Pi 5 temperature sensor path
-- Fixed channel 36 DFS false positive
-- Fixed SNR calculation on some Intel adapters
-
----
-
-## [1.0.6] - 2026-07-16
-
-### Changed
-- All panels now read from live API when backend is running — no more static demo data
-- WirelessPanel, DevicesPanel, SystemPanel, DashboardPanel, AiPanel, SpeedPanel all use real data
-- AI Features panel generates real insights from live scan, diagnostics, and device data
-- Speed Test now hits real Cloudflare endpoint and shows actual results
-- System panel shows real CPU %, RAM, disk, temp, uptime, hostname, WiFi adapter
-- Dashboard stat cards show real packet loss, latency, network count from live APIs
-- 10-second auto-refresh now updates networks, devices, and diagnostics simultaneously
-- Demo mode preserved as fallback when no WiFi card or backend is detected
+## [1.0.5] — 2026-07-16
+- Expanded wireless analytics, dashboard visualisation and device discovery panels.
 
 ## [1.0.4] — 2026-07-15
+- Rogue AP warning UI, trusted BSSID workflow and channel recommendations.
 
-- Rogue AP detection
-- Trusted SSID/BSSID management
-- Best channel recommendations
-- Packet loss history graphs
-- Device discovery improvements
-- Integrated speed test backend
-- Dashboard refresh improvements
+## [1.0.3] — 2026-07-15
+- Integrated speed testing and dashboard refinements.
 
-## [1.0.3] — 2026-07-12
+## [1.0.2] — 2026-07-14
+- Device list, ARP discovery and MAC vendor lookup.
 
-- Integrated speed test (download/upload)
-- Performance improvements
-- UI refinements
+## [1.0.1] — 2026-07-14
+- macOS Wi-Fi scanning support.
 
-## [1.0.2] — 2026-07-10
-
-- Devices tab
-- MAC vendor lookup
-- Device identification
-- Gateway highlighting
-
-## [1.0.1] — 2026-07-08
-
-- Native macOS WiFi scanning
-- system_profiler fallback for macOS 14+
-
-## [1.0.0] — 2026-07-06
-
-- Initial release
-- Live WiFi scanning (Linux, Windows, macOS, Pi)
-- AP deep scan
-- Signal metrics (RSSI, SNR, channel)
-- Security detection (WPA/WPA2/WPA3)
-- Network diagnostics
-- Glassmorphism dashboard
-- Demo mode
+## [1.0.0] — 2026-07-14
+- Initial Wi-Fi scan dashboard, signal metrics, network diagnostics and demo mode.

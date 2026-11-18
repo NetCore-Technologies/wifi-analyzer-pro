@@ -1,0 +1,11 @@
+node_modules
+dist
+wifi_analyzer_backend/dist
+wifi_analyzer_backend/build
+wifi_analyzer_backend/.venv
+.git
+.github
+tests
+*.pyc
+__pycache__
+.env

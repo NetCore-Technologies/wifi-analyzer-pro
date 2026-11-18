@@ -1,46 +1,31 @@
-#!/bin/bash
-# WiFi Analyzer Pro - One-shot setup & launch for Raspberry Pi
-# Usage: sudo bash setup.sh
-set -e
+#!/usr/bin/env bash
+# WiFi Analyzer Pro — Linux / Raspberry Pi source setup.
+set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+VENV_DIR="$SCRIPT_DIR/.venv"
 
-echo ""
-echo "╔══════════════════════════════════════╗"
-echo "║   WiFi Analyzer Pro - Setup Script   ║"
-echo "╚══════════════════════════════════════╝"
-echo ""
-
-# ── 1. Node.js ────────────────────────────────────────────────────────────────
-if ! command -v node &>/dev/null; then
-  echo "[*] Installing Node.js 18..."
-  curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-  apt-get install -y nodejs
-else
-  echo "[✓] Node.js $(node -v) found"
+command -v node >/dev/null 2>&1 || { echo "[!] Install Node.js 22 or newer: https://nodejs.org/"; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo "[!] Install Python 3."; exit 1; }
+NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
+if (( NODE_MAJOR < 22 )); then
+  echo "[!] Node.js 22 or newer is required (found $(node --version))."
+  exit 1
 fi
 
-# ── 2. npm deps + build frontend ─────────────────────────────────────────────
-echo "[*] Installing npm dependencies..."
+printf '\n[1/4] Installing frontend dependencies...\n'
 cd "$ROOT_DIR"
-npm install
-
-echo "[*] Building frontend..."
+npm ci --no-audit --no-fund
+printf '\n[2/4] Building the frontend...\n'
 npm run build
-
-echo "[*] Copying dist/ to backend folder..."
+printf '\n[3/4] Creating an isolated Python environment...\n'
+python3 -m venv "$VENV_DIR"
+"$VENV_DIR/bin/python" -m pip install --upgrade pip
+"$VENV_DIR/bin/python" -m pip install -r "$SCRIPT_DIR/requirements.txt"
 rm -rf "$SCRIPT_DIR/dist"
-cp -r "$ROOT_DIR/dist" "$SCRIPT_DIR/dist"
-
-# ── 3. Python deps ────────────────────────────────────────────────────────────
-echo "[*] Installing Python dependencies..."
-pip3 install psutil --quiet
-
-# ── 4. Launch ─────────────────────────────────────────────────────────────────
-echo ""
-echo "[✓] Setup complete!"
-echo "[✓] Starting WiFi Analyzer Pro on http://0.0.0.0:199 ..."
-echo "[✓] Open in browser: http://$(hostname -I | awk '{print $1}'):199"
-echo ""
-sudo python3 "$SCRIPT_DIR/server.py"
+cp -R "$ROOT_DIR/dist" "$SCRIPT_DIR/dist"
+printf '\n[4/4] Starting WiFi Analyzer Pro...\n'
+echo "Open http://127.0.0.1:199 in your browser."
+echo "The service binds to loopback by default. For trusted-LAN access, set WIFI_ANALYZER_HOST=0.0.0.0 and use a firewall plus an authenticated reverse proxy or VPN."
+exec "$VENV_DIR/bin/python" "$SCRIPT_DIR/server.py"

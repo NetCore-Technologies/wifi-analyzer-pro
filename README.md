@@ -1,224 +1,143 @@
 <div align="center">
 
-```
-██╗    ██╗██╗███████╗██╗     ███████╗    ███╗   ██╗███████╗████████╗
-██║    ██║██║██╔════╝██║     ██╔════╝    ████╗  ██║██╔════╝╚══██╔══╝
-██║ █╗ ██║██║█████╗  ██║     ███████╗    ██╔██╗ ██║█████╗     ██║
-██║███╗██║██║██╔══╝  ██║     ╚════██║    ██║╚██╗██║██╔══╝     ██║
-╚███╔███╔╝██║██║     ██║     ███████║    ██║ ╚████║███████╗   ██║
- ╚══╝╚══╝ ╚═╝╚═╝     ╚═╝     ╚══════╝    ╚═╝  ╚═══╝╚══════╝   ╚═╝
-                                                              PRO
-```
-
 # WiFi Analyzer Pro
 
-**The most advanced open-source WiFi diagnostic platform**
+**See the spectrum. Own your network.**
 
-[![Version](https://img.shields.io/badge/version-1.0.6-00d4ff?style=for-the-badge&logoColor=white)](https://github.com/manit6752025/wifi-analyzer-pro/releases)
-[![License](https://img.shields.io/badge/license-MIT-a855f7?style=for-the-badge)](LICENSE)
-[![Platform](https://img.shields.io/badge/Linux%20%7C%20Windows%20%7C%20macOS%20%7C%20Pi-22c55e?style=for-the-badge)](README.md)
-[![React](https://img.shields.io/badge/React-18-61dafb?style=for-the-badge&logo=react&logoColor=white)](https://reactjs.org)
-[![Python](https://img.shields.io/badge/Python-3.8%2B-f59e0b?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![HackerOne](https://img.shields.io/badge/HackerOne-irule675-ef4444?style=for-the-badge)](https://hackerone.com/irule675)
+Professional, local-first Wi-Fi visibility and network diagnostics for engineers, IT teams and power users.
 
-*Real-time WiFi diagnostic dashboard — Python backend + React frontend*
+[![Quality gates](https://github.com/NetCore-Technologies/wifi-analyzer-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/NetCore-Technologies/wifi-analyzer-pro/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/NetCore-Technologies/wifi-analyzer-pro)](https://github.com/NetCore-Technologies/wifi-analyzer-pro/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-50e3d2.svg)](LICENSE)
 
-**Built by [@manit6752025](https://github.com/manit6752025)** · [HackerOne](https://hackerone.com/irule675) · [Ko-fi](https://ko-fi.com/manit6752025)
+[Product website](https://netcore-technologies.github.io/wifi-analyzer-pro/) · [Downloads](https://github.com/NetCore-Technologies/wifi-analyzer-pro/releases) · [Source](https://github.com/NetCore-Technologies/wifi-analyzer-pro)
 
 </div>
 
 ---
 
-## What's New in v1.0.5 — The Monster Release
+## What it does
 
-> This release adds **17 major feature categories**, a completely rewritten UI with animations, mobile app, and more. This is the biggest update in the project's history.
+WiFi Analyzer Pro brings wireless observations and practical network diagnostics into one dashboard. It uses the operating system's Wi-Fi utilities and local network interfaces; the available details depend on the adapter, driver, operating system and permissions.
 
-| Category | Features Added |
+- Discover nearby access points and inspect SSID, BSSID, band, channel, signal and advertised security.
+- Compare channel occupancy and nearby networks to help investigate congestion.
+- Inspect supported PHY, interface and system information.
+- Check gateway reachability, latency, DNS resolution and packet loss where the host tools permit it.
+- Review locally visible neighbour/ARP data and vendor hints.
+- Run an explicit throughput test and export observations for troubleshooting reports.
+- Use the React dashboard locally or run it on a small Linux host such as a Raspberry Pi.
+
+The interface includes a clearly labelled demo mode for exploring the dashboard without Wi-Fi hardware. Demo observations are examples, not measurements of your network.
+
+## Downloads
+
+Get the latest version from [GitHub Releases](https://github.com/NetCore-Technologies/wifi-analyzer-pro/releases). Tagged releases build platform-specific packages and SHA-256 manifests:
+
+| Platform | Release files |
 |---|---|
-| 📡 Wireless Analysis | Live scan, AP deep scan, hidden SSID, rogue AP, Evil Twin, captive portal, mesh detection, 2.4/5/6GHz, WiFi 6/6E/7 |
-| 📈 Signal Analytics | Live RSSI graph, SNR history, packet loss, jitter, link rate, signal prediction, stability/health scores |
-| 🌐 Network Diagnostics | Traceroute, route viz, IPv4/v6, DNS bench, MTU test, gateway health, bufferbloat |
-| ⚡ Speed Testing | Download, upload, ping, jitter, bufferbloat, multi-server, scheduled tests, history |
-| 🖥️ System Monitor | CPU, RAM, temp, disk, processes, USB devices, WiFi adapter, driver, kernel info |
-| 📡 PHY Info | MCS index, NSS, channel width, guard interval, bitrate, TX power, antenna chains |
-| 🔌 Interface Monitor | RX/TX packets, errors, drops, retries, collisions, per-interface throughput |
-| 🏠 Router Support | OpenWrt, DD-WRT, pfSense, OPNsense, UniFi, MikroTik, Omada, ASUS, GL.iNet |
-| 📱 Device Discovery | MAC vendor, device type, OS fingerprint, IP history, bandwidth per device |
-| 📊 Visualization | Heatmaps, coverage maps, channel graphs, topology graph, geographic maps |
-| 📁 Export & Reports | CSV, JSON, PDF, HTML, scheduled reports, screenshots, config backup |
-| 🔔 Alerts | Rogue AP, weak signal, packet loss, email, Discord, Slack, MQTT |
-| 🤖 AI Features | AI health summary, auto troubleshooting, channel recommendation, optimization tips |
-| 🌍 Remote Monitor | Multi-site, Pi agent, remote dashboard, RBAC, cloud sync, self-hosted |
-| 🧰 Advanced Networking | WoL, ARP table, DHCP leases, DNS cache, port scan, TCP/UDP tests, SSL certs |
-| 🔌 API & Integrations | REST API, WebSocket, MQTT, Prometheus, Grafana, Home Assistant, Node-RED |
-| 📱 Mobile App | iOS + Android companion app (v1.0.5 beta) |
+| macOS Apple Silicon | DMG app bundle and portable tar.gz |
+| macOS Intel | DMG app bundle and portable tar.gz |
+| Linux x64 / ARM64 (Raspberry Pi) | AppImage, DEB, standalone ELF, installer script and tar.gz |
+| Windows x64 | EXE, MSI, PowerShell launcher and batch launcher |
 
----
+The app bundles include the Python runtime and built web interface. Python and Node.js are not required to run a published standalone binary. macOS bundles are ad-hoc signed by default and will not be accepted by Gatekeeper as notarised software. Configure the five Apple Developer ID / notarisation repository secrets used by the release workflow to produce signed and notarised macOS downloads.
 
-## Feature Showcase
+Verify a download against `SHA256SUMS` or the platform-specific `SHA256SUMS-*.txt` attached to the same release.
 
-### 📡 Wireless Analysis
+## Run from source
 
-```
-SSID                  Band    Ch    Security  Wi-Fi   RSSI    SNR    Clients  Flags
-────────────────────────────────────────────────────────────────────────────────────
-ManitNet-AX3600       5GHz    36    WPA3      Wi-Fi 6 -42dBm  45dB   8
-ManitNet-6GHz         6GHz    37    WPA3      Wi-Fi6E -45dBm  42dB   2
-Optus_5G_Home         2.4GHz  6     WPA2      Wi-Fi 5 -58dBm  28dB   3
-(hidden network)      2.4GHz  1     Open      Wi-Fi 4 -71dBm  14dB   0        ROGUE ⚠️
-```
-
-- **Live WiFi scanning** with auto-refresh
-- **Hidden SSID detection** — finds cloaked networks
-- **Evil Twin / Rogue AP warning** — Evil Twin detector with BSSID comparison
-- **WPA/WPA2/WPA3 detection** with encryption details
-- **WiFi 4/5/6/6E/7 capability detection**
-- **2.4 / 5 / 6 GHz** full band support
-- **Best channel recommendation** via congestion analysis
-- **Captive portal detection**, **mesh network detection**, **band steering analysis**
-
-### 📈 Signal Analytics
-
-```
-Signal Quality      ████████████████████░  94/100
-Connection Stability ████████████████████░  88/100
-Reliability         ████████████████████░  91/100
-Overall Health      ████████████████████░  91/100
-```
-
-Live RSSI / SNR graphs, packet loss, latency, jitter, throughput, and link rate — all charted in real time.
-
-### ⚡ Speed Test
-
-```
-Download   ████████████████████  924 Mbps
-Upload     ████████████████░░░░  421 Mbps
-Ping                             8ms
-Jitter                           1.2ms
-Bufferbloat                      A+
-```
-
-### 🤖 AI Network Health Summary
-
-> *"Your network is generally healthy with 1 critical alert. ManitNet-AX3600 (5GHz) shows excellent signal at -42 dBm with WPA3 security. Your 6GHz band is underutilised — only 2 clients on ManitNet-6GHz despite 160MHz capability. **Immediate action required:** a rogue AP is mimicking your SSID. Your AdGuard Home at 172.19.137.189 is responding with 2ms DNS latency — excellent."*
-
----
-
-## Platform Support
-
-| Platform | Live Scanning | Demo Mode | Router API | Mobile App |
-|---|---|---|---|---|
-| Linux | ✅ | ✅ | ✅ | ✅ |
-| Raspberry Pi | ✅ | ✅ | ✅ | ✅ |
-| Windows 11 | ✅ | ✅ | ✅ | ✅ |
-| macOS | ✅ | ✅ | ✅ | ✅ |
-| iOS (v1.0.5 beta) | ✅ | ✅ | ✅ | — |
-| Android (v1.0.5 beta) | ✅ | ✅ | ✅ | — |
-
----
-
-## Quick Start
-
-### Raspberry Pi (recommended)
+### Linux / Raspberry Pi
 
 ```bash
-sudo bash wifi_analyzer_backend/setup.sh
+bash wifi_analyzer_backend/setup.sh
 ```
 
-Open `http://<pi-ip>:199`
+Then open `http://127.0.0.1:199`.
 
-### Linux / macOS
+### Windows
+
+Run `install_windows.bat` from the repository root. It creates a local Python virtual environment, builds the frontend and starts the backend.
+
+### macOS
 
 ```bash
 npm install
 npm run build
-cd wifi_analyzer_backend && pip install -r requirements.txt
-sudo python3 server.py
+python3 -m venv wifi_analyzer_backend/.venv
+wifi_analyzer_backend/.venv/bin/python -m pip install -r wifi_analyzer_backend/requirements.txt
+cp -R dist wifi_analyzer_backend/dist
+wifi_analyzer_backend/.venv/bin/python wifi_analyzer_backend/server.py
 ```
 
-Open `http://localhost:199`
+Open `http://127.0.0.1:199`.
 
-### Windows 11
-
-Run `install_windows.bat` as Administrator, then open `http://localhost:199`
-
-### Demo Mode (no hardware needed)
+### Demo / frontend development
 
 ```bash
-npm install && npm run dev
+npm install
+npm run dev
 ```
 
-Works without backend — realistic fake data, all charts, all dashboards.
+The app can be explored with sample data. To run the backend in explicit demo mode:
 
----
-
-## Architecture
-
-```
-React Frontend  ←→  Python API (port 199)
-     │                    │
-     │          ┌─────────┼──────────┐
-     │          │         │          │
-  Recharts   WiFi       PHY      Diagnostics
-  Framer     Scanner   Stats     Engine
-  Motion     (iw/iwconfig/pywifi)
-     │
-  Tailwind CSS
-  Vite build
+```bash
+WIFI_ANALYZER_DEMO=1 python3 wifi_analyzer_backend/server.py
 ```
 
-## API Reference
+## API
 
-| Endpoint | Description |
+The local HTTP service currently exposes:
+
+| Route | Purpose |
 |---|---|
-| `GET /api/scan` | Live WiFi scan — SSID, BSSID, RSSI, SNR, channel, security, clients |
-| `GET /api/system` | CPU, RAM, temperature, disk, OS info |
-| `GET /api/phy` | PHY stats, MCS, bitrate, antenna chains |
-| `GET /api/link` | TX/RX packets, errors, drops, retries, throughput |
-| `GET /api/diagnostics` | Ping, DNS, traceroute, MTU, packet loss |
-| `GET /api/devices` | Connected devices, MAC vendor, gateway detection |
-| `GET /api/speedtest` | Download/upload/ping speed test |
-| `GET /api/alerts` | Active alerts feed |
-| `WS /ws/live` | WebSocket live stream (new in v1.0.5) |
-| `GET /health` | Backend health check |
+| `GET /health` | Basic server health |
+| `GET /api/has_wifi` | Wi-Fi adapter availability |
+| `GET /api/scan` | Nearby access point scan and channel counts |
+| `GET /api/system` | Host system information |
+| `GET /api/phy` | Available PHY/link details |
+| `GET /api/link` | Interface counters |
+| `GET /api/diagnostics` | Gateway, latency, DNS and packet-loss checks |
+| `GET /api/devices` | Locally visible neighbour/ARP entries |
+| `GET /api/speedtest` | Explicit throughput test |
 
-Full interactive API docs at `http://localhost:199/docs` (new in v1.0.5).
+## Security and privacy
 
----
+WiFi Analyzer Pro is intended to run close to the network being diagnosed. Network scans and system diagnostics are performed by the local host. No cloud account is required for local use.
 
-## Tech Stack
+**Important:** the current HTTP API does not provide user authentication or enterprise SSO/RBAC. Keep it on a trusted machine/network. Do not expose port `199` directly to the public internet. For team or remote access, place it behind a VPN or an authenticated reverse proxy and restrict network access. Review [SECURITY.md](SECURITY.md) before deployment.
 
-**Frontend:** React 18 · Vite · Tailwind CSS · Recharts · Framer Motion · Lucide Icons
+Only scan networks and devices you own or are authorised to assess. A Wi-Fi adapter may require OS-specific permissions for full scan details.
 
-**Backend:** Python 3.8+ · psutil · iw / iwconfig · pywifi · speedtest-cli · scapy (optional)
+## Development and quality
 
-**Integrations:** OpenWrt LuCI API · UniFi API · MikroTik RouterOS API · Prometheus · MQTT
+```bash
+npm install
+npm run lint
+npm run build
+python3 -m compileall -q wifi_analyzer_backend tests
+python3 -m unittest discover -s tests -v
+```
 
----
+Pull requests and pushes to `main` run frontend build/lint and Python regression tests across supported Python versions. Dependabot checks npm, pip and GitHub Actions dependencies. Tagged releases build desktop/server packages, platform and master SHA-256 manifests, GitHub artifact provenance attestations, and a multi-architecture GHCR image with SBOM, build provenance and keyless Cosign signature. macOS Developer ID signing and notarisation are enabled when the required repository secrets are configured.
 
-## Roadmap
 
-- [x] v1.0.0 — Initial release
-- [x] v1.0.1 — macOS scanning
-- [x] v1.0.2 — Device discovery
-- [x] v1.0.3 — Speed test
-- [x] v1.0.4 — Rogue AP, channel recommendations
-- [x] v1.0.5 — **17 feature categories, animated UI, mobile app, AI features, REST API, WebSocket**
-- [ ] v1.1.0 — Plugin SDK, multi-user remote, pcap capture
-- [ ] v2.0.0 — Electron desktop app, cloud dashboard
+### Optional macOS Developer ID signing and notarisation
 
----
+Configure these repository Actions secrets to sign and notarise the macOS DMG/app bundle:
 
-## Author
+- `APPLE_CERTIFICATE_P12_BASE64` — base64-encoded Developer ID Application certificate export.
+- `APPLE_CERTIFICATE_P12_PASSWORD` — password for that certificate export.
+- `APPLE_ID` — Apple ID used for notarisation.
+- `APPLE_TEAM_ID` — Apple Developer Team ID.
+- `APPLE_APP_SPECIFIC_PASSWORD` — app-specific password for `notarytool`.
 
-**Manit Arora** — Sydney AU
+Without these secrets, the workflow still builds the macOS binaries, but the downloads are not notarised and may require a user override at first launch.
 
-- GitHub: [@manit6752025](https://github.com/manit6752025)
-- HackerOne: [irule675](https://hackerone.com/irule675)
-- Ko-fi: [manit6752025](https://ko-fi.com/manit6752025)
+## Contributing
 
----
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports should include the OS, Python/Node versions, Wi-Fi adapter/driver and reproducible steps. Please remove SSIDs, BSSIDs, IP addresses and other private network details before attaching logs or exports.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE).

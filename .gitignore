@@ -3,6 +3,11 @@ dist/
 *.zip
 *.tar.gz
 __pycache__/
-*.pyc
+*.py[cod]
 .env
 wifi_analyzer_backend/dist/
+wifi_analyzer_backend/build/
+wifi_analyzer_backend/.venv/
+.venv/
+*.spec
+.DS_Store
