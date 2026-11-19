@@ -13,6 +13,8 @@ import {
   Moon, Sun, Menu, X, Terminal, Package, Antenna
 } from "lucide-react";
 
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
+
 const C = {
   bg: "#070b14", card: "#0c1120", card2: "#111827",
   border: "#1e2d47", borderHov: "#2a3f65",
@@ -487,7 +489,7 @@ function SpeedPanel({ speedData }) {
     let p=0;
     const t=setInterval(()=>{p+=1;setPct(p);if(p>=50)setPhase("upload");if(p>=99){clearInterval(t);}},120);
     try{
-      const r=await fetch("http://localhost:199/api/speedtest",{signal:AbortSignal.timeout(60000)});
+      const r=await fetch(`${API_BASE}/api/speedtest`,{signal:AbortSignal.timeout(60000)});
       const d=await r.json();
       clearInterval(t);setPct(100);setPhase("done");
       setRealDl(d.download);setRealUl(d.upload);setRealPing(d.ping);
@@ -736,36 +738,26 @@ function SystemPanel({ sysInfo }) {
   );
 }
 
-function AiPanel({ networks: netsProp, devices: devsProp, diag, sysInfo }) {
-  const nets = netsProp || NETWORKS;
-  const devs = devsProp || DEVICES;
+function AiPanel({ networks: netsProp, devices: devsProp, diag, sysInfo, isLive = false }) {
+  const nets = isLive ? (netsProp || []) : [];
+  const devs = isLive ? (devsProp || []) : [];
   const best = nets.length ? [...nets].sort((a,b)=>b.rssi-a.rssi)[0] : null;
   const rogues = nets.filter(n=>n.rogue);
   const loss = diag?.packet_loss_pct || 0;
   const latency = diag?.latency_ms || 0;
   const score = Math.max(0, 100 - rogues.length*20 - (loss>5?15:loss>0?5:0) - (latency>100?10:0));
-  const liveInsights = [
+  const liveInsights = isLive ? [
     rogues.length>0 && {Icon:Shield, col:C.red, title:"Rogue AP Detected", body:`${rogues[0].ssid} is visible on unknown BSSID ${rogues[0].bssid}. This may be an Evil Twin attack. Do not connect.`},
     loss>5 && {Icon:Activity, col:C.yellow, title:"High Packet Loss", body:`${loss}% packet loss detected on active connection. Possible causes: interference, distance, or congestion.`},
     best && best.rssi > -50 && {Icon:Wifi, col:C.green, title:"Excellent Signal", body:`${best.ssid} reporting ${best.rssi} dBm on ${best.band}. Conditions are optimal for high-throughput transfers.`},
     latency > 100 && {Icon:Globe, col:C.yellow, title:"High Latency", body:`Gateway latency at ${latency}ms — above 100ms threshold. Check for background downloads or QoS issues.`},
     best && {Icon:ScanLine, col:C.cyan, title:"Channel Recommendation", body:`Best available channel: ${best.ch} (${best.band}). ${nets.filter(n=>n.ch===best.ch).length} APs on same channel.`},
     devs.filter(d=>!d.vendor||d.vendor==="???").length>0 && {Icon:AlertTriangle, col:C.red, title:"Unknown Device", body:`${devs.filter(d=>!d.vendor||d.vendor==="???").length} device(s) with unidentified MAC vendor detected on network.`},
-  ].filter(Boolean).slice(0,4);
-  const tips = liveInsights.length >= 2 ? liveInsights : [
-    {Icon:Wifi,    col:C.cyan,   title:"Channel Recommendation",   body:"Switch to Channel 36 (5GHz) — only 22% utilisation vs Channel 6 at 78%. Expected throughput gain: ~120 Mbps."},
-    {Icon:Shield,  col:C.red,    title:"Rogue AP Detected",        body:"DE:AD:BE:EF:00:01 is cloning ManitNet-AX3600. This is an Evil Twin attack. Isolate and investigate immediately."},
-    {Icon:Activity,col:C.yellow, title:"Stability Issue",          body:"8.3% packet loss on wlan0. Likely cause: 2.4GHz interference from Ch 6 neighbours. Enable band steering."},
-    {Icon:Zap,     col:C.green,  title:"Speed Optimisation",       body:"Enable 802.11k/v/r for roaming. Prioritise Pi 4B traffic via QoS — it handles all DNS for the network."},
+  ].filter(Boolean).slice(0,4) : [];
+  const tips = liveInsights.length ? liveInsights : [
+    {Icon:Info, col:C.cyan, title:"Awaiting live observations", body:"Connect the Wi-Fi Analyzer Pro local service to generate recommendations from measured scans and diagnostics. Demo samples are not security findings."},
   ];
-  const summaryScore = liveInsights.length >= 2 ? score : 91;
-  const isLive = liveInsights.length >= 2;
-  const tips=[
-    {Icon:Wifi,    col:C.cyan,   title:"Channel Recommendation",   body:"Switch to Channel 36 (5GHz) — only 22% utilisation vs Channel 6 at 78%. Expected throughput gain: ~120 Mbps."},
-    {Icon:Shield,  col:C.red,    title:"Rogue AP Detected",        body:"DE:AD:BE:EF:00:01 is cloning ManitNet-AX3600. This is an Evil Twin attack. Isolate and investigate immediately."},
-    {Icon:Activity,col:C.yellow, title:"Stability Issue",          body:"8.3% packet loss on wlan0. Likely cause: 2.4GHz interference from Ch 6 neighbours. Enable band steering."},
-    {Icon:Zap,     col:C.green,  title:"Speed Optimisation",       body:"Enable 802.11k/v/r on AX10000 for roaming. Prioritise Pi 4B traffic via QoS — it handles all DNS for the network."},
-  ];
+  const summaryScore = isLive && diag ? score : null;
   return (
     <div style={{...s.col,gap:14}}>
       <div className="anim-fade" style={{...s.card,background:C.purpleFaint,border:`1px solid ${C.purple}33`,animation:"borderPulse 3s ease-in-out infinite"}}>
@@ -775,7 +767,7 @@ function AiPanel({ networks: netsProp, devices: devsProp, diag, sysInfo }) {
           <Tag text="v1.0.5 NEW" col={C.purple}/>
         </div>
         <p style={{fontSize:13,color:C.textSec,lineHeight:1.75,margin:0}}>
-          Your network is <span style={{color:summaryScore>75?C.green:summaryScore>50?C.yellow:C.red,fontWeight:600}}>{summaryScore>75?"generally healthy":summaryScore>50?"moderate":"needs attention"}</span>
+          Your network is <span style={{color:summaryScore==null?C.cyan:summaryScore>75?C.green:summaryScore>50?C.yellow:C.red,fontWeight:600}}>{summaryScore==null?"awaiting live observations":summaryScore>75?"generally healthy":summaryScore>50?"moderate":"needs attention"}</span>
           {rogues.length>0&&<span> with <span style={{color:C.red,fontWeight:600}}>{rogues.length} critical alert{rogues.length>1?"s":""}</span> requiring immediate action.</span>}
           {best&&<span> {best.ssid} ({best.band}) shows signal at {best.rssi} dBm{best.sec==="WPA3"?" with WPA3 — solid":best.sec==="WPA2"?" with WPA2":" (open — insecure)"}.</span>}
           {diag&&<span> Gateway latency: {latency}ms. Packet loss: {loss}%.</span>}
@@ -869,44 +861,39 @@ export default function App() {
   const [checking,setChecking]=useState(true);
 
   useEffect(()=>{
-    async function autoDetect(){
+    let disposed=false;
+    const refreshLiveData=async()=>{
       try{
-        const r=await fetch("http://localhost:199/api/has_wifi",{signal:AbortSignal.timeout(3000)});
-        const d=await r.json();
-        if(d.has_wifi){
-          setLiveMode(true);
-          const [sr,dr,sysr,diagr]=await Promise.all([
-            fetch("http://localhost:199/api/scan"),
-            fetch("http://localhost:199/api/devices"),
-            fetch("http://localhost:199/api/system"),
-            fetch("http://localhost:199/api/diagnostics"),
-          ]);
-          const sd=await sr.json();const dd=await dr.json();
-          const syd=await sysr.json();const dg=await diagr.json();
-          if(sd.networks?.length)setLiveNets(sd.networks);
-          if(dd.devices?.length)setLiveDevs(dd.devices);
-          if(syd)setLiveSystem(syd);
-          if(dg)setLiveDiag(dg);
+        const hasResponse=await fetch(`${API_BASE}/api/has_wifi`,{signal:AbortSignal.timeout(4000)});
+        if(!hasResponse.ok)throw new Error(`Wi-Fi probe returned HTTP ${hasResponse.status}`);
+        const availability=await hasResponse.json();
+        if(!availability.has_wifi){
+          if(!disposed)setLiveMode(false);
+          return;
         }
-      }catch(_){}
-      setChecking(false);
-    }
-    autoDetect();
-    const iv=setInterval(async()=>{
-      if(!liveMode)return;
-      try{
-        const [r,dr,dg]=await Promise.all([
-          fetch("http://localhost:199/api/scan"),
-          fetch("http://localhost:199/api/devices"),
-          fetch("http://localhost:199/api/diagnostics"),
+        const responses=await Promise.all([
+          fetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(15000)}),
+          fetch(`${API_BASE}/api/devices`,{signal:AbortSignal.timeout(10000)}),
+          fetch(`${API_BASE}/api/system`,{signal:AbortSignal.timeout(5000)}),
+          fetch(`${API_BASE}/api/diagnostics`,{signal:AbortSignal.timeout(18000)}),
         ]);
-        const d=await r.json();const dd=await dr.json();const diag=await dg.json();
-        if(d.networks?.length)setLiveNets(d.networks);
-        if(dd.devices?.length)setLiveDevs(dd.devices);
-        if(diag)setLiveDiag(diag);
-      }catch(_){}
-    },10000);
-    return()=>clearInterval(iv);
+        if(responses.some(response=>!response.ok))throw new Error("One or more local API requests failed");
+        const [scanData,deviceData,systemData,diagnosticData]=await Promise.all(responses.map(response=>response.json()));
+        if(disposed)return;
+        setLiveMode(true);
+        if(Array.isArray(scanData.networks))setLiveNets(scanData.networks);
+        if(Array.isArray(deviceData.devices))setLiveDevs(deviceData.devices);
+        setLiveSystem(systemData);
+        setLiveDiag(diagnosticData);
+      }catch(_error){
+        if(!disposed)setLiveMode(false);
+      }finally{
+        if(!disposed)setChecking(false);
+      }
+    };
+    refreshLiveData();
+    const intervalId=setInterval(refreshLiveData,10000);
+    return()=>{disposed=true;clearInterval(intervalId);};
   },[]);
 
   const networks=liveNets||NETWORKS;
@@ -922,10 +909,22 @@ export default function App() {
 
   const dismissToast=id=>setToasts(t=>t.filter(x=>x.id!==id));
 
-  const scan=()=>{
+  const scan=async()=>{
     if(scanning)return;
     setScanning(true);
-    setTimeout(()=>{setScanning(false);addToast("Scan complete — 7 networks found","success");},2200);
+    try{
+      const response=await fetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(18000)});
+      if(!response.ok)throw new Error(`HTTP ${response.status}`);
+      const data=await response.json();
+      if(!Array.isArray(data.networks))throw new Error("The scan endpoint returned an invalid response");
+      setLiveNets(data.networks);
+      setLiveMode(data.source!=="demo");
+      addToast(`${data.source==="demo"?"Demo":"Live"} scan complete — ${data.networks.length} network(s) found`,data.source==="demo"?"info":"success");
+    }catch(error){
+      addToast(`Scan failed: ${error.message||"local backend unavailable"}`,"warning");
+    }finally{
+      setScanning(false);
+    }
   };
 
   const switchTab=id=>{
@@ -941,7 +940,7 @@ export default function App() {
     devices:     <DevicesPanel devices={devices}/>,
     alerts:      <AlertsPanel/>,
     system:      <SystemPanel sysInfo={liveSystem}/>,
-    ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem}/>,
+    ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem} isLive={liveMode}/>,
     phy:         <FeatureGrid title="PHY Information" badge="v1.0.5" col={C.cyan}
       features={["MCS index display","NSS spatial streams","Channel width","Short guard interval","Bitrate TX/RX","TX power (dBm)","RX sensitivity","PHY type (HT/VHT/HE/EHT)","Antenna chains","Radio capabilities","Regulatory domain","Max EIRP"]} />,
     interface:   <FeatureGrid title="Interface Monitor" badge="v1.0.5" col={C.purple}
@@ -1042,7 +1041,7 @@ export default function App() {
               <div style={{fontSize:14,fontWeight:700,color:C.text}}>{current?.label||"Dashboard"}</div>
               <div style={{fontSize:10,color:C.muted,display:"flex",alignItems:"center",gap:5}}>
                 <PulseDot col={C.green} size={6}/>
-                <span>LIVE · wlan0 · -42 dBm · SNR 45 dB</span>
+                <span>{liveMode ? `LIVE · ${liveSystem?.wifi_interface || "Wi-Fi adapter detected"}` : "DEMO DATA · no live adapter connected"}</span>
               </div>
             </div>
           </div>

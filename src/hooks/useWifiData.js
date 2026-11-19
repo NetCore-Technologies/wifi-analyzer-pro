@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-const API_BASE = window.location.port === '199'
-  ? `${window.location.protocol}//${window.location.hostname}:199`
-  : 'http://localhost:8765';
+const API_BASE = import.meta.env.VITE_API_BASE || `${window.location.protocol}//${window.location.hostname}:199`;
 
 const MOCK_NETWORKS = [
   { ssid: 'HomeNetwork_5G', bssid: 'AA:BB:CC:DD:EE:01', rssi: -48, channel: 36, band: '5GHz', frequency: 5.18, security: 'WPA3', security_detail: 'WPA3', noise: -95, snr: 47, rsrp: -48, rsrq: -8, sinr: 44, link_speed: 867, quality: 104 },
