@@ -1,9 +1,12 @@
 """Regression tests for the independently registered feature tools."""
+import hashlib
 import json
 import unittest
+from pathlib import Path
 
 from wifi_analyzer_backend.feature_plugins import catalog, run, count
 from wifi_analyzer_backend.feature_plugins.registry import FEATURE_MODULES
+from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
 
 SAMPLE = [
     {"ssid": "Lab", "bssid": "02:11:22:33:44:55", "band": "2.4GHz", "channel": 6, "rssi": -52, "security": "WPA3"},
@@ -11,8 +14,32 @@ SAMPLE = [
     {"ssid": "Guest", "bssid": "00:11:22:33:44:77", "band": "6GHz", "channel": 5, "rssi": -88, "security": "Open"},
 ]
 
+_SAMPLE_DELIVERY_REPORT = build_report_bundle({
+    "report_id": "weekly-home",
+    "title": "Sample weekly report",
+    "generated_at": "2026-11-20T09:59:00Z",
+    "sources": [{
+        "source_id": "home-health",
+        "source_type": "router_fleet_health_audit",
+        "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []}
+    }]
+})
+_SAMPLE_DELIVERY_SCHEDULE = "daily-home"
+_SAMPLE_DELIVERY_OCCURRENCE = "b" * 64
+_SAMPLE_DELIVERY_REPORT_ID = "weekly-home"
+_SAMPLE_DELIVERY_JOB_KEY = hashlib.sha256(json.dumps([
+    _SAMPLE_DELIVERY_SCHEDULE,
+    _SAMPLE_DELIVERY_OCCURRENCE,
+    _SAMPLE_DELIVERY_REPORT_ID,
+], separators=(",", ":")).encode()).hexdigest()
+_SAMPLE_DELIVERY_PAYLOAD_HASH = hashlib.sha256(json.dumps(
+    _SAMPLE_DELIVERY_REPORT,
+    ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+).encode()).hexdigest()
+
 PAYLOADS = {
     "interface_inventory": {},
+    "pcap_capture_analyzer": {"capture_base64": "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"},
     "wireless_interface_inventory": {},
     "wifi_scan": {"networks": SAMPLE, "source": "test"},
     "normalise_bssid": {"bssid": "aa-bb-cc-dd-ee-ff"},
@@ -358,6 +385,458 @@ PAYLOADS = {
         }
     }
 ,
+    "unifi_snapshot_normalizer": {
+        "captured_at": "2026-11-20T10:00:00Z",
+        "controller": {"model": "Cloud Gateway", "version": "9.0.1"},
+        "devices": [{
+            "_id": "ap-office", "mac": "00:11:22:33:44:55", "name": "Office AP",
+            "model": "U7 Pro", "state": 1,
+            "radio_table": [
+                {"radio": "ng", "channel": 6, "ht": "HT20"},
+                {"radio": "na", "channel": 36, "ht": "VHT80"}
+            ]
+        }],
+        "clients": [{
+            "mac": "aa:bb:cc:dd:ee:01", "ap_mac": "00:11:22:33:44:55",
+            "essid": "Office", "signal": -57
+        }],
+        "networks": [{
+            "_id": "network-office", "name": "Office", "vlan": 20,
+            "ip_subnet": "192.0.2.0/24"
+        }]
+    },
+    "router_scheduled_report_planner": {
+        "now": "2026-11-20T00:00:00Z",
+        "schedules": [{
+            "schedule_id": "daily-home", "report_id": "weekly-home",
+            "timezone": "Australia/Sydney", "frequency": "daily", "local_time": "18:30"
+        }],
+        "occurrences_per_schedule": 3
+    },
+    "router_webhook_subscription_router": {
+        "subscriptions": [{
+            "subscription_id": "home-health",
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "key_id": "webhook-key-01",
+            "event_types": ["router.health"],
+            "minimum_severity": "warning",
+            "site_allowlist": ["home"],
+            "maximum_events_per_batch": 100,
+            "maximum_batches": 10
+        }],
+        "events": [{
+            "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "event_type": "router.health",
+            "severity": "warning",
+            "occurred_at": "2026-11-20T10:00:00Z",
+            "site_id": "home",
+            "router_id": "openwrt-home",
+            "summary": "CPU pressure crossed warning threshold",
+            "attributes": {"observed": 90, "threshold": 85}
+        }]
+    },
+    "router_scheduled_report_delivery_package": {
+        "now": "2026-11-20T10:00:00Z",
+        "claimed_job": {
+            "id": 1,
+            "schedule_id": _SAMPLE_DELIVERY_SCHEDULE,
+            "occurrence_id": _SAMPLE_DELIVERY_OCCURRENCE,
+            "report_id": _SAMPLE_DELIVERY_REPORT_ID,
+            "job_key": _SAMPLE_DELIVERY_JOB_KEY,
+            "payload_hash": _SAMPLE_DELIVERY_PAYLOAD_HASH,
+            "status": "leased",
+            "lease_id": "00000000-0000-4000-8000-000000000001",
+            "lease_owner": "sample-worker",
+            "lease_expires_at": "2026-11-20T10:02:00Z",
+            "report_bundle": _SAMPLE_DELIVERY_REPORT
+        },
+        "webhook": {
+            "endpoint": "https://hooks.example.net/reports",
+            "allowed_hosts": ["hooks.example.net"],
+            "key_id": "sample-key",
+            "signing_secret": "sample-webhook-secret-with-at-least-32-bytes"
+        },
+        "egress_evidence": {
+            "resolution_at": "2026-11-20T09:59:55Z",
+            "connected_at": "2026-11-20T10:00:00Z",
+            "resolved_addresses": ["1.1.1.1", "2606:4700:4700::1111"],
+            "peer_ip": "1.1.1.1",
+            "connected_port": 443,
+            "tls_version": "TLSv1.3",
+            "tls_verified": True,
+            "hostname_verified": True,
+            "redirect_location": None
+        }
+    },
+    "router_scheduled_report_job_intake": {
+        "schedule_id": "daily-home",
+        "occurrence_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scheduled_at": "2026-11-20T10:05:00Z",
+        "report_bundle": build_report_bundle({
+            "report_id": "weekly-home",
+            "title": "Weekly router report",
+            "generated_at": "2026-11-20T10:00:00Z",
+            "sources": [{
+                "source_id": "health-home",
+                "source_type": "router_fleet_health_audit",
+                "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []}
+            }]
+        })
+    },
+    "router_webhook_egress_policy_verifier": {
+        "endpoint": "https://hooks.example.net/router/events",
+        "allowed_hosts": ["hooks.example.net"],
+        "resolution_at": "2026-11-20T09:59:55Z",
+        "connected_at": "2026-11-20T10:00:00Z",
+        "resolved_addresses": ["1.1.1.1", "2606:4700:4700::1111"],
+        "peer_ip": "1.1.1.1",
+        "connected_port": 443,
+        "tls_version": "TLSv1.3",
+        "tls_verified": True,
+        "hostname_verified": True,
+        "redirect_location": None
+    },
+    "router_encrypted_report_archive": {
+        "mode": "encrypt",
+        "archive_id": "sample-backup-001",
+        "created_at": "2026-11-20T10:00:00Z",
+        "passphrase": "test-only-passphrase-for-encrypted-report-backup",
+        "data": {
+            "reports": [{"report_id": "weekly-home", "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+            "alerts": [{"alert_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "status": "acknowledged"}]
+        }
+    },
+    "router_webhook_envelope_builder": {
+        "now": "2026-11-20T10:00:00Z",
+        "batch_id": "batch-sample",
+        "key_id": "router-webhook-v1",
+        "signing_secret": "test-only-secret-that-is-longer-than-thirty-two-bytes",
+        "endpoint": "https://hooks.example.net/router/events",
+        "allowed_hosts": ["hooks.example.net"],
+        "events": [{
+            "event_id": "event-sample", "event_type": "router.health.warning",
+            "severity": "warning", "occurred_at": "2026-11-20T10:00:00Z",
+            "site_id": "home", "router_id": "openwrt-home",
+            "summary": "Router health warning", "attributes": {"observed": 91, "threshold": 85}
+        }]
+    },
+    "router_audit_report_comparator": {
+        "previous": {
+                "schema_version": "1.0",
+                "report_id": "sample-before",
+                "title": "Sample router report",
+                "generated_at": "2026-11-20T09:00:00+00:00",
+                "period": {
+                        "start": None,
+                        "end": None
+                },
+                "filters": {
+                        "site_allowlist": [],
+                        "include_details": True,
+                        "maximum_findings": 10
+                },
+                "summary": {
+                        "source_count": 1,
+                        "site_count": 0,
+                        "finding_count": 0,
+                        "critical_count": 0,
+                        "warning_count": 0,
+                        "info_count": 0,
+                        "detail_count": 0,
+                        "details_truncated": False
+                },
+                "sites": [],
+                "sections": [
+                        {
+                                "source_id": "health",
+                                "source_type": "router_fleet_health_audit",
+                                "title": "Router fleet health",
+                                "status": "audited",
+                                "summary": {
+                                        "router_count": 0
+                                },
+                                "finding_count": 0,
+                                "findings_truncated": False
+                        }
+                ],
+                "findings": [],
+                "note": "This bundle contains allow-listed summaries and normalized finding evidence only. Raw snapshots, credentials, unknown fields, and untrusted source messages are not copied. Findings retain the limitations of their source audits and do not prove root cause or live reachability.",
+                "content_hash": "71a6510ce8ac63d14947641b2e9689c8ac55f6a8e3ae40464b8f543079b08154"
+        },
+        "current": {
+                "schema_version": "1.0",
+                "report_id": "sample-after",
+                "title": "Sample router report",
+                "generated_at": "2026-11-20T10:00:00+00:00",
+                "period": {
+                        "start": None,
+                        "end": None
+                },
+                "filters": {
+                        "site_allowlist": [],
+                        "include_details": True,
+                        "maximum_findings": 10
+                },
+                "summary": {
+                        "source_count": 1,
+                        "site_count": 0,
+                        "finding_count": 0,
+                        "critical_count": 0,
+                        "warning_count": 0,
+                        "info_count": 0,
+                        "detail_count": 0,
+                        "details_truncated": False
+                },
+                "sites": [],
+                "sections": [
+                        {
+                                "source_id": "health",
+                                "source_type": "router_fleet_health_audit",
+                                "title": "Router fleet health",
+                                "status": "audited",
+                                "summary": {
+                                        "router_count": 0
+                                },
+                                "finding_count": 0,
+                                "findings_truncated": False
+                        }
+                ],
+                "findings": [],
+                "note": "This bundle contains allow-listed summaries and normalized finding evidence only. Raw snapshots, credentials, unknown fields, and untrusted source messages are not copied. Findings retain the limitations of their source audits and do not prove root cause or live reachability.",
+                "content_hash": "7ba5f846dbca3a65cd1e48e1863924a382ebafb425f78a0fc8f9b059346271fa"
+        },
+        "maximum_details": 10,
+        "include_details": True
+    },
+    "router_audit_report_bundle_builder": {
+        "report_id": "weekly-home",
+        "title": "Weekly router audit",
+        "generated_at": "2026-11-20T10:00:00Z",
+        "period_start": "2026-11-19T00:00:00Z",
+        "period_end": "2026-11-20T10:00:00Z",
+        "sources": [{
+            "source_id": "fleet-home",
+            "source_type": "router_fleet_health_audit",
+            "result": {
+                "status": "audited",
+                "summary": {"router_count": 1, "site_count": 1, "critical_count": 1},
+                "routers": [{
+                    "router_id": "openwrt-home",
+                    "site_id": "home",
+                    "findings": [{
+                        "code": "resource.cpu_critical",
+                        "severity": "critical",
+                        "resource_type": "router",
+                        "resource_id": "openwrt-home",
+                        "observed": 99,
+                        "threshold": 95
+                    }]
+                }]
+            }
+        }]
+    },
+    "router_incident_alert_policy_evaluator": {
+        "generated_at": "2026-11-20T10:00:00Z",
+        "policies": [{
+            "policy_id": "router-health",
+            "match_codes": ["resource.cpu_high", "resource.cpu_critical"],
+            "minimum_severity": "warning",
+            "group_by": "router"
+        }],
+        "findings": [
+            {
+                "site_id": "home", "router_id": "openwrt-home", "adapter_id": "openwrt",
+                "code": "resource.cpu_high", "severity": "warning",
+                "resource_type": "router", "resource_id": "openwrt-home",
+                "observed": 91, "threshold": 85
+            },
+            {
+                "site_id": "branch", "router_id": "mikrotik-branch", "adapter_id": "mikrotik",
+                "code": "resource.cpu_critical", "severity": "critical",
+                "resource_type": "router", "resource_id": "mikrotik-branch",
+                "observed": 99, "threshold": 95
+            }
+        ]
+    },
+    "router_gateway_redundancy_audit": {
+        "snapshots": [
+            {
+                "router_id": "openwrt-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "openwrt",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "routes": [{
+                        "target": "0.0.0.0/0", "gateway": "192.0.2.1",
+                        "device": "wan", "metric": 10
+                    }]
+                }
+            },
+            {
+                "router_id": "mikrotik-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "mikrotik",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "routes": [{
+                        "target": "0.0.0.0/0", "gateway": "198.51.100.1",
+                        "gateway_interface": "ether1", "routing_table": "main",
+                        "distance": 1, "active": True
+                    }]
+                }
+            }
+        ]
+    },
+    "router_vlan_segmentation_audit": {
+        "snapshots": [
+            {
+                "router_id": "unifi-controller",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "unifi",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "controller": {"hostname": "unifi.office.local"},
+                    "networks": [{
+                        "id": "office", "name": "Office", "vlan_enabled": True,
+                        "vlan_id": 20, "ip_subnet": "192.0.2.0/24"
+                    }]
+                }
+            },
+            {
+                "router_id": "mikrotik-switch",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "mikrotik",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "interfaces": [{"name": "bridge", "type": "bridge"}],
+                    "vlans": [{
+                        "name": "vlan20", "interface": "bridge", "interface_known": True,
+                        "vlan_id": 20, "running": True
+                    }],
+                    "addresses": [{"interface": "vlan20", "network": "192.0.2.0/24"}]
+                }
+            }
+        ]
+    },
+    "router_route_table_audit": {
+        "snapshots": [
+            {
+                "router_id": "openwrt-gateway",
+                "site_id": "home",
+                "snapshot": {
+                    "adapter_id": "openwrt",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "interfaces": [{"interface": "lan", "ipv4_addresses": ["192.0.2.2/24"]}],
+                    "routes": [{
+                        "target": "0.0.0.0/0", "gateway": "192.0.2.1",
+                        "device": "wan", "metric": 10
+                    }]
+                }
+            },
+            {
+                "router_id": "mikrotik-branch",
+                "site_id": "branch",
+                "snapshot": {
+                    "adapter_id": "mikrotik",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "addresses": [{"interface": "ether1", "network": "198.51.100.0/24"}],
+                    "routes": [{
+                        "target": "0.0.0.0/0", "gateway": "198.51.100.1",
+                        "gateway_interface": "ether1", "routing_table": "main",
+                        "distance": 1, "active": True
+                    }]
+                }
+            }
+        ]
+    },
+    "router_client_roaming_audit": {
+        "snapshots": [{
+            "router_id": "unifi-office",
+            "site_id": "office",
+            "snapshot": {
+                "adapter_id": "unifi",
+                "captured_at": "2026-11-20T10:00:00Z",
+                "controller": {"hostname": "unifi.office.local"},
+                "associations": [{
+                    "client_mac": "AA:BB:CC:DD:EE:01",
+                    "ap_mac": "00:11:22:33:44:55",
+                    "ssid": "Office",
+                    "signal_dbm": -55,
+                    "is_wired": False
+                }]
+            }
+        }]
+    },
+    "router_subnet_overlap_audit": {
+        "snapshots": [
+            {
+                "router_id": "openwrt-gateway", "site_id": "home",
+                "snapshot": {
+                    "adapter_id": "openwrt", "captured_at": "2026-11-20T10:00:00Z",
+                    "interfaces": [{"interface": "lan", "ipv4_addresses": ["192.0.2.1/24"]}]
+                }
+            },
+            {
+                "router_id": "unifi-controller", "site_id": "home",
+                "snapshot": {
+                    "adapter_id": "unifi", "captured_at": "2026-11-20T10:00:00Z",
+                    "controller": {"hostname": "unifi.home.local"},
+                    "networks": [{"id": "lan", "name": "LAN", "ip_subnet": "192.0.2.0/24"}]
+                }
+            }
+        ]
+    },
+    "router_fleet_health_audit": {
+        "now": "2026-11-20T10:00:00Z",
+        "snapshots": [{
+            "router_id": "office-router",
+            "site_id": "office",
+            "snapshot": {
+                "adapter_id": "unifi",
+                "captured_at": "2026-11-20T09:59:00Z",
+                "controller": {"hostname": "unifi.office.local"},
+                "access_points": [{"mac": "00:11:22:33:44:55", "status": "online"}],
+                "wireless_radios": [{"ap_mac": "00:11:22:33:44:55", "radio": "na", "up": True}],
+                "associations": [{"client_mac": "AA:BB:CC:DD:EE:01", "signal_dbm": -55}]
+            }
+        }]
+    },
+    "router_snapshot_drift_report": {
+        "previous": {
+            "adapter_id": "unifi", "captured_at": "2026-11-20T09:00:00Z",
+            "access_points": [{"mac": "00:11:22:33:44:55", "name": "Office AP", "ip_address": "192.0.2.10"}],
+            "wireless_radios": [{"ap_mac": "00:11:22:33:44:55", "radio": "ng", "channel": 1}],
+            "associations": [], "networks": [{"id": "office", "name": "Office", "vlan_id": 10}]
+        },
+        "current": {
+            "adapter_id": "unifi", "captured_at": "2026-11-20T10:00:00Z",
+            "access_points": [{"mac": "00:11:22:33:44:55", "name": "Office AP", "ip_address": "192.0.2.11"}],
+            "wireless_radios": [{"ap_mac": "00:11:22:33:44:55", "radio": "ng", "channel": 6}],
+            "associations": [{"client_mac": "AA:BB:CC:DD:EE:01", "ap_mac": "00:11:22:33:44:55"}],
+            "networks": [{"id": "office", "name": "Office", "vlan_id": 20}]
+        }
+    },
+    "mikrotik_snapshot_normalizer": {
+        "captured_at": "2026-11-20T06:00:00Z",
+        "router": {"board_name": "MikroTik hAP ax3", "version": "7.17.2"},
+        "resource": {"cpu_load": "12", "free_memory": "100", "total_memory": "200"},
+        "interfaces": [{"name": "bridge", "type": "bridge", "running": True}],
+        "wireless": [{
+            "name": "wifi1", "ssid": "Lab", "band": "5ghz-ax",
+            "channel": "36", "channel_width": "80mhz", "running": True
+        }],
+        "registrations": [{
+            "mac_address": "AA:BB:CC:DD:EE:01",
+            "interface": "wifi1", "signal_strength": "-61"
+        }],
+        "addresses": [{"interface": "bridge", "address": "192.0.2.1/24"}],
+        "vlans": [{"name": "vlan20", "interface": "bridge", "vlan_id": "20"}],
+        "dhcp_leases": [{
+            "address": "192.0.2.25", "mac_address": "AA:BB:CC:DD:EE:01",
+            "status": "bound"
+        }]
+    },
     "router_agent_negotiation_audit": {
         "agent_id": "openwrt-home",
         "adapter_id": "openwrt",
@@ -377,14 +856,33 @@ PAYLOADS = {
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_eight_distinct_features_are_registered(self):
+    def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 168)
-        self.assertEqual(len(set(FEATURE_MODULES)), 168)
-        self.assertEqual(count(), 168)
-        self.assertEqual(len(entries), 168)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 168)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 169)])
+        self.assertEqual(len(FEATURE_MODULES), 188)
+        self.assertEqual(len(set(FEATURE_MODULES)), 188)
+        self.assertEqual(count(), 188)
+        self.assertEqual(len(entries), 188)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 188)
+        self.assertEqual(
+            [entry["id"] for entry in entries],
+            [f"F{i:03d}" for i in range(1, 169)]
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191"],
+        )
+
+    def test_static_feature_manifest_matches_the_registered_catalogue(self):
+        manifest_path = (
+            Path(__file__).resolve().parents[1]
+            / "wifi_analyzer_backend"
+            / "feature_plugins"
+            / "FEATURES.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        registered = {entry["slug"] for entry in catalog()}
+        manifest_slugs = {entry["slug"] for entry in manifest}
+        self.assertEqual(len(manifest), count())
+        self.assertEqual(len(manifest_slugs), len(manifest))
+        self.assertEqual(manifest_slugs, registered)
+        self.assertTrue(all(isinstance(entry.get("parameters", {}), dict) for entry in manifest))
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():

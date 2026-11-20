@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 156 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 188 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 168 distinct built-in feature tools (F001–F168), each in its own module with a stable slug and metadata.
+- ✅ 188 distinct callable feature modules (F001–F168 and F172–F191), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
@@ -66,8 +66,8 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 | ✅ | F101–F120 | Shipped: same-SSID band visibility, roaming evidence/timelines, channel-width overlap, DFS/PSC planning, Wi-Fi 7 EHT/MLO and PMF/regulatory audits | 2026-11-20 | Implemented | F001–F100 registry; 20 module-level test payloads |
 | ✅ | F121–F140 | Shipped: client association inventory, airtime/throughput fairness, QoS/DSCP, retry/PHY checks, 802.11k/v/r, TWT, DHCP/DNS/gateway checks and association diagnostics | 2026-11-20 | Implemented | F001–F120; supplied AP/controller and client measurement records |
 | 🚧 | F141–F160 | F141–F160 shipped: site inventory snapshots/comparisons, AP topology relationships and gateway-path audits, subnet correlation/capacity, gateway redundancy, floor-plan anchors/zones, topology redundancy/diffs/history, AP freshness, channel-reuse and radio-configuration standards audits, interactive topology visualisation, persistent site discovery history, stored site-to-site change reports, and consolidated site audit reporting; all deliverables in this wave are shipped | 2027-02-26 | 20 features shipped; 0 remains | SQLite history; consented local discovery |
-| 🚧 | F161–F180 | F161–F171 shipped: versioned OpenWrt read-only adapter manifest and capability negotiation, bounded credential-free snapshot normalisation, persisted authenticated agent heartbeats and stale-health reporting, retained normalised agent snapshot history and diffs, per-agent read-only scoped credentials with expiry/rotation/revocation, UUID-keyed idempotent snapshot delivery, append-only versioned negotiation audit history, deployable local OpenWrt collector with a protected retry spool, negotiated system-health telemetry for uptime/load/memory/swap, and an authenticated Router Agent Console for enrolment, health, credential lifecycle, inventory drift and negotiation audit; remaining: UniFi/MikroTik adapter contracts | 2027-04-09 | 11 features shipped; 9 remain | Authenticated API; adapter contract tests |
-| 3 | F181–F200 | Scheduled reports, alert policies, webhook delivery, report comparison and backup/restore | 2027-05-07 | 4–5 weeks | Waves 2–4; encrypted local settings |
+| 🚧 | F161–F180 | F161–F180 implementation committed: versioned OpenWrt read-only agent and scope-gated health telemetry; authenticated Router Agent Console; credential-free UniFi/MikroTik imports; cross-vendor snapshot drift, fleet health, subnet overlap, client roaming, VLAN consistency, route-table and cross-router gateway redundancy audits | 2026-11-20 | 20 implemented; final Python matrix and frontend verification pending | Authenticated API; offline adapter contracts; bounded schema validation |
+| 🚧 | F181–F200 | F181–F191 shipped: local incident policy evaluation; hashed report bundles/comparison; timezone-aware schedule preview; signed webhook envelopes; encrypted backups; DNS/TLS egress evidence; durable SQLite report outbox; lease-verified delivery packages; bounded subscription routing; offline PCAP/PCAPNG analysis with radiotap RF metrics; remaining: autonomous worker orchestration, notification delivery and live capture interface controls | 2027-05-07 | 11 deliverables shipped; 9 remain | F182 report schema; F184 occurrence IDs; F188 job queue; F185 signing; F187 egress verification |
 
 ### Longer-range direction (F201–F1100)
 

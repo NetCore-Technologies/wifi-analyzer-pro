@@ -79,6 +79,7 @@ jobs:
           cp -R ../dist ./dist
           mkdir -p build/binary release-out
           pyinstaller --clean --noconfirm --onefile \
+            --collect-submodules feature_plugins \
             --name wifi-analyzer-pro \
             --distpath build/binary \
             --workpath build/work \
@@ -359,6 +360,8 @@ jobs:
           done
           test "$ready" -eq 1 || { cat "$RUNNER_TEMP/wifi-analyzer-pro.log"; exit 1; }
           curl -fsS http://127.0.0.1:199/ | grep -q 'WiFi Analyzer Pro'
+          python wifi_analyzer_backend/smoke_test_frozen_features.py
+          python smoke_test_frozen_features.py
       - name: Smoke test standalone server (macOS)
         if: startsWith(matrix.target, 'macos-')
         shell: bash
@@ -394,6 +397,7 @@ jobs:
             if (-not $ready) { throw 'Standalone Windows server did not become healthy.' }
             $home = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:199/' -TimeoutSec 5
             if ($home.StatusCode -ne 200 -or $home.Content -notmatch 'WiFi Analyzer Pro') { throw 'Embedded web UI smoke test failed.' }
+            python wifi_analyzer_backend/smoke_test_frozen_features.py
           } finally {
             if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit() }
           }

@@ -1,4 +1,4 @@
-# 168 WiFi Analyzer Pro feature tools
+# 188 WiFi Analyzer Pro feature tools (F001–F168, F172–F191)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -188,3 +188,42 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 - SNR is calculated only if a real noise measurement is present.
 - Vendor identification uses a small bundled OUI subset and may return Unknown.
 - DNS and TLS probes perform read-only lookups/connections to the host provided in the tool input.
+
+| F172 | UniFi controller snapshot normalizer (`unifi_snapshot_normalizer`) | Router integrations | Import bounded, caller-supplied UniFi Network exports into the common AP, radio, client and network schema; omit secrets and make no controller connection. |
+| F173 | MikroTik RouterOS snapshot normalizer (`mikrotik_snapshot_normalizer`) | Router integrations | Import bounded RouterOS exports covering board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; omit secrets and make no router connection. |
+
+| F174 | Multi-vendor router snapshot drift report (`router_snapshot_drift_report`) | Router integrations | Compare OpenWrt, UniFi or MikroTik normalized snapshots using stable record identities and bounded allow-listed changes; reject mixed vendors and omit unknown/secret fields. |
+
+| F175 | Multi-vendor router fleet health audit (`router_fleet_health_audit`) | Router integrations | Audit normalized OpenWrt, UniFi and MikroTik snapshots for stale data, measured CPU/memory pressure, down interfaces/radios, offline APs and weak clients; unknown telemetry remains unknown. |
+
+| F176 | Multi-vendor router subnet overlap audit (`router_subnet_overlap_audit`) | Router integrations | Correlate normalized OpenWrt interface, UniFi network and MikroTik address CIDRs within each site; report duplicate or overlapping IPv4/IPv6 ranges across routers. |
+
+| F177 | Multi-vendor client roaming audit (`router_client_roaming_audit`) | Router integrations | Build normalized OpenWrt, UniFi and MikroTik client association timelines; identify observed AP handoffs, short multi-AP windows and weak measured RSSI while excluding wired clients. |
+
+| F178 | OpenWrt and MikroTik route-table audit (`router_route_table_audit`) | Router integrations | Inspect normalized route tables, default routes, duplicates, routing tables and connected prefixes; flag questionable defaults and unmatched gateway prefixes without assuming recursive routes are unreachable. |
+
+| F179 | Multi-vendor VLAN segmentation audit (`router_vlan_segmentation_audit`) | Router integrations | Compare normalized UniFi network profiles and MikroTik VLAN interfaces within each site; identify inconsistent subnets/names, duplicate VLAN IDs, unknown parents and down interfaces. |
+
+| F180 | Cross-router default-gateway redundancy audit (`router_gateway_redundancy_audit`) | Router integrations | Compare configured OpenWrt/MikroTik default routes by site, IP family and routing table; distinguish single-router paths, shared next hops, multiple configured paths and unknown activation without claiming failover is proven. |
+
+| F181 | Router incident alert policy evaluator (`router_incident_alert_policy_evaluator`) | Router operations | Apply site/adapter/code/severity/occurrence policies to normalized audit findings and generate deterministic new, ongoing, acknowledged and resolved alert candidates without sending notifications. |
+
+| F182 | Router audit report bundle builder (`router_audit_report_bundle_builder`) | Router operations | Combine F174–F181 audit results into a versioned, site-filterable, credential-free JSON report with severity rollups, bounded findings and a deterministic SHA-256 content hash. |
+
+| F183 | Router audit report comparator (`router_audit_report_comparator`) | Router operations | Validate F182 bundle SHA-256 hashes and compare reports by source/site/router/resource identity; classify unchanged, changed, added and removed findings with section/site deltas and bounded detail output. |
+
+| F184 | Timezone-aware router scheduled report planner (`router_scheduled_report_planner`) | Router operations | Validate daily, weekly and monthly report schedules and preview future occurrences with IANA timezones, DST gap/fold policies and short-month skip/clamp rules; does not run background jobs. |
+
+| F185 | Allow-listed signed router webhook envelope builder (`router_webhook_envelope_builder`) | Router operations | Create canonical event batches with HMAC-SHA256 signatures for exact allow-listed HTTPS DNS hostnames, timestamp/key headers and idempotency keys; prepares but never transmits requests. |
+
+| F186 | Authenticated-encrypted router report archive (`router_encrypted_report_archive`) | Router operations | Encrypt and restore report/alert backup data using Scrypt-derived AES-256-GCM keys, authenticated metadata and strict bounded archive validation; the passphrase is never stored or returned. |
+
+| F187 | Webhook egress and DNS-pinning policy verifier (`router_webhook_egress_policy_verifier`) | Router operations | Verify exact HTTPS host allowlists, public-only DNS answers, recent resolution, actual peer-IP pinning, TLS/hostname verification and redirect refusal without making network requests. |
+
+| F188 | Scheduled router report job intake (`router_scheduled_report_job_intake`) | Router operations | Validate F184 occurrence IDs and F182 bundle hashes, derive stable job keys and place bounded report payloads into the durable lease-based SQLite worker queue with retries and dead-letter handling. |
+
+| F189 | Scheduled report webhook delivery package builder (`router_scheduled_report_delivery_package`) | Router operations | Require an active F188 worker lease, verify F182 report and payload hashes, gate on F187 fresh public DNS/TLS evidence, and create F185 HMAC-signed summary/finding events without sending a request. |
+
+| F190 | Router webhook subscription router (`router_webhook_subscription_router`) | Router operations | Route normalized events using type/severity/site subscriptions; deduplicate events, produce deterministic bounded batches and enforce exact HTTPS host allowlists without accepting signing secrets or sending requests. |
+
+| F191 | Bounded PCAP capture analyzer (`pcap_capture_analyzer`) | Packet analysis | Analyse classic PCAP and PCAPNG files up to 512 KiB, including multi-interface sections, declared section-length validation, per-interface timestamps and zero-snaplen semantics under a hard frame cap; analyse Ethernet, Linux cooked v1/v2, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap RSSI/noise/channel statistics without exposing packet payloads or endpoint addresses. |

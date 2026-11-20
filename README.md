@@ -96,8 +96,14 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 168 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 188 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
+| `GET /api/reports/jobs` | List authenticated scheduled-report jobs and state counts |
+| `POST /api/reports/jobs/enqueue` | Queue a hash-validated report occurrence idempotently |
+| `POST /api/reports/jobs/claim` | Claim due jobs using exclusive, expiring worker leases |
+| `POST /api/reports/jobs/{id}/renew` | Extend an active worker lease without reviving expired leases |
+| `POST /api/reports/jobs/{id}/delivery-package` | Verify the current SQLite lease and prepare an approved, signed delivery package without sending it |
+| `POST /api/reports/jobs/{id}/complete`, `/fail`, `/cancel` | Complete a lease, schedule a bounded retry/dead-letter, or cancel a pending job |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
@@ -121,9 +127,13 @@ The local HTTP service exposes:
 | `GET /api/agents/snapshots/{agent_id}/diff` | Compare the two most recent retained snapshots and list board/network/wireless/client/route changes |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
-After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.
+After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token. The Settings panel stores local preferences for refresh cadence, compact navigation, hiding demo observations when offline and reduced motion; preferences stay in the current browser profile.
 
 The SYSTEM → Router Agents page provides the authenticated Router Agent Console for enrolment, least-privilege capability selection, heartbeat health, snapshot drift, credential rotation/revocation and negotiation audit. It does not reveal stored credentials.
+
+The `unifi_snapshot_normalizer` (F172) and `mikrotik_snapshot_normalizer` (F173) features accept caller-supplied controller/router exports through their `/api/features/{slug}` endpoints. They validate inventory, radio, client, address and network records and omit unknown and credential-like fields. These are offline imports, not live controller integrations.
+
+The `router_snapshot_drift_report` (F174) compares two normalized snapshots from the same supported adapter. It reports bounded inventory drift for interfaces, radios, associations, network profiles and routes; only allow-listed fields are returned. The `router_fleet_health_audit` (F175) rolls up the same vendor schemas across sites, scoring only measured health evidence and marking absent telemetry as unknown. The `router_subnet_overlap_audit` (F176) checks IPv4 and IPv6 CIDRs across routers within each site and reports overlaps for operator review. The `router_client_roaming_audit` (F177) builds AP handoff timelines from the same normalized vendor snapshots. The `router_route_table_audit` (F178) validates OpenWrt and MikroTik route metadata and connected prefixes without probing or changing routes. The `router_vlan_segmentation_audit` (F179) checks VLAN consistency across UniFi and MikroTik within each site. The `router_gateway_redundancy_audit` (F180) compares configured default routes across routers without running a failover test. The `router_incident_alert_policy_evaluator` (F181) turns normalized findings into scoped, deduplicated local alert candidates and lifecycle updates. The `router_audit_report_bundle_builder` (F182) combines audit outputs into versioned, site-filterable JSON report bundles with stable content hashes. The `router_audit_report_comparator` (F183) validates those hashes and compares findings and site/source summaries across reports. The `router_scheduled_report_planner` (F184) previews recurring report times across IANA timezones without executing background jobs. The `router_webhook_envelope_builder` (F185) prepares canonical HMAC-signed HTTPS event batches for exact host allowlists without sending them. The `router_encrypted_report_archive` (F186) protects report/alert backups with authenticated encryption and a caller-held passphrase. The `router_webhook_egress_policy_verifier` (F187) checks DNS, peer-IP and TLS evidence before a dispatcher accepts a connection.
 
 For router-side, read-only telemetry collection, see the [OpenWrt agent installation and service guide](agent/README.md). The agent uses an enrolled scoped token, TLS verification, a private on-disk retry spool and the idempotent snapshot-delivery endpoint. Optional uptime, load-average, memory and swap telemetry is collected only when the enrolled credential grants `system.health`.
 
@@ -169,3 +179,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports should include the OS, Pytho
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+
+Scheduled report execution is coordinated through the authenticated `/api/reports/jobs` endpoints. Jobs are queued with an idempotency key, claimed by workers using expiring leases, and transitioned to completion, retry or dead-letter state; delivery remains the responsibility of an external worker that follows the signed webhook and egress policy contracts. Workers can renew a lease before expiry. The delivery-package endpoint reads the claimed job and lease from the local SQLite store, rejects mismatched or expired leases, and only then prepares F189 output using supplied fresh DNS/TLS evidence. This endpoint does not transmit the webhook; an external worker remains responsible for network delivery and should complete or fail the job using the same lease ID.
+
+
+Workers can prepare a report webhook package through `router_scheduled_report_delivery_package` only while holding the active report-job lease and supplying fresh DNS/TLS evidence that passes the egress policy. The feature creates a signed request envelope; outbound transmission remains an explicit worker responsibility.
+
+
+The `router_webhook_subscription_router` (F190) maps normalized events to bounded, deterministic subscription batches. Each batch can be signed by F185 and checked by F187 before the leased worker sends it; the router itself never transmits events or accepts signing secrets. The `pcap_capture_analyzer` (F191) accepts standard-base64 classic PCAP and PCAPNG files through the authenticated feature API, with a 512 KiB file bound and 5,000-packet limit. It supports multi-interface PCAPNG sections with declared section-length validation, per-interface timestamp precision/offset, and zero-snaplen interfaces under the analyzer’s hard frame-size cap. It supports Ethernet, Linux cooked v1/v2, raw 802.11 and radiotap link types, and summarizes IPv4/IPv6, TCP/UDP, DSCP and wireless frame types. Radiotap fields provide measured signal/noise and channel-frequency metadata when present. Analysis results can be downloaded locally as JSON or CSV; exports include summary, protocol, DSCP, port, wireless and radiotap measurements but never raw packet payloads or endpoint identities. Payloads, source/destination addresses, SSIDs and BSSIDs are not returned. It is an offline file analyzer, not a live interface capture.

@@ -17,7 +17,7 @@
     "slug": "wifi_scan",
     "name": "Wi-Fi scan execution",
     "category": "Discovery",
-    "description": "Run the existing platform scanner, or validate supplied scan observations in a test/import workflow.",
+    "description": "Trigger the existing platform scanner or validate supplied scan observations.",
     "parameters": {
       "networks": "optional network[]"
     }
@@ -1230,6 +1230,298 @@
       "clients": "client[]",
       "diagnostics": "object",
       "thresholds": "object"
+    }
+  },
+  {
+    "slug": "site_inventory_snapshot",
+    "name": "Multi-site access-point inventory snapshot",
+    "category": "Site inventory",
+    "description": "Normalise AP inventories across sites, detect duplicate BSSIDs and report metadata coverage."
+  },
+  {
+    "slug": "ap_topology_relationships",
+    "name": "Access-point topology relationships",
+    "category": "Site inventory",
+    "description": "Separate physical/backhaul and RF-neighbour relationships while flagging unresolved or cyclic links."
+  },
+  {
+    "slug": "site_network_segment_correlation",
+    "name": "Site subnet and gateway correlation",
+    "category": "Site inventory",
+    "description": "Match AP management addresses to explicit site CIDRs and report ambiguous or invalid gateway relationships."
+  },
+  {
+    "slug": "floor_plan_anchor_validation",
+    "name": "Floor-plan AP anchor validation",
+    "category": "Site inventory",
+    "description": "Validate AP floor-plan coordinates and surface missing references or collocated anchors."
+  },
+  {
+    "slug": "site_inventory_snapshot_diff",
+    "name": "Site inventory snapshot diff",
+    "category": "Site inventory",
+    "description": "Compare AP snapshots for additions, removals, metadata changes and site moves."
+  },
+  {
+    "slug": "site_network_segment_capacity",
+    "name": "Site network segment capacity",
+    "category": "Site inventory",
+    "description": "Calculate subnet capacity and utilisation from explicitly supplied allocation counts."
+  },
+  {
+    "slug": "site_gateway_redundancy_audit",
+    "name": "Site gateway redundancy audit",
+    "category": "Site inventory",
+    "description": "Review gateway failover groups, duplicate addresses and reported active/standby state."
+  },
+  {
+    "slug": "floorplan_zone_assignment",
+    "name": "Floor-plan zone assignment",
+    "category": "Site inventory",
+    "description": "Assign AP anchors to explicit room polygons and surface out-of-zone or overlapping placements."
+  },
+  {
+    "slug": "site_topology_redundancy_audit",
+    "name": "Site topology redundancy audit",
+    "category": "Site inventory",
+    "description": "Identify physical-backhaul cut links, articulation APs and disconnected components."
+  },
+  {
+    "slug": "site_topology_snapshot_diff",
+    "name": "Site topology snapshot diff",
+    "category": "Site inventory",
+    "description": "Compare AP inventory and explicit physical/RF topology edges between two snapshots."
+  },
+  {
+    "slug": "site_inventory_comparison",
+    "name": "Multi-site AP inventory comparison",
+    "category": "Site inventory",
+    "description": "Compare AP counts, bands, vendors, models and firmware distributions and flag cross-site BSSID reuse."
+  },
+  {
+    "slug": "ap_observation_freshness_audit",
+    "name": "AP observation freshness audit",
+    "category": "Site inventory",
+    "description": "Detect stale and future-dated AP observations while treating missing timestamps as unknown."
+  },
+  {
+    "slug": "site_ap_channel_reuse_audit",
+    "name": "Site AP channel reuse audit",
+    "category": "Site inventory",
+    "description": "Identify co-channel reuse and adjacent-channel overlap from supplied same-site radio widths and centres."
+  },
+  {
+    "slug": "site_topology_history_timeline",
+    "name": "Site topology history timeline",
+    "category": "Site inventory",
+    "description": "Summarise AP and link changes across up to 256 timestamped, caller-supplied topology snapshots."
+  },
+  {
+    "slug": "site_topology_gateway_path_audit",
+    "name": "Site AP-to-gateway path audit",
+    "category": "Site inventory",
+    "description": "Trace AP backhaul paths to supplied gateway APs and distinguish unreachable, unknown and cross-site evidence."
+  },
+  {
+    "slug": "site_radio_configuration_audit",
+    "name": "Site radio configuration audit",
+    "category": "Site inventory",
+    "description": "Compare AP radio channel widths, security and transmit power with explicit site/band standards; missing observations remain unknown."
+  },
+  {
+    "slug": "site_topology_visualisation",
+    "name": "Interactive site topology visualisation",
+    "category": "Site inventory",
+    "description": "Create deterministic, per-site AP layers and typed physical/RF/cross-site links for interactive inspection in the Workbench."
+  },
+  {
+    "slug": "site_discovery_history_snapshot",
+    "name": "Persistent site discovery history snapshot",
+    "category": "Site inventory",
+    "description": "Validate bounded timestamped AP/topology snapshots before saving to a local SQLite history database with per-site retention."
+  },
+  {
+    "slug": "site_to_site_change_report",
+    "name": "Site-to-site change report",
+    "category": "Site inventory",
+    "description": "Compare each site’s latest two stored snapshots, report AP/topology drift, and flag BSSID reuse across sites."
+  },
+  {
+    "slug": "consolidated_site_audit_report",
+    "name": "Consolidated site audit report",
+    "category": "Site inventory",
+    "description": "Combine inventory, topology, gateway, radio standards, subnet capacity, cross-site inventory and optional saved-history results into one evidence-based report."
+  },
+  {
+    "slug": "router_agent_capability_negotiation",
+    "name": "Router agent capability negotiation",
+    "category": "Router integrations",
+    "description": "Negotiate versioned, advertised read-only capabilities against the OpenWrt adapter manifest and reject unsupported operations or write permissions."
+  },
+  {
+    "slug": "openwrt_snapshot_normalizer",
+    "name": "OpenWrt snapshot normalizer",
+    "category": "Router integrations",
+    "description": "Normalise bounded board, interface, radio, station and route snapshots into a credential-free common schema."
+  },
+  {
+    "slug": "router_agent_health_report",
+    "name": "Router agent health report",
+    "category": "Router integrations",
+    "description": "Track authenticated agent heartbeats and classify healthy, degraded, unhealthy, stale and future-dated status using server timestamps."
+  },
+  {
+    "slug": "openwrt_agent_snapshot_ingest",
+    "name": "OpenWrt agent snapshot ingestion",
+    "category": "Router integrations",
+    "description": "Accept authenticated snapshots from registered agents, normalise before persistence, retain bounded history, and expose latest inventory data."
+  },
+  {
+    "slug": "openwrt_agent_snapshot_diff",
+    "name": "OpenWrt agent snapshot diff",
+    "category": "Router integrations",
+    "description": "Compare retained snapshots and identify board, interface, radio, client-association and route changes."
+  },
+  {
+    "slug": "router_agent_credential_scope",
+    "name": "Router agent credential scope",
+    "category": "Router integrations",
+    "description": "Issue per-agent, read-only scoped bearer credentials with expiry, rotation and revocation; store only token hashes."
+  },
+  {
+    "slug": "openwrt_snapshot_delivery_envelope",
+    "name": "OpenWrt idempotent snapshot delivery",
+    "category": "Router integrations",
+    "description": "Accept UUID-keyed snapshot deliveries with safe retries, duplicate-content detection and bounded idempotency retention."
+  },
+  {
+    "slug": "router_agent_negotiation_audit",
+    "name": "Router agent negotiation audit",
+    "category": "Router integrations",
+    "description": "Persist bounded, append-only records of adapter/schema versions and advertised, requested, negotiated and rejected read-only scopes."
+  },
+  {
+    "slug": "unifi_snapshot_normalizer",
+    "name": "UniFi controller snapshot normalizer",
+    "category": "Router integrations",
+    "description": "Import bounded, caller-supplied UniFi Network exports into the common AP, radio, client and network schema; omit secrets and make no controller connection."
+  },
+  {
+    "slug": "mikrotik_snapshot_normalizer",
+    "name": "MikroTik RouterOS snapshot normalizer",
+    "category": "Router integrations",
+    "description": "Import bounded RouterOS exports covering board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; omit secrets and make no router connection."
+  },
+  {
+    "slug": "router_snapshot_drift_report",
+    "name": "Multi-vendor router snapshot drift report",
+    "category": "Router integrations",
+    "description": "Compare OpenWrt, UniFi or MikroTik normalized snapshots using stable record identities and bounded allow-listed changes; reject mixed vendors and omit unknown/secret fields."
+  },
+  {
+    "slug": "router_fleet_health_audit",
+    "name": "Multi-vendor router fleet health audit",
+    "category": "Router integrations",
+    "description": "Audit normalized OpenWrt, UniFi and MikroTik snapshots for stale data, measured CPU/memory pressure, down interfaces/radios, offline APs and weak clients; unknown telemetry remains unknown."
+  },
+  {
+    "slug": "router_subnet_overlap_audit",
+    "name": "Multi-vendor router subnet overlap audit",
+    "category": "Router integrations",
+    "description": "Correlate normalized OpenWrt interface, UniFi network and MikroTik address CIDRs within each site; report duplicate or overlapping IPv4/IPv6 ranges across routers."
+  },
+  {
+    "slug": "router_client_roaming_audit",
+    "name": "Multi-vendor client roaming audit",
+    "category": "Router integrations",
+    "description": "Build normalized OpenWrt, UniFi and MikroTik client association timelines; identify observed AP handoffs, short multi-AP windows and weak measured RSSI while excluding wired clients."
+  },
+  {
+    "slug": "router_route_table_audit",
+    "name": "OpenWrt and MikroTik route-table audit",
+    "category": "Router integrations",
+    "description": "Inspect normalized route tables, default routes, duplicates, routing tables and connected prefixes; flag questionable defaults and unmatched gateway prefixes without assuming recursive routes are unreachable."
+  },
+  {
+    "slug": "router_vlan_segmentation_audit",
+    "name": "Multi-vendor VLAN segmentation audit",
+    "category": "Router integrations",
+    "description": "Compare normalized UniFi network profiles and MikroTik VLAN interfaces within each site; identify inconsistent subnets/names, duplicate VLAN IDs, unknown parents and down interfaces."
+  },
+  {
+    "slug": "router_gateway_redundancy_audit",
+    "name": "Cross-router default-gateway redundancy audit",
+    "category": "Router integrations",
+    "description": "Compare configured OpenWrt/MikroTik default routes by site, IP family and routing table; distinguish single-router paths, shared next hops, multiple configured paths and unknown activation without claiming failover is proven."
+  },
+  {
+    "slug": "router_incident_alert_policy_evaluator",
+    "name": "Router incident alert policy evaluator",
+    "category": "Router operations",
+    "description": "Apply site/adapter/code/severity/occurrence policies to normalized audit findings and generate deterministic new, ongoing, acknowledged and resolved alert candidates without sending notifications."
+  },
+  {
+    "slug": "router_audit_report_bundle_builder",
+    "name": "Router audit report bundle builder",
+    "category": "Router operations",
+    "description": "Combine F174–F181 audit results into a versioned, site-filterable, credential-free JSON report with severity rollups, bounded findings and a deterministic SHA-256 content hash."
+  },
+  {
+    "slug": "router_audit_report_comparator",
+    "name": "Router audit report comparator",
+    "category": "Router operations",
+    "description": "Validate F182 bundle SHA-256 hashes and compare reports by source/site/router/resource identity; classify unchanged, changed, added and removed findings with section/site deltas and bounded detail output."
+  },
+  {
+    "slug": "router_scheduled_report_planner",
+    "name": "Timezone-aware router scheduled report planner",
+    "category": "Router operations",
+    "description": "Validate daily, weekly and monthly report schedules and preview future occurrences with IANA timezones, DST gap/fold policies and short-month skip/clamp rules; does not run background jobs."
+  },
+  {
+    "slug": "router_webhook_envelope_builder",
+    "name": "Allow-listed signed router webhook envelope builder",
+    "category": "Router operations",
+    "description": "Create canonical event batches with HMAC-SHA256 signatures for exact allow-listed HTTPS DNS hostnames, timestamp/key headers and idempotency keys; prepares but never transmits requests."
+  },
+  {
+    "slug": "router_encrypted_report_archive",
+    "name": "Authenticated-encrypted router report archive",
+    "category": "Router operations",
+    "description": "Encrypt and restore report/alert backup data using Scrypt-derived AES-256-GCM keys, authenticated metadata and strict bounded archive validation; the passphrase is never stored or returned."
+  },
+  {
+    "slug": "router_webhook_egress_policy_verifier",
+    "name": "Webhook egress and DNS-pinning policy verifier",
+    "category": "Router operations",
+    "description": "Verify exact HTTPS host allowlists, public-only DNS answers, recent resolution, actual peer-IP pinning, TLS/hostname verification and redirect refusal without making network requests."
+  },
+  {
+    "slug": "router_scheduled_report_job_intake",
+    "name": "Scheduled router report job intake",
+    "category": "Router operations",
+    "description": "Validate F184 occurrence IDs and F182 bundle hashes, derive stable job keys and place bounded report payloads into the durable lease-based SQLite worker queue with retries and dead-letter handling."
+  },
+  {
+    "slug": "router_scheduled_report_delivery_package",
+    "name": "Scheduled report webhook delivery package builder",
+    "category": "Router operations",
+    "description": "Require an active F188 worker lease, verify F182 report and payload hashes, gate on F187 fresh public DNS/TLS evidence, and create F185 HMAC-signed summary/finding events without sending a request."
+  },
+  {
+    "slug": "router_webhook_subscription_router",
+    "name": "Router webhook subscription router",
+    "category": "Router operations",
+    "description": "Route normalized events using type/severity/site subscriptions; deduplicate events, produce deterministic bounded batches and enforce exact HTTPS host allowlists without accepting signing secrets or sending requests."
+  },
+  {
+    "slug": "pcap_capture_analyzer",
+    "name": "Bounded PCAP capture analyzer",
+    "category": "Packet analysis",
+    "description": "Analyse classic PCAP and PCAPNG files up to 512 KiB, including multi-interface sections, declared section-length validation, per-interface timestamps and zero-snaplen semantics under a hard frame cap; analyse Ethernet, Linux cooked v1/v2, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap RSSI/noise/channel statistics without exposing packet payloads or endpoint addresses.",
+    "parameters": {
+      "capture_base64": "standard-base64 classic PCAP or PCAPNG file, decoded size up to 512 KiB",
+      "maximum_packets": "optional packet limit from 1 to 5000"
     }
   }
 ]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import json
 import tempfile
 import threading
@@ -12,6 +13,8 @@ from http.client import HTTPConnection
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
 from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
+from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
+from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
 
 
 class AuthenticatedApiTests(unittest.TestCase):
@@ -20,9 +23,11 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_auth = server.AUTH
         self.previous_history = server.HISTORY
         self.previous_agent_health = server.AGENT_HEALTH
+        self.previous_report_jobs = server.REPORT_JOBS
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
+        server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
         self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         self.httpd.daemon_threads = True
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -36,6 +41,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.AUTH = self.previous_auth
         server.HISTORY = self.previous_history
         server.AGENT_HEALTH = self.previous_agent_health
+        server.REPORT_JOBS = self.previous_report_jobs
         self.temp.cleanup()
 
     def request(self, method, path, payload=None, token=None, origin=None):
@@ -90,8 +96,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 168)
-        self.assertEqual(len(catalog["features"]), 168)
+        self.assertEqual(catalog["count"], 188)
+        self.assertEqual(len(catalog["features"]), 188)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -309,9 +315,14 @@ class AuthenticatedApiTests(unittest.TestCase):
         token = setup["token"]
         status, catalogue = self.request("GET", "/api/adapters", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalogue["count"], 1)
-        self.assertEqual(catalogue["adapters"][0]["adapter_id"], "openwrt")
-        self.assertTrue(catalogue["adapters"][0]["read_only"])
+        self.assertEqual(catalogue["count"], 3)
+        adapters = {item["adapter_id"]: item for item in catalogue["adapters"]}
+        self.assertTrue(adapters["openwrt"]["read_only"])
+        self.assertEqual(adapters["openwrt"]["transport"], "local_agent")
+        self.assertTrue(adapters["unifi"]["read_only"])
+        self.assertEqual(adapters["unifi"]["transport"], "controller_export")
+        self.assertTrue(adapters["mikrotik"]["read_only"])
+        self.assertEqual(adapters["mikrotik"]["transport"], "controller_export")
 
         status, negotiated = self.request("POST", "/api/adapters/negotiate", {
             "adapter_id": "openwrt",
@@ -323,6 +334,671 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(negotiated["result"]["status"], "partial")
         self.assertEqual(negotiated["result"]["negotiated_permissions"], ["read"])
+
+    def test_unifi_snapshot_normalizer_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/unifi_snapshot_normalizer", {
+            "captured_at": "2026-11-20T10:00:00Z",
+            "devices": [{
+                "mac": "00:11:22:33:44:55",
+                "radio_table": [{"radio": "na", "channel": 36, "ht": "VHT80"}],
+            }],
+            "clients": [],
+            "networks": [{"name": "Office", "vlan_enabled": False, "vlan": 0}],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F172")
+        self.assertEqual(result["result"]["adapter_id"], "unifi")
+        self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
+        self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
+
+    def test_router_webhook_egress_policy_verifier_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_webhook_egress_policy_verifier", {
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "resolution_at": "2026-11-20T09:59:55Z",
+            "connected_at": "2026-11-20T10:00:00Z",
+            "resolved_addresses": ["1.1.1.1"],
+            "peer_ip": "1.1.1.1",
+            "connected_port": 443,
+            "tls_version": "TLSv1.3",
+            "tls_verified": True,
+            "hostname_verified": True,
+            "redirect_location": None,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F187")
+        self.assertTrue(result["result"]["approved"])
+        self.assertEqual(result["result"]["connection_policy"]["connect_to_exact_peer_ip"], "1.1.1.1")
+
+    def test_router_encrypted_report_archive_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        passphrase = "api-test-passphrase-for-encrypted-router-reports"
+        status, encrypted = self.request("POST", "/api/features/router_encrypted_report_archive", {
+            "mode": "encrypt",
+            "archive_id": "api-backup-001",
+            "created_at": "2026-11-20T10:00:00Z",
+            "passphrase": passphrase,
+            "data": {"reports": [{"report_id": "office-weekly", "finding_count": 1}]},
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(encrypted["feature"], "F186")
+        self.assertEqual(encrypted["result"]["status"], "encrypted")
+        self.assertNotIn(passphrase, str(encrypted))
+        self.assertNotIn(passphrase, str(encrypted))
+
+        status, restored = self.request("POST", "/api/features/router_encrypted_report_archive", {
+            "mode": "restore",
+            "passphrase": passphrase,
+            "archive": encrypted["result"]["archive"],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(restored["result"]["status"], "restored")
+        self.assertEqual(restored["result"]["data"], {"reports": [{"report_id": "office-weekly", "finding_count": 1}]})
+
+    def test_router_webhook_envelope_builder_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_webhook_envelope_builder", {
+            "now": "2026-11-20T10:00:00Z",
+            "batch_id": "api-batch-001",
+            "key_id": "router-key-v1",
+            "signing_secret": "api-test-secret-that-is-over-thirty-two-bytes-long",
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "events": [{
+                "event_id": "api-event-001", "event_type": "router.health.warning",
+                "severity": "warning", "occurred_at": "2026-11-20T10:00:00Z",
+                "site_id": "office", "router_id": "openwrt-office",
+                "summary": "Router CPU warning", "attributes": {"observed": 90, "threshold": 85},
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F185")
+        self.assertEqual(result["result"]["status"], "prepared")
+        self.assertEqual(result["result"]["summary"]["event_count"], 1)
+        self.assertNotIn("signing_secret", str(result))
+        self.assertNotIn("api-test-secret", str(result))
+
+    def test_webhook_subscription_router_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_webhook_subscription_router", {
+            "subscriptions": [{
+                "subscription_id": "home-alerts",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "key_id": "webhook-key-01",
+                "event_types": ["router.health"],
+                "minimum_severity": "warning",
+                "site_allowlist": ["home"],
+                "maximum_events_per_batch": 25,
+            }],
+            "events": [{
+                "event_id": "a" * 64,
+                "event_type": "router.health",
+                "severity": "warning",
+                "occurred_at": "2026-11-20T10:00:00Z",
+                "site_id": "home",
+                "router_id": "openwrt-home",
+                "summary": "Router health warning",
+                "attributes": {"observed": 90, "threshold": 85},
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F190")
+        self.assertEqual(result["result"]["summary"]["batch_count"], 1)
+        self.assertEqual(result["result"]["batches"][0]["subscription_id"], "home-alerts")
+
+    def test_pcap_capture_analyzer_is_available_through_authenticated_api(self):
+        denied, response = self.request("POST", "/api/features/pcap_capture_analyzer", {
+            "capture_base64": "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA",
+        })
+        self.assertEqual(denied, 401)
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/pcap_capture_analyzer", {
+            "capture_base64": "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F191")
+        self.assertEqual(result["result"]["status"], "analysed")
+        self.assertEqual(result["result"]["capture"]["link_type_name"], "ethernet")
+        self.assertEqual(result["result"]["summary"]["packet_count"], 0)
+        self.assertFalse(result["result"]["privacy"]["packet_payloads_returned"])
+
+        pcapng = "Cg0NChwAAABNPCsaAQAAAP//////////HAAAAAEAAAAUAAAAAQAAAP//AAAUAAAA"
+        status, ng_result = self.request("POST", "/api/features/pcap_capture_analyzer", {
+            "capture_base64": pcapng,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(ng_result["result"]["capture"]["format"], "pcapng")
+        self.assertEqual(ng_result["result"]["capture"]["link_type_name"], "ethernet")
+        self.assertEqual(ng_result["result"]["capture"]["interface_count"], 1)
+        self.assertEqual(ng_result["result"]["summary"]["packet_count"], 0)
+
+    def test_scheduled_report_delivery_package_uses_active_job_lease_and_approved_egress(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        bundle = build_report_bundle({
+            "report_id": "weekly-home",
+            "title": "Weekly home router report",
+            "generated_at": "2026-11-20T09:59:00Z",
+            "sources": [{
+                "source_id": "home-health",
+                "source_type": "router_fleet_health_audit",
+                "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []},
+            }],
+        })
+        occurrence_id = "c" * 64
+        intake = server.run_feature("router_scheduled_report_job_intake", {
+            "schedule_id": "daily-home",
+            "occurrence_id": occurrence_id,
+            "scheduled_at": "2026-11-20T09:59:00Z",
+            "report_bundle": bundle,
+        })["result"]
+        server.REPORT_JOBS.enqueue(intake, now="2026-11-20T09:58:00Z")
+        claimed = server.REPORT_JOBS.claim_due(
+            "api-worker", now="2026-11-20T10:00:00Z", lease_seconds=120,
+        )["jobs"][0]
+        delivery_payload = {
+            "now": "2026-11-20T10:00:00Z",
+            "lease_id": claimed["lease_id"],
+            "webhook": {
+                "endpoint": "https://hooks.example.net/reports",
+                "allowed_hosts": ["hooks.example.net"],
+                "key_id": "api-key",
+                "signing_secret": "api-test-secret-with-at-least-32-bytes",
+            },
+            "egress_evidence": {
+                "resolution_at": "2026-11-20T09:59:55Z",
+                "connected_at": "2026-11-20T10:00:00Z",
+                "resolved_addresses": ["1.1.1.1"],
+                "peer_ip": "1.1.1.1",
+                "connected_port": 443,
+                "tls_version": "TLSv1.3",
+                "tls_verified": True,
+                "hostname_verified": True,
+                "redirect_location": None,
+            },
+        }
+        delivery_path = f"/api/reports/jobs/{claimed['id']}/delivery-package"
+        status, rejected = self.request(
+            "POST", delivery_path,
+            {**delivery_payload, "lease_id": "00000000-0000-4000-8000-000000000000"},
+            token=token,
+        )
+        self.assertEqual(status, 409)
+        status, result = self.request("POST", delivery_path, delivery_payload, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F189")
+        self.assertEqual(result["result"]["status"], "ready")
+        self.assertTrue(result["result"]["egress"]["approved"])
+        self.assertEqual(result["result"]["delivery"]["method"], "POST")
+        self.assertNotIn("api-test-secret-with-at-least-32-bytes", str(result))
+
+    def test_scheduled_report_job_queue_is_authenticated_idempotent_and_lease_guarded(self):
+        status, denied = self.request("GET", "/api/reports/jobs")
+        self.assertEqual(status, 401)
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        bundle = build_report_bundle({
+            "report_id": "weekly-home",
+            "title": "Weekly home router report",
+            "generated_at": "2026-11-20T10:00:00Z",
+            "sources": [{
+                "source_id": "health-home",
+                "source_type": "router_fleet_health_audit",
+                "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []},
+            }],
+        })
+        prepared = {
+            "schedule_id": "daily-home",
+            "occurrence_id": "a" * 64,
+            "scheduled_at": "2026-11-20T10:01:00Z",
+            "report_bundle": bundle,
+            "max_attempts": 2,
+        }
+        status, first = self.request("POST", "/api/reports/jobs/enqueue", prepared, token=token)
+        self.assertEqual(status, 201)
+        self.assertTrue(first["created"])
+        status, retry = self.request("POST", "/api/reports/jobs/enqueue", prepared, token=token)
+        self.assertEqual(status, 200)
+        self.assertTrue(retry["replayed"])
+        self.assertEqual(first["job"]["id"], retry["job"]["id"])
+
+        changed_bundle = {**bundle, "title": "Altered title"}
+        body = {key: value for key, value in changed_bundle.items() if key != "content_hash"}
+        changed_bundle["content_hash"] = hashlib.sha256(
+            json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        status, conflict = self.request("POST", "/api/reports/jobs/enqueue", {
+            **prepared, "report_bundle": changed_bundle,
+        }, token=token)
+        self.assertEqual(status, 409)
+        self.assertIn("different report content", conflict["error"])
+
+        status, early = self.request("POST", "/api/reports/jobs/claim", {
+            "worker_id": "report-worker",
+            "now": "2026-11-20T10:00:30Z",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(early["jobs"], [])
+        status, claimed = self.request("POST", "/api/reports/jobs/claim", {
+            "worker_id": "report-worker",
+            "now": "2026-11-20T10:01:00Z",
+            "lease_seconds": 60,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(claimed["jobs"]), 1)
+        lease = claimed["jobs"][0]
+        self.assertEqual(lease["status"], "leased")
+        self.assertEqual(lease["report_bundle"]["report_id"], "weekly-home")
+
+        renewal_path = f"/api/reports/jobs/{lease['id']}/renew"
+        status, denied_renewal = self.request("POST", renewal_path, {
+            "lease_id": lease["lease_id"],
+            "now": "2026-11-20T10:01:20Z",
+        })
+        self.assertEqual(status, 401)
+        status, invalid_renewal = self.request("POST", renewal_path, {
+            "lease_id": lease["lease_id"],
+            "now": "2026-11-20T10:01:20Z",
+            "lease_seconds": 1,
+        }, token=token)
+        self.assertEqual(status, 400)
+        status, renewed = self.request("POST", renewal_path, {
+            "lease_id": lease["lease_id"],
+            "now": "2026-11-20T10:01:20Z",
+            "lease_seconds": 120,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(renewed["job"]["lease_expires_at"], "2026-11-20T10:03:20+00:00")
+
+        status, stale = self.request("POST", f"/api/reports/jobs/{lease['id']}/complete", {
+            "lease_id": "00000000-0000-4000-8000-000000000000",
+            "result": {"delivery_status": "delivered"},
+            "now": "2026-11-20T10:01:01Z",
+        }, token=token)
+        self.assertEqual(status, 409)
+
+        status, failed = self.request("POST", f"/api/reports/jobs/{lease['id']}/fail", {
+            "lease_id": lease["lease_id"],
+            "error_code": "delivery_timeout",
+            "now": "2026-11-20T10:01:01Z",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(failed["job"]["status"], "retry_wait")
+        self.assertEqual(failed["job"]["error_code"], "delivery_timeout")
+
+        status, second_claim = self.request("POST", "/api/reports/jobs/claim", {
+            "worker_id": "report-worker-2",
+            "now": "2026-11-20T10:01:31Z",
+            "lease_seconds": 60,
+        }, token=token)
+        self.assertEqual(status, 200)
+        second = second_claim["jobs"][0]
+        self.assertEqual(second["attempts"], 2)
+
+        status, completed = self.request("POST", f"/api/reports/jobs/{second['id']}/complete", {
+            "lease_id": second["lease_id"],
+            "result": {
+                "report_id": "weekly-home",
+                "content_hash": bundle["content_hash"],
+                "delivery_status": "prepared",
+                "api_token": "must-not-be-stored",
+            },
+            "now": "2026-11-20T10:01:32Z",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(completed["job"]["status"], "completed")
+        self.assertNotIn("api_token", str(completed))
+
+        status, listing = self.request("GET", "/api/reports/jobs?status=completed", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(listing["jobs"]), 1)
+        self.assertEqual(listing["summary"]["counts_by_status"]["completed"], 1)
+
+    def test_router_scheduled_report_planner_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_scheduled_report_planner", {
+            "now": "2026-11-20T00:00:00Z",
+            "schedules": [{
+                "schedule_id": "daily-office",
+                "report_id": "office-weekly",
+                "timezone": "Australia/Sydney",
+                "frequency": "daily",
+                "local_time": "18:30",
+            }],
+            "occurrences_per_schedule": 2,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F184")
+        self.assertEqual(result["result"]["summary"]["planned_occurrence_count"], 2)
+        self.assertEqual(result["result"]["schedules"][0]["status"], "scheduled")
+
+    def test_router_audit_report_comparator_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        previous = build_report_bundle({
+            "report_id": "api-before",
+            "generated_at": "2026-11-20T09:00:00Z",
+            "sources": [{
+                "source_id": "office-health",
+                "source_type": "router_fleet_health_audit",
+                "result": {
+                    "status": "audited",
+                    "summary": {"router_count": 1},
+                    "routers": [{
+                        "router_id": "openwrt-office",
+                        "site_id": "office",
+                        "findings": [{
+                            "code": "resource.cpu_high",
+                            "severity": "warning",
+                            "resource_type": "router",
+                            "resource_id": "openwrt-office",
+                            "observed": 90,
+                            "threshold": 85,
+                        }],
+                    }],
+                },
+            }],
+        })
+        current = build_report_bundle({
+            "report_id": "api-after",
+            "generated_at": "2026-11-20T10:00:00Z",
+            "sources": [{
+                "source_id": "office-health",
+                "source_type": "router_fleet_health_audit",
+                "result": {
+                    "status": "audited",
+                    "summary": {"router_count": 1},
+                    "routers": [{
+                        "router_id": "openwrt-office",
+                        "site_id": "office",
+                        "findings": [{
+                            "code": "resource.cpu_high",
+                            "severity": "warning",
+                            "resource_type": "router",
+                            "resource_id": "openwrt-office",
+                            "observed": 95,
+                            "threshold": 85,
+                        }],
+                    }],
+                },
+            }],
+        })
+        status, result = self.request("POST", "/api/features/router_audit_report_comparator", {
+            "previous": previous,
+            "current": current,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F183")
+        self.assertEqual(result["result"]["summary"]["changed_count"], 1)
+        self.assertEqual(result["result"]["findings"]["changed"][0]["code"], "resource.cpu_high")
+
+    def test_router_audit_report_bundle_builder_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_audit_report_bundle_builder", {
+            "report_id": "office-weekly",
+            "title": "Office weekly router report",
+            "generated_at": "2026-11-20T10:00:00Z",
+            "sources": [{
+                "source_id": "office-fleet",
+                "source_type": "router_fleet_health_audit",
+                "result": {
+                    "status": "audited",
+                    "summary": {"router_count": 1, "site_count": 1},
+                    "routers": [{
+                        "router_id": "openwrt-office",
+                        "site_id": "office",
+                        "findings": [{
+                            "code": "resource.cpu_high",
+                            "severity": "warning",
+                            "resource_type": "router",
+                            "resource_id": "openwrt-office",
+                            "observed": 90,
+                            "threshold": 85,
+                        }],
+                    }],
+                },
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F182")
+        self.assertEqual(result["result"]["summary"]["finding_count"], 1)
+        self.assertEqual(len(result["result"]["content_hash"]), 64)
+
+    def test_router_incident_alert_policy_evaluator_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_incident_alert_policy_evaluator", {
+            "generated_at": "2026-11-20T10:00:00Z",
+            "policies": [{
+                "policy_id": "cpu-pressure",
+                "match_codes": ["resource.cpu_high"],
+                "minimum_severity": "warning",
+                "group_by": "router",
+            }],
+            "findings": [{
+                "site_id": "office", "router_id": "openwrt-office", "adapter_id": "openwrt",
+                "code": "resource.cpu_high", "severity": "warning",
+                "resource_type": "router", "resource_id": "openwrt-office",
+                "observed": 90, "threshold": 85,
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F181")
+        self.assertEqual(result["result"]["summary"]["new_alert_count"], 1)
+        self.assertEqual(result["result"]["alerts"][0]["status"], "new")
+
+    def test_router_gateway_redundancy_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_gateway_redundancy_audit", {
+            "snapshots": [
+                {
+                    "router_id": "openwrt-office",
+                    "site_id": "office",
+                    "snapshot": {
+                        "adapter_id": "openwrt",
+                        "captured_at": "2026-11-20T10:00:00Z",
+                        "routes": [{
+                            "target": "0.0.0.0/0", "gateway": "192.0.2.1",
+                            "device": "wan", "metric": 10,
+                        }],
+                    },
+                },
+                {
+                    "router_id": "mikrotik-office",
+                    "site_id": "office",
+                    "snapshot": {
+                        "adapter_id": "mikrotik",
+                        "captured_at": "2026-11-20T10:00:00Z",
+                        "routes": [{
+                            "target": "0.0.0.0/0", "gateway": "198.51.100.1",
+                            "gateway_interface": "ether1", "routing_table": "main",
+                            "distance": 1, "active": True,
+                        }],
+                    },
+                },
+            ],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F180")
+        self.assertEqual(result["result"]["summary"]["router_count"], 2)
+        self.assertEqual(result["result"]["groups"][0]["distinct_gateway_count"], 2)
+
+    def test_router_vlan_segmentation_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_vlan_segmentation_audit", {
+            "snapshots": [{
+                "router_id": "unifi-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "unifi",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "controller": {"hostname": "unifi.office.local"},
+                    "networks": [{
+                        "id": "office", "name": "Office", "vlan_enabled": True,
+                        "vlan_id": 20, "ip_subnet": "192.0.2.0/24",
+                    }],
+                },
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F179")
+        self.assertEqual(result["result"]["summary"]["segment_count"], 1)
+        self.assertEqual(result["result"]["segments"][0]["vlan_id"], 20)
+
+    def test_router_route_table_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_route_table_audit", {
+            "snapshots": [{
+                "router_id": "openwrt-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "openwrt",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "interfaces": [{"interface": "lan", "ipv4_addresses": ["192.0.2.2/24"]}],
+                    "routes": [{
+                        "target": "0.0.0.0/0", "gateway": "192.0.2.1",
+                        "device": "wan", "metric": 10,
+                    }],
+                },
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F178")
+        self.assertEqual(result["result"]["summary"]["default_route_count"], 1)
+        self.assertEqual(result["result"]["routers"][0]["route_count"], 1)
+
+    def test_router_client_roaming_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_client_roaming_audit", {
+            "snapshots": [{
+                "router_id": "unifi-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "unifi",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "controller": {"hostname": "unifi.office.local"},
+                    "associations": [{
+                        "client_mac": "AA:BB:CC:DD:EE:01",
+                        "ap_mac": "00:11:22:33:44:55",
+                        "ssid": "Office",
+                        "signal_dbm": -55,
+                        "is_wired": False,
+                    }],
+                },
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F177")
+        self.assertEqual(result["result"]["summary"]["client_count"], 1)
+        self.assertEqual(result["result"]["summary"]["observation_count"], 1)
+
+    def test_router_subnet_overlap_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_subnet_overlap_audit", {
+            "snapshots": [
+                {
+                    "router_id": "openwrt-gateway",
+                    "site_id": "home",
+                    "snapshot": {
+                        "adapter_id": "openwrt", "captured_at": "2026-11-20T10:00:00Z",
+                        "interfaces": [{"interface": "lan", "ipv4_addresses": ["192.0.2.1/24"]}],
+                    },
+                },
+                {
+                    "router_id": "unifi-controller",
+                    "site_id": "home",
+                    "snapshot": {
+                        "adapter_id": "unifi", "captured_at": "2026-11-20T10:00:00Z",
+                        "controller": {"hostname": "unifi.home.local"},
+                        "networks": [{"id": "lan", "name": "LAN", "ip_subnet": "192.0.2.0/24"}],
+                    },
+                },
+            ],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F176")
+        self.assertEqual(result["result"]["summary"]["duplicate_subnet_count"], 1)
+        self.assertEqual(result["result"]["overlaps"][0]["overlap_type"], "duplicate")
+
+    def test_router_fleet_health_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_fleet_health_audit", {
+            "now": "2026-11-20T10:00:00Z",
+            "snapshots": [{
+                "router_id": "mikrotik-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "mikrotik",
+                    "captured_at": "2026-11-20T09:59:00Z",
+                    "resource": {
+                        "cpu_load_pct": 20,
+                        "free_memory_bytes": 800,
+                        "total_memory_bytes": 1000,
+                    },
+                    "interfaces": [{"name": "bridge", "state": "up"}],
+                    "wireless_radios": [{"interface": "wifi1", "state": "up"}],
+                    "associations": [],
+                },
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F175")
+        self.assertEqual(result["result"]["summary"]["healthy_count"], 1)
+        self.assertEqual(result["result"]["routers"][0]["adapter_id"], "mikrotik")
+
+    def test_router_snapshot_drift_report_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_snapshot_drift_report", {
+            "previous": {
+                "adapter_id": "unifi",
+                "captured_at": "2026-11-20T09:00:00Z",
+                "access_points": [{"mac": "00:11:22:33:44:55", "name": "Office AP", "ip_address": "192.0.2.10"}],
+            },
+            "current": {
+                "adapter_id": "unifi",
+                "captured_at": "2026-11-20T10:00:00Z",
+                "access_points": [{"mac": "00:11:22:33:44:55", "name": "Office AP", "ip_address": "192.0.2.11"}],
+            },
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F174")
+        self.assertEqual(result["result"]["adapter_id"], "unifi")
+        self.assertEqual(result["result"]["summary"]["access_points_changed"], 1)
+
+    def test_mikrotik_snapshot_normalizer_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/mikrotik_snapshot_normalizer", {
+            "captured_at": "2026-11-20T10:00:00Z",
+            "router": {"board_name": "MikroTik sample", "version": "7.17.2"},
+            "interfaces": [{"name": "bridge", "running": True}],
+            "wireless": [{"name": "wifi1", "band": "5ghz-ax", "channel": 36, "channel_width": "80mhz"}],
+            "addresses": [{"interface": "bridge", "address": "192.0.2.1/24"}],
+            "vlans": [{"name": "vlan20", "interface": "bridge", "vlan_id": "20"}],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F173")
+        self.assertEqual(result["result"]["adapter_id"], "mikrotik")
+        self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
+        self.assertEqual(result["result"]["vlans"][0]["vlan_id"], 20)
 
     def test_openwrt_snapshot_normalizer_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
@@ -366,11 +1042,12 @@ class AuthenticatedApiTests(unittest.TestCase):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
         admin_token = setup["token"]
         agent_token = self.enroll_agent(admin_token, "edge", ["system.board"])
-        status, invalid = self.request("POST", "/api/agents/heartbeat", {
-            "agent_id":"edge","adapter_id":"unifi","agent_version":"1.0.0",
-        }, token=agent_token)
-        self.assertEqual(status, 400)
-        self.assertIn("not installed", invalid["error"])
+        for adapter_id in ("unifi", "mikrotik"):
+            status, invalid = self.request("POST", "/api/agents/heartbeat", {
+                "agent_id":"edge","adapter_id":adapter_id,"agent_version":"1.0.0",
+            }, token=agent_token)
+            self.assertEqual(status, 400)
+            self.assertIn("not installed", invalid["error"])
         for field, value in (("status", []), ("error_code", {})):
             bad = {"agent_id":"edge","adapter_id":"openwrt","agent_version":"1.0.0",field:value}
             status, response = self.request("POST", "/api/agents/heartbeat", bad, token=agent_token)
