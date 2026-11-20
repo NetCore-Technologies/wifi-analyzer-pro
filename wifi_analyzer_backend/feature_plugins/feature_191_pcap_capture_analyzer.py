@@ -1,4 +1,4 @@
-"""Bounded, privacy-preserving analysis of classic PCAP captures.
+"""Bounded, privacy-preserving analysis of classic PCAP and PCAPNG captures.
 
 This feature analyses a caller-supplied capture offline. It does not open interfaces,
 capture live traffic, transmit packets, or return packet payloads or endpoint addresses.
@@ -372,7 +372,7 @@ def _pcapng_options(data: bytes, start: int, end: int, byteorder: str) -> list:
     return options
 
 
-def _pcapng_interface_options(options: list) -> tuple:
+def _pcapng_interface_options(options: list, byteorder: str) -> tuple:
     denominator = 1_000_000
     resolution_name = "microsecond"
     offset_seconds = 0
@@ -399,7 +399,7 @@ def _pcapng_interface_options(options: list) -> tuple:
         elif code == 14:
             if len(value) != 8:
                 raise ValueError("PCAPNG if_tsoffset option must contain eight bytes")
-            offset_seconds = int.from_bytes(value, "little", signed=True)
+            offset_seconds = int.from_bytes(value, byteorder, signed=True)
     return denominator, resolution_name, offset_seconds
 
 
@@ -481,7 +481,7 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
             if not 1 <= snaplen <= MAX_SNAPLEN:
                 raise ValueError(f"PCAPNG interface snap length must be from 1 to {MAX_SNAPLEN} bytes")
             options = _pcapng_options(capture, cursor + 16, block_end - 4, byteorder)
-            denominator, resolution_name, offset_seconds = _pcapng_interface_options(options)
+            denominator, resolution_name, offset_seconds = _pcapng_interface_options(options, byteorder)
             interface_id = len(interfaces)
             interface = {
                 "interface_id": interface_id,
@@ -606,7 +606,7 @@ def run(payload: dict) -> dict:
         raise ValueError("payload must be an object")
     encoded = payload.get("capture_base64")
     if not isinstance(encoded, str) or not encoded:
-        raise ValueError("capture_base64 must contain a base64-encoded classic PCAP file")
+        raise ValueError("capture_base64 must contain a base64-encoded PCAP or PCAPNG file")
     if len(encoded) > MAX_ENCODED_BYTES:
         raise ValueError(f"capture exceeds the {MAX_CAPTURE_BYTES}-byte file limit")
     try:
@@ -615,23 +615,8 @@ def run(payload: dict) -> dict:
         raise ValueError("capture_base64 must be valid standard base64") from error
     if not capture or len(capture) > MAX_CAPTURE_BYTES:
         raise ValueError(f"capture must contain between 1 and {MAX_CAPTURE_BYTES} decoded bytes")
-    if len(capture) < 24:
-        raise ValueError("capture is shorter than the 24-byte PCAP global header")
-
-    magic = capture[:4]
-    if magic not in MAGIC:
-        raise ValueError("unsupported capture format; classic PCAP is required (PCAPNG is not supported)")
-    byteorder, divisor, resolution = MAGIC[magic]
-    major = _integer(capture, 4, 2, byteorder)
-    minor = _integer(capture, 6, 2, byteorder)
-    if (major, minor) != (2, 4):
-        raise ValueError("PCAP version 2.4 is required")
-    snaplen = _integer(capture, 16, 4, byteorder)
-    link_type = _integer(capture, 20, 4, byteorder) & 0xFFFF
-    if not 1 <= snaplen <= MAX_SNAPLEN:
-        raise ValueError(f"PCAP snap length must be from 1 to {MAX_SNAPLEN} bytes")
-    if link_type not in SUPPORTED_LINK_TYPES:
-        raise ValueError("unsupported PCAP link type; supported types are Ethernet, Linux cooked v1/v2, IEEE 802.11 and radiotap")
+    if len(capture) < 12:
+        raise ValueError("capture is shorter than a valid PCAP or PCAPNG header")
 
     maximum_packets = payload.get("maximum_packets", MAX_PACKETS)
     if isinstance(maximum_packets, bool) or not isinstance(maximum_packets, int) or not 1 <= maximum_packets <= MAX_PACKETS:
@@ -656,55 +641,70 @@ def run(payload: dict) -> dict:
         "radio_noise_samples": 0,
         "radiotap_unsupported_fields": 0,
     }
-    cursor = 24
-    packets_read = 0
-    captured_bytes = 0
-    wire_bytes = 0
-    first_packet_at = None
-    last_packet_at = None
-    packet_header_size = 16
 
-    while cursor < len(capture):
-        if packets_read >= maximum_packets:
-            raise ValueError(f"capture exceeds the {maximum_packets}-packet analysis limit")
-        if len(capture) - cursor < packet_header_size:
-            raise ValueError("capture ends with an incomplete packet record header")
-        seconds = _integer(capture, cursor, 4, byteorder)
-        fraction = _integer(capture, cursor + 4, 4, byteorder)
-        included_length = _integer(capture, cursor + 8, 4, byteorder)
-        original_length = _integer(capture, cursor + 12, 4, byteorder)
-        cursor += packet_header_size
-        if fraction >= divisor:
-            raise ValueError("capture packet timestamp fraction exceeds its resolution")
-        if included_length > snaplen or included_length > MAX_FRAME_BYTES:
-            raise ValueError("capture packet exceeds the declared snap length or frame limit")
-        if original_length < included_length:
-            raise ValueError("capture packet original length is smaller than its captured length")
-        if included_length > len(capture) - cursor:
-            raise ValueError("capture ends with a truncated packet record")
-        packet_time = _utc_timestamp(seconds, fraction, divisor)
-        if first_packet_at is None:
-            first_packet_at = packet_time
-        last_packet_at = packet_time
-        frame = capture[cursor:cursor + included_length]
-        cursor += included_length
-        packets_read += 1
-        captured_bytes += included_length
-        wire_bytes += original_length
-        if included_length < original_length:
-            state["truncated"] += 1
-        _parse_packet(frame, link_type, state)
+    if capture[:4] == PCAPNG_MAGIC:
+        capture_metadata, summary = _analyse_pcapng(capture, maximum_packets, state)
+    else:
+        magic = capture[:4]
+        if magic not in MAGIC:
+            raise ValueError("unsupported capture format; classic PCAP or PCAPNG is required")
+        if len(capture) < 24:
+            raise ValueError("capture is shorter than the 24-byte PCAP global header")
+        byteorder, divisor, resolution = MAGIC[magic]
+        major = _integer(capture, 4, 2, byteorder)
+        minor = _integer(capture, 6, 2, byteorder)
+        if (major, minor) != (2, 4):
+            raise ValueError("PCAP version 2.4 is required")
+        snaplen = _integer(capture, 16, 4, byteorder)
+        link_type = _integer(capture, 20, 4, byteorder) & 0xFFFF
+        if not 1 <= snaplen <= MAX_SNAPLEN:
+            raise ValueError(f"PCAP snap length must be from 1 to {MAX_SNAPLEN} bytes")
+        if link_type not in SUPPORTED_LINK_TYPES:
+            raise ValueError(
+                "unsupported PCAP link type; supported types are Ethernet, Linux cooked v1/v2, "
+                "IEEE 802.11 and radiotap"
+            )
 
-    top_ports = [
-        {"port": port, "count": count}
-        for port, count in sorted(
-            state["destination_ports"].items(),
-            key=lambda item: (-item[1], item[0]),
-        )[:10]
-    ]
-    return {
-        "status": "analysed",
-        "capture": {
+        cursor = 24
+        packets_read = 0
+        captured_bytes = 0
+        wire_bytes = 0
+        first_packet_at = None
+        last_packet_at = None
+        packet_header_size = 16
+
+        while cursor < len(capture):
+            if packets_read >= maximum_packets:
+                raise ValueError(f"capture exceeds the {maximum_packets}-packet analysis limit")
+            if len(capture) - cursor < packet_header_size:
+                raise ValueError("capture ends with an incomplete packet record header")
+            seconds = _integer(capture, cursor, 4, byteorder)
+            fraction = _integer(capture, cursor + 4, 4, byteorder)
+            included_length = _integer(capture, cursor + 8, 4, byteorder)
+            original_length = _integer(capture, cursor + 12, 4, byteorder)
+            cursor += packet_header_size
+            if fraction >= divisor:
+                raise ValueError("capture packet timestamp fraction exceeds its resolution")
+            if included_length > snaplen or included_length > MAX_FRAME_BYTES:
+                raise ValueError("capture packet exceeds the declared snap length or frame limit")
+            if original_length < included_length:
+                raise ValueError("capture packet original length is smaller than its captured length")
+            if included_length > len(capture) - cursor:
+                raise ValueError("capture ends with a truncated packet record")
+            packet_time = _utc_timestamp(seconds, fraction, divisor)
+            if first_packet_at is None:
+                first_packet_at = packet_time
+            last_packet_at = packet_time
+            frame = capture[cursor:cursor + included_length]
+            cursor += included_length
+            packets_read += 1
+            captured_bytes += included_length
+            wire_bytes += original_length
+            if included_length < original_length:
+                state["truncated"] += 1
+            _parse_packet(frame, link_type, state)
+
+        capture_metadata = {
             "format": "pcap",
             "version": "2.4",
             "byte_order": byteorder,
@@ -712,9 +712,10 @@ def run(payload: dict) -> dict:
             "link_type": link_type,
             "link_type_name": SUPPORTED_LINK_TYPES[link_type],
             "snap_length_bytes": snaplen,
+            "interface_count": 1,
             "capture_sha256": hashlib.sha256(capture).hexdigest(),
-        },
-        "summary": {
+        }
+        summary = {
             "packet_count": packets_read,
             "captured_bytes": captured_bytes,
             "wire_bytes": wire_bytes,
@@ -725,7 +726,19 @@ def run(payload: dict) -> dict:
             "arp_packet_count": state["arp"],
             "first_packet_at": first_packet_at,
             "last_packet_at": last_packet_at,
-        },
+        }
+
+    top_ports = [
+        {"port": port, "count": count}
+        for port, count in sorted(
+            state["destination_ports"].items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:10]
+    ]
+    return {
+        "status": "analysed",
+        "capture": capture_metadata,
+        "summary": summary,
         "ether_type_counts": _sorted_counts(state["ether_types"]),
         "ip_protocol_counts": _sorted_counts(state["ip_protocols"]),
         "dscp_counts": _sorted_counts(state["dscp"], numeric=True),
@@ -752,9 +765,9 @@ def run(payload: dict) -> dict:
             "ssid_and_bssid_values_returned": False,
         },
         "note": (
-            "This is offline classic-PCAP analysis only. It does not start a live capture, "
-            "select interfaces, send traffic, or support PCAPNG. Use an operator-approved "
-            "capture tool to create the input file; sensitive addresses and payloads are not returned."
+            "This is offline PCAP/PCAPNG analysis only. It does not start a live capture, "
+            "select interfaces, or send traffic. Use an operator-approved capture tool to "
+            "create the input file; sensitive addresses and packet payloads are not returned."
         ),
     }
 
@@ -765,11 +778,11 @@ FEATURE = {
     "name": "Bounded PCAP capture analyzer",
     "category": "Packet analysis",
     "description": (
-        "Analyse bounded classic PCAP files for Ethernet, Linux cooked, IPv4/IPv6, TCP/UDP, DSCP and "
+        "Analyse bounded classic PCAP/PCAPNG files for Ethernet, Linux cooked, IPv4/IPv6, TCP/UDP, DSCP and "
         "802.11/radiotap frame and measured PHY statistics without returning packet payloads or endpoint addresses."
     ),
     "parameters": {
-        "capture_base64": "standard-base64 classic PCAP file, decoded size up to 512 KiB",
+        "capture_base64": "standard-base64 classic PCAP or PCAPNG file, decoded size up to 512 KiB",
         "maximum_packets": f"optional packet limit from 1 to {MAX_PACKETS}",
     },
     "run": run,
