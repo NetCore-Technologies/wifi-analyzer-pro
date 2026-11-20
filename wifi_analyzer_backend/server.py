@@ -23,6 +23,7 @@ if __package__:
     from .router_adapters.health_store import (
         AgentAuthenticationError,
         AgentCredentialConflictError,
+        DuplicateAgentDeliveryError,
         DuplicateAgentSnapshotError,
         RouterAgentHealthStore,
     )
@@ -941,6 +942,34 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 400)
                 return
             self.send_json({"agent": heartbeat}, 201 if heartbeat["created"] else 200)
+            return
+
+        if path == "/api/agents/snapshots/batch":
+            try:
+                delivery = run_feature("openwrt_snapshot_delivery_envelope", payload)["result"]
+                saved = AGENT_HEALTH.record_snapshot(
+                    delivery["agent_id"],
+                    delivery["snapshot"],
+                    token=self.bearer_token(),
+                    delivery_id=delivery["delivery_id"],
+                )
+            except AgentAuthenticationError as error:
+                self.send_json({"error": str(error)}, 401)
+                return
+            except DuplicateAgentDeliveryError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except DuplicateAgentSnapshotError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception as error:
+                print(f"[AGENT DELIVERY ERROR] {error}")
+                self.send_json({"error": "Agent snapshot delivery failed"}, 500)
+                return
+            self.send_json({"delivery": saved}, 200 if saved.get("replayed") else 201)
             return
 
         if path == "/api/agents/snapshot":

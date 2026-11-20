@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -20,6 +21,8 @@ MAX_CAPABILITIES = 64
 MAX_SNAPSHOTS_PER_AGENT = 100
 MAX_STORED_SNAPSHOT_BYTES = 512 * 1024
 MAX_STORED_SNAPSHOTS_TOTAL = 1000
+MAX_DELIVERIES_PER_AGENT = 500
+MAX_DELIVERIES_TOTAL = 5000
 DEFAULT_AGENT_TOKEN_TTL_DAYS = 90
 MAX_AGENT_TOKEN_TTL_DAYS = 365
 _AGENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
@@ -37,6 +40,10 @@ _ERROR_CODES = {
 
 class DuplicateAgentSnapshotError(ValueError):
     """Raised when an agent submits an already stored capture timestamp."""
+
+
+class DuplicateAgentDeliveryError(ValueError):
+    """Raised when a delivery ID is replayed with different payload contents."""
 
 
 class AgentCredentialConflictError(ValueError):
@@ -82,6 +89,23 @@ class RouterAgentHealthStore:
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_agent_router_snapshots_agent_id_id "
             "ON agent_router_snapshots(agent_id, id DESC)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS agent_snapshot_deliveries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id TEXT NOT NULL,
+                delivery_id TEXT NOT NULL,
+                payload_hash TEXT NOT NULL,
+                result_json TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                UNIQUE(agent_id, delivery_id)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_snapshot_deliveries_agent_id_id "
+            "ON agent_snapshot_deliveries(agent_id, id DESC)"
         )
         connection.execute(
             """
@@ -387,11 +411,21 @@ class RouterAgentHealthStore:
         }
 
 
-    def record_snapshot(self, agent_id: str, snapshot: dict, *, token: str) -> dict:
+    def record_snapshot(
+        self, agent_id: str, snapshot: dict, *, token: str, delivery_id: str | None = None
+    ) -> dict:
         if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
             raise ValueError("agent_id must be a 1 to 64 character identifier")
         if not isinstance(snapshot, dict) or snapshot.get("adapter_id") != "openwrt":
             raise ValueError("snapshot must be a normalised OpenWrt snapshot")
+        if delivery_id is not None:
+            if not isinstance(delivery_id, str) or len(delivery_id) > 64:
+                raise ValueError("delivery_id must be a UUID string")
+            try:
+                delivery_id = str(uuid.UUID(delivery_id))
+            except (ValueError, AttributeError, TypeError) as error:
+                raise ValueError("delivery_id must be a UUID string") from error
+
         captured_at = snapshot.get("captured_at")
         if not isinstance(captured_at, str) or not captured_at.strip():
             raise ValueError("snapshot.captured_at must be a timezone-aware ISO-8601 timestamp")
@@ -408,8 +442,9 @@ class RouterAgentHealthStore:
             raise ValueError("snapshot must contain JSON-compatible finite values") from error
         if len(encoded.encode("utf-8")) > MAX_STORED_SNAPSHOT_BYTES:
             raise ValueError(f"normalised snapshot exceeds the {MAX_STORED_SNAPSHOT_BYTES}-byte storage limit")
-
+        payload_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         received_at = datetime.now(timezone.utc).isoformat()
+
         try:
             with self._connection() as connection:
                 credential = self._require_agent_credential(connection, agent_id, token)
@@ -425,6 +460,25 @@ class RouterAgentHealthStore:
                     raise ValueError("Agent credential does not include the inventory.snapshot capability")
                 if "inventory.snapshot" not in json.loads(agent["capabilities"]):
                     raise ValueError("agent has not negotiated the inventory.snapshot capability")
+
+                if delivery_id is not None:
+                    existing_delivery = connection.execute(
+                        """
+                        SELECT payload_hash, result_json
+                        FROM agent_snapshot_deliveries
+                        WHERE agent_id = ? AND delivery_id = ?
+                        """,
+                        (agent_id, delivery_id),
+                    ).fetchone()
+                    if existing_delivery is not None:
+                        if not hmac.compare_digest(existing_delivery["payload_hash"], payload_hash):
+                            raise DuplicateAgentDeliveryError(
+                                "delivery_id has already been used with different snapshot contents"
+                            )
+                        replayed = json.loads(existing_delivery["result_json"])
+                        replayed["replayed"] = True
+                        return replayed
+
                 cursor = connection.execute(
                     """
                     INSERT INTO agent_router_snapshots
@@ -453,21 +507,63 @@ class RouterAgentHealthStore:
                     """,
                     (agent_id, agent_id, MAX_SNAPSHOTS_PER_AGENT),
                 )
+                summary = snapshot.get("summary", {})
+                result = {
+                    "id": snapshot_id,
+                    "agent_id": agent_id,
+                    "adapter_id": snapshot["adapter_id"],
+                    "captured_at": captured_at,
+                    "received_at": received_at,
+                    "interface_count": summary.get("interface_count", 0),
+                    "wireless_radio_count": summary.get("wireless_radio_count", 0),
+                    "association_count": summary.get("association_count", 0),
+                    "route_count": summary.get("route_count", 0),
+                    "replayed": False,
+                }
+                if delivery_id is not None:
+                    connection.execute(
+                        """
+                        INSERT INTO agent_snapshot_deliveries
+                            (agent_id, delivery_id, payload_hash, result_json, received_at)
+                        VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            agent_id,
+                            delivery_id,
+                            payload_hash,
+                            json.dumps(result, separators=(",", ":"), sort_keys=True),
+                            received_at,
+                        ),
+                    )
+                    connection.execute(
+                        """
+                        DELETE FROM agent_snapshot_deliveries
+                        WHERE id NOT IN (
+                            SELECT id FROM agent_snapshot_deliveries ORDER BY id DESC LIMIT ?
+                        )
+                        """,
+                        (MAX_DELIVERIES_TOTAL,),
+                    )
+                    connection.execute(
+                        """
+                        DELETE FROM agent_snapshot_deliveries
+                        WHERE agent_id = ? AND id NOT IN (
+                            SELECT id FROM agent_snapshot_deliveries
+                            WHERE agent_id = ? ORDER BY id DESC LIMIT ?
+                        )
+                        """,
+                        (agent_id, agent_id, MAX_DELIVERIES_PER_AGENT),
+                    )
+                return result
         except sqlite3.IntegrityError as error:
-            if "UNIQUE constraint failed" in str(error):
+            message = str(error)
+            if "agent_snapshot_deliveries.agent_id, agent_snapshot_deliveries.delivery_id" in message:
+                raise DuplicateAgentDeliveryError("Snapshot delivery was already accepted") from error
+            if "UNIQUE constraint failed" in message:
                 raise DuplicateAgentSnapshotError(
                     "A snapshot for this agent and capture timestamp already exists"
                 ) from error
             raise
-        summary = snapshot.get("summary", {})
-        return {
-            "id": snapshot_id, "agent_id": agent_id, "adapter_id": snapshot["adapter_id"],
-            "captured_at": captured_at, "received_at": received_at,
-            "interface_count": summary.get("interface_count", 0),
-            "wireless_radio_count": summary.get("wireless_radio_count", 0),
-            "association_count": summary.get("association_count", 0),
-            "route_count": summary.get("route_count", 0),
-        }
 
     def list_latest_snapshots(self) -> list[dict]:
         with self._connection() as connection:

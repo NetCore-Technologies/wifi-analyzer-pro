@@ -108,6 +108,7 @@ The local HTTP service exposes:
 | `POST /api/adapters/openwrt/normalise` | Validate and normalise a supplied OpenWrt board/network/wireless/route snapshot |
 | `POST /api/agents/heartbeat` | Record a heartbeat using that agent’s scoped bearer token |
 | `POST /api/agents/snapshot` | Store a normalised OpenWrt snapshot using the agent token and its `inventory.snapshot` scope |
+| `POST /api/agents/snapshots/batch` | Recommended retry-safe snapshot delivery using a stable UUID `delivery_id`; identical retries return the original acknowledgement |
 | `GET /api/agents/health` | Report latest agent health using server-received heartbeat timestamps |
 | `POST /api/agents/enroll` | Admin-only enrolment that issues a one-time, read-only scoped agent token |
 | `GET /api/agents/credentials` | Admin-only credential metadata listing; token hashes and bearer tokens are never returned |

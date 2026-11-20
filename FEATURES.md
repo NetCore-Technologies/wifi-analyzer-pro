@@ -1,4 +1,4 @@
-# 166 WiFi Analyzer Pro feature tools
+# 167 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -173,6 +173,7 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 164 | OpenWrt agent snapshot ingestion (`openwrt_agent_snapshot_ingest`) | Router integrations | Accept authenticated snapshots from registered agents, normalise before persistence, retain bounded history, and expose latest inventory data. |
 | 165 | OpenWrt agent snapshot diff (`openwrt_agent_snapshot_diff`) | Router integrations | Compare retained snapshots and identify board, interface, radio, client-association and route changes. |
 | 166 | Router agent credential scope (`router_agent_credential_scope`) | Router integrations | Issue per-agent, read-only scoped bearer credentials with expiry, rotation and revocation; store only token hashes. |
+| 167 | OpenWrt idempotent snapshot delivery (`openwrt_snapshot_delivery_envelope`) | Router integrations | Accept UUID-keyed snapshot deliveries with safe retries, duplicate-content detection and bounded idempotency retention. |
 
 
 ## Authentication and UI

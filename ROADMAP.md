@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 166 distinct built-in feature tools (F001–F166), each in its own module with a stable slug and metadata.
+- ✅ 167 distinct built-in feature tools (F001–F167), each in its own module with a stable slug and metadata.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
@@ -66,7 +66,7 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 | ✅ | F101–F120 | Shipped: same-SSID band visibility, roaming evidence/timelines, channel-width overlap, DFS/PSC planning, Wi-Fi 7 EHT/MLO and PMF/regulatory audits | 2026-11-20 | Implemented | F001–F100 registry; 20 module-level test payloads |
 | ✅ | F121–F140 | Shipped: client association inventory, airtime/throughput fairness, QoS/DSCP, retry/PHY checks, 802.11k/v/r, TWT, DHCP/DNS/gateway checks and association diagnostics | 2026-11-20 | Implemented | F001–F120; supplied AP/controller and client measurement records |
 | 🚧 | F141–F160 | F141–F160 shipped: site inventory snapshots/comparisons, AP topology relationships and gateway-path audits, subnet correlation/capacity, gateway redundancy, floor-plan anchors/zones, topology redundancy/diffs/history, AP freshness, channel-reuse and radio-configuration standards audits, interactive topology visualisation, persistent site discovery history, stored site-to-site change reports, and consolidated site audit reporting; all deliverables in this wave are shipped | 2027-02-26 | 20 features shipped; 0 remains | SQLite history; consented local discovery |
-| 🚧 | F161–F180 | F161–F166 shipped: versioned OpenWrt read-only adapter manifest and capability negotiation, bounded credential-free snapshot normalisation, persisted authenticated agent heartbeats and stale-health reporting, retained normalised agent snapshot history and diffs, and per-agent read-only scoped credentials with expiry/rotation/revocation; remaining: live local-agent collection, UniFi/MikroTik adapter contracts and capability-negotiation persistence | 2027-04-09 | 6 features shipped; 14 remain | Authenticated API; adapter contract tests |
+| 🚧 | F161–F180 | F161–F167 shipped: versioned OpenWrt read-only adapter manifest and capability negotiation, bounded credential-free snapshot normalisation, persisted authenticated agent heartbeats and stale-health reporting, retained normalised agent snapshot history and diffs, per-agent read-only scoped credentials with expiry/rotation/revocation, and UUID-keyed idempotent snapshot delivery; remaining: live local-agent collection, UniFi/MikroTik adapter contracts and capability-negotiation persistence | 2027-04-09 | 7 features shipped; 13 remain | Authenticated API; adapter contract tests |
 | 3 | F181–F200 | Scheduled reports, alert policies, webhook delivery, report comparison and backup/restore | 2027-05-07 | 4–5 weeks | Waves 2–4; encrypted local settings |
 
 ### Longer-range direction (F201–F1100)

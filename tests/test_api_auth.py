@@ -89,8 +89,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 166)
-        self.assertEqual(len(catalog["features"]), 166)
+        self.assertEqual(catalog["count"], 167)
+        self.assertEqual(len(catalog["features"]), 167)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -104,6 +104,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("openwrt_agent_snapshot_ingest", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_agent_snapshot_diff", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_credential_scope", {item["slug"] for item in catalog["features"]})
+        self.assertIn("openwrt_snapshot_delivery_envelope", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -538,6 +539,51 @@ class AuthenticatedApiTests(unittest.TestCase):
         }, token=admin_token)
         self.assertEqual(status, 409)
         self.assertIn("rotate", duplicate["error"])
+
+
+    def test_openwrt_snapshot_delivery_is_idempotent_and_rejects_payload_reuse(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "delivery-agent", ["system.board", "inventory.snapshot"])
+        status, heartbeat = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"delivery-agent","adapter_id":"openwrt","agent_version":"1.2.0",
+            "status":"healthy","capabilities":["system.board","inventory.snapshot"],
+        }, token=agent_token)
+        self.assertEqual(status, 201)
+        delivery_id = "6c6329b5-8611-4c45-8926-5d6a85bc9f7d"
+        snapshot = {
+            "captured_at":"2026-11-20T10:00:00Z",
+            "board":{"model":"OpenWrt sample","release":{"distribution":"OpenWrt","version":"24.10.0"}},
+            "interfaces":[{"interface":"lan","ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
+            "wireless":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":5180,"channel":36,"channel_width_mhz":80}],
+            "associations":[],
+            "routes":[{"target":"0.0.0.0/0","nexthop":"192.168.1.1","device":"eth0"}],
+        }
+        payload = {"agent_id":"delivery-agent","delivery_id":delivery_id,"snapshot":snapshot}
+        status, first = self.request("POST", "/api/agents/snapshots/batch", payload, token=agent_token)
+        self.assertEqual(status, 201)
+        self.assertFalse(first["delivery"]["replayed"])
+        status, retry = self.request("POST", "/api/agents/snapshots/batch", payload, token=agent_token)
+        self.assertEqual(status, 200)
+        self.assertTrue(retry["delivery"]["replayed"])
+        self.assertEqual(retry["delivery"]["id"], first["delivery"]["id"])
+
+        changed = {**snapshot, "board": {"model":"Different router"}}
+        status, conflict = self.request("POST", "/api/agents/snapshots/batch", {
+            **payload, "snapshot":changed,
+        }, token=agent_token)
+        self.assertEqual(status, 409)
+        self.assertIn("different snapshot contents", conflict["error"])
+
+        status, invalid = self.request("POST", "/api/agents/snapshots/batch", {
+            "agent_id":"delivery-agent","delivery_id":"invalid","snapshot":snapshot,
+        }, token=agent_token)
+        self.assertEqual(status, 400)
+        self.assertIn("UUID", invalid["error"])
+
+        status, denied = self.request("POST", "/api/agents/snapshots/batch", payload)
+        self.assertEqual(status, 401)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -337,18 +337,31 @@ PAYLOADS = {
         "requested_capabilities": ["system.board", "inventory.snapshot"],
         "requested_permissions": ["read"]
     }
+,
+    "openwrt_snapshot_delivery_envelope": {
+        "agent_id": "openwrt-home",
+        "delivery_id": "6c6329b5-8611-4c45-8926-5d6a85bc9f7d",
+        "snapshot": {
+            "captured_at":"2026-11-20T10:00:00Z",
+            "board":{"model":"OpenWrt sample","release":{"distribution":"OpenWrt","version":"24.10.0"}},
+            "interfaces":[{"interface":"lan","ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
+            "wireless":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":5180,"channel":36,"channel_width_mhz":80,"password":"never-store-me"}],
+            "associations":[],
+            "routes":[{"target":"0.0.0.0/0","nexthop":"192.168.1.1","device":"eth0"}]
+        }
+    }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_six_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_seven_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 166)
-        self.assertEqual(len(set(FEATURE_MODULES)), 166)
-        self.assertEqual(count(), 166)
-        self.assertEqual(len(entries), 166)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 166)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 167)])
+        self.assertEqual(len(FEATURE_MODULES), 167)
+        self.assertEqual(len(set(FEATURE_MODULES)), 167)
+        self.assertEqual(count(), 167)
+        self.assertEqual(len(entries), 167)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 167)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 168)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -1043,6 +1056,25 @@ class FeatureCatalogTests(unittest.TestCase):
             run("router_agent_credential_scope", {
                 **PAYLOADS["router_agent_credential_scope"],
                 "requested_capabilities": ["system.board", "wireless.config.write"],
+            })
+
+    def test_openwrt_snapshot_delivery_envelope_normalises_uuid_and_snapshot(self):
+        result = run("openwrt_snapshot_delivery_envelope", PAYLOADS["openwrt_snapshot_delivery_envelope"])["result"]
+        self.assertEqual(result["agent_id"], "openwrt-home")
+        self.assertEqual(result["delivery_id"], "6c6329b5-8611-4c45-8926-5d6a85bc9f7d")
+        self.assertEqual(result["summary"]["wireless_radio_count"], 1)
+        self.assertNotIn("password", result["snapshot"]["wireless_radios"][0])
+
+    def test_openwrt_snapshot_delivery_envelope_rejects_invalid_ids(self):
+        with self.assertRaisesRegex(ValueError, "UUID"):
+            run("openwrt_snapshot_delivery_envelope", {
+                "agent_id":"openwrt-home","delivery_id":"not-a-uuid",
+                "snapshot":{"captured_at":"2026-11-20T10:00:00Z"},
+            })
+        with self.assertRaisesRegex(ValueError, "agent_id"):
+            run("openwrt_snapshot_delivery_envelope", {
+                "agent_id":"../admin","delivery_id":"6c6329b5-8611-4c45-8926-5d6a85bc9f7d",
+                "snapshot":{"captured_at":"2026-11-20T10:00:00Z"},
             })
 
 if __name__ == "__main__":

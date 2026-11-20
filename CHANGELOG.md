@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 166 independently callable feature modules (F001–F166), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 167 independently callable feature modules (F001–F167), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -20,6 +20,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add authenticated OpenWrt agent snapshot ingestion, credential-free normalisation before storage, duplicate capture protection, bounded per-agent retention and latest-snapshot read APIs.
 - Add deterministic agent snapshot diffs for board metadata, network interfaces, wireless radio configuration, client associations and routes, with capped detail lists and explicit first-snapshot baselines.
 - Add per-agent read-only bearer credentials with hashed-at-rest secrets, bounded expiry, one-time enrollment/rotation responses, immediate revocation, capability-scoped heartbeat/snapshot writes and admin-only credential metadata.
+- Add UUID-keyed OpenWrt snapshot delivery with payload-hash matching, replay-safe acknowledgements, conflicting-retry rejection and bounded delivery-ledger retention.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
 - Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.
