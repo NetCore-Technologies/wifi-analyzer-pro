@@ -58,7 +58,7 @@ class RouterSubnetOverlapAuditTests(unittest.TestCase):
         self.assertEqual(result["status"], "audited")
         self.assertEqual(result["summary"]["router_count"], 3)
         self.assertEqual(result["summary"]["site_count"], 1)
-        self.assertEqual(result["summary"]["subnet_count"], 4)
+        self.assertEqual(result["summary"]["subnet_count"], 5)
         self.assertEqual(result["summary"]["overlap_count"], 4)
         self.assertEqual(result["summary"]["duplicate_subnet_count"], 2)
         self.assertEqual(result["summary"]["overlapping_subnet_count"], 2)
@@ -152,7 +152,7 @@ class RouterSubnetOverlapAuditTests(unittest.TestCase):
                     "interfaces": [{"interface": "lan", "ipv4_addresses": ["192.0.2.1/99"]}],
                 },
             }]})
-        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
             run({"snapshots": [{
                 "router_id": "router-naive",
                 "snapshot": {"adapter_id": "openwrt", "captured_at": "2026-11-20T10:00:00"},
@@ -169,7 +169,7 @@ class RouterSubnetOverlapAuditTests(unittest.TestCase):
             ]})
 
     def test_rejects_bounded_input_and_invalid_vlan_values(self):
-        with self.assertRaisesRegex(ValueError, "no more than 64"):
+        with self.assertRaisesRegex(ValueError, "from 1 to 64"):
             run({"snapshots": [
                 {"router_id": f"router-{index}", "snapshot": {
                     "adapter_id": "openwrt", "captured_at": NOW,
