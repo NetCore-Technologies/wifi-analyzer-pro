@@ -189,19 +189,35 @@ PAYLOADS = {
             {"site_id":"home","band":"5GHz","channel_width_mhz":80,"security":"WPA3","min_tx_power_dbm":10,"max_tx_power_dbm":22}
         ]
     },
+    "site_topology_visualisation": {
+        "access_points": [
+            {"ap_id":"gw","site_id":"home","name":"Gateway"},
+            {"ap_id":"ap-a","site_id":"home","name":"Hall AP"},
+            {"ap_id":"ap-b","site_id":"home","name":"Office AP"},
+            {"ap_id":"branch-ap","site_id":"branch","name":"Branch AP"}
+        ],
+        "gateway_ap_ids": ["gw"],
+        "links": [
+            {"from_ap_id":"gw","to_ap_id":"ap-a","relationship":"wired_uplink"},
+            {"from_ap_id":"ap-a","to_ap_id":"ap-b","relationship":"mesh_backhaul"},
+            {"from_ap_id":"gw","to_ap_id":"ap-b","relationship":"rf_neighbor"},
+            {"from_ap_id":"ap-b","to_ap_id":"branch-ap","relationship":"wireless_backhaul"},
+            {"from_ap_id":"missing","to_ap_id":"ap-a","relationship":"wired_uplink"}
+        ]
+    },
 
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_fifty_six_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_fifty_seven_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 156)
-        self.assertEqual(len(set(FEATURE_MODULES)), 156)
-        self.assertEqual(count(), 156)
-        self.assertEqual(len(entries), 156)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 156)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 157)])
+        self.assertEqual(len(FEATURE_MODULES), 157)
+        self.assertEqual(len(set(FEATURE_MODULES)), 157)
+        self.assertEqual(count(), 157)
+        self.assertEqual(len(entries), 157)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 157)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 158)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -653,6 +669,39 @@ class FeatureCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must be one of"):
             run("site_radio_configuration_audit", {
                 "radios": [{"radio_id": "ap-radio", "site_id": "home", "band": "60GHz"}],
+            })
+
+    def test_site_topology_visualisation_builds_site_aware_deterministic_layers(self):
+        payload = PAYLOADS["site_topology_visualisation"]
+        result = run("site_topology_visualisation", payload)["result"]
+        by_id = {item["ap_id"]: item for item in result["nodes"]}
+        self.assertEqual(by_id["gw"]["layout_depth"], 0)
+        self.assertEqual(by_id["ap-a"]["layout_depth"], 1)
+        self.assertEqual(by_id["ap-b"]["layout_depth"], 2)
+        self.assertTrue(by_id["ap-a"]["reachable_from_gateway"])
+        self.assertIsNone(by_id["branch-ap"]["reachable_from_gateway"])
+        self.assertEqual(result["summary"]["physical_link_count"], 2)
+        self.assertEqual(result["summary"]["rf_neighbor_link_count"], 1)
+        self.assertEqual(result["summary"]["cross_site_link_count"], 1)
+        self.assertEqual(result["summary"]["unresolved_link_count"], 1)
+        self.assertEqual(run("site_topology_visualisation", payload)["result"]["nodes"], result["nodes"])
+
+    def test_site_topology_visualisation_keeps_missing_gateway_paths_unknown(self):
+        result = run("site_topology_visualisation", {
+            "access_points": [{"ap_id": "ap-a", "site_id": "home"}, {"ap_id": "ap-b", "site_id": "home"}],
+            "links": [{"from_ap_id": "ap-a", "to_ap_id": "ap-b", "relationship": "wired_uplink"}],
+        })["result"]
+        self.assertTrue(all(node["reachable_from_gateway"] is None for node in result["nodes"]))
+        self.assertEqual(result["site_groups"][0]["unknown_reachability_count"], 2)
+
+    def test_site_topology_visualisation_rejects_duplicate_gateways_and_unknown_relationships(self):
+        base = {"access_points": [{"ap_id": "gw", "site_id": "home"}]}
+        with self.assertRaisesRegex(ValueError, "gateway_ap_ids must be unique"):
+            run("site_topology_visualisation", {**base, "gateway_ap_ids": ["gw", "gw"]})
+        with self.assertRaisesRegex(ValueError, "relationship must be one of"):
+            run("site_topology_visualisation", {
+                **base,
+                "links": [{"from_ap_id": "gw", "to_ap_id": "other", "relationship": "invented"}],
             })
 
 if __name__ == "__main__":

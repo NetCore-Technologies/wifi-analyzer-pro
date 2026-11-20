@@ -69,11 +69,12 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 156)
-        self.assertEqual(len(catalog["features"]), 156)
+        self.assertEqual(catalog["count"], 157)
+        self.assertEqual(len(catalog["features"]), 157)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("site_topology_visualisation", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -146,6 +147,24 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["feature"], "F156")
         self.assertEqual(result["result"]["radios"][0]["status"], "compliant")
+
+    def test_site_topology_visualisation_is_available_through_the_authenticated_api(self):
+        _, setup = self.request(
+            "POST", "/api/auth/setup", {"password": "correct horse battery staple"}
+        )
+        status, result = self.request(
+            "POST",
+            "/api/features/site_topology_visualisation",
+            {
+                "access_points": [{"ap_id": "gw", "site_id": "home"}, {"ap_id": "ap-1", "site_id": "home"}],
+                "gateway_ap_ids": ["gw"],
+                "links": [{"from_ap_id": "gw", "to_ap_id": "ap-1", "relationship": "wired_uplink"}],
+            },
+            token=setup["token"],
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F157")
+        self.assertEqual(result["result"]["summary"]["access_point_count"], 2)
 
 if __name__ == "__main__":
     unittest.main()

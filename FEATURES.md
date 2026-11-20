@@ -1,4 +1,4 @@
-# 156 WiFi Analyzer Pro feature tools
+# 157 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -163,6 +163,7 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 154 | Site topology history timeline (`site_topology_history_timeline`) | Site inventory | Summarise AP and link changes across up to 256 timestamped, caller-supplied topology snapshots. |
 | 155 | Site AP-to-gateway path audit (`site_topology_gateway_path_audit`) | Site inventory | Trace AP backhaul paths to supplied gateway APs and distinguish unreachable, unknown and cross-site evidence. |
 | 156 | Site radio configuration audit (`site_radio_configuration_audit`) | Site inventory | Compare AP radio channel widths, security and transmit power with explicit site/band standards; missing observations remain unknown. |
+| 157 | Interactive site topology visualisation (`site_topology_visualisation`) | Site inventory | Create deterministic, per-site AP layers and typed physical/RF/cross-site links for interactive inspection in the Workbench. |
 
 
 ## Authentication and UI
