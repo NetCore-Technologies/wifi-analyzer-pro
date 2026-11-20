@@ -20,7 +20,7 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         arm64_script = (ROOT / "wifi_analyzer_backend" / "build_arm64_binary.sh").read_text(encoding="utf-8")
         smoke_helper = (ROOT / "wifi_analyzer_backend" / "smoke_test_frozen_features.py").read_text(encoding="utf-8")
 
-        self.assertIn("SMOKE_PORT=19991", arm64_script)
+        self.assertIn("SMOKE_PORT=$(", arm64_script)
         self.assertIn("WIFI_ANALYZER_PORT=", arm64_script)
         self.assertIn("smoke_test_frozen_features.py", arm64_script)
         self.assertIn("WIFI_ANALYZER_SMOKE_URL", smoke_helper)
