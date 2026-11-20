@@ -72,8 +72,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 160)
-        self.assertEqual(len(catalog["features"]), 160)
+        self.assertEqual(catalog["count"], 161)
+        self.assertEqual(len(catalog["features"]), 161)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -81,6 +81,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("site_discovery_history_snapshot", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_to_site_change_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("consolidated_site_audit_report", {item["slug"] for item in catalog["features"]})
+        self.assertIn("router_agent_capability_negotiation", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -274,6 +275,29 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, response = self.request("POST", "/api/sites/audit", {"sites": []})
         self.assertEqual(status, 401)
         self.assertIn("Authentication required", response["error"])
+
+    def test_read_only_adapter_catalog_and_capability_negotiation_require_auth(self):
+        status, denied = self.request("GET", "/api/adapters")
+        self.assertEqual(status, 401)
+        self.assertIn("Authentication required", denied["error"])
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, catalogue = self.request("GET", "/api/adapters", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(catalogue["count"], 1)
+        self.assertEqual(catalogue["adapters"][0]["adapter_id"], "openwrt")
+        self.assertTrue(catalogue["adapters"][0]["read_only"])
+
+        status, negotiated = self.request("POST", "/api/adapters/negotiate", {
+            "adapter_id": "openwrt",
+            "agent_version": "1.0.0",
+            "advertised_capabilities": ["system.board", "network.routes"],
+            "requested_capabilities": ["system.board", "network.routes"],
+            "requested_permissions": ["read", "config.write"],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(negotiated["result"]["status"], "partial")
+        self.assertEqual(negotiated["result"]["negotiated_permissions"], ["read"])
 
 if __name__ == "__main__":
     unittest.main()

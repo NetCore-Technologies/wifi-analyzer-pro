@@ -267,19 +267,24 @@ PAYLOADS = {
             "gateways": [{"gateway_id":"gw-a","site_id":"home","group_id":"edge","protocol":"vrrp","ip":"192.168.1.1","state":"active"}],
             "segments": [{"segment_id":"main","site_id":"home","cidr":"192.168.1.0/24","in_use_count":240,"reserved_count":5}]
         }]
+    },
+    "router_agent_capability_negotiation": {
+        "adapter_id": "openwrt",
+        "agent_version": "1.2.0",
+        "advertised_capabilities": ["system.board", "system.health", "network.interfaces", "wireless.radios", "wireless.scan_results"],
+        "requested_capabilities": ["system.board", "wireless.radios", "wireless.config.write"],
+        "requested_permissions": ["read", "config.write"]
     }
 }
-
-
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_one_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 160)
-        self.assertEqual(len(set(FEATURE_MODULES)), 160)
-        self.assertEqual(count(), 160)
-        self.assertEqual(len(entries), 160)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 160)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 161)])
+        self.assertEqual(len(FEATURE_MODULES), 161)
+        self.assertEqual(len(set(FEATURE_MODULES)), 161)
+        self.assertEqual(count(), 161)
+        self.assertEqual(len(entries), 161)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 161)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 162)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -846,6 +851,39 @@ class FeatureCatalogTests(unittest.TestCase):
                     {"site_id": "home", "access_points": []},
                     {"site_id": "home", "access_points": []},
                 ]
+            })
+
+    def test_router_agent_capability_negotiation_intersects_read_only_capabilities(self):
+        result = run("router_agent_capability_negotiation", PAYLOADS["router_agent_capability_negotiation"])["result"]
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(result["negotiated_capabilities"], ["system.board", "wireless.radios"])
+        self.assertEqual(result["negotiated_permissions"], ["read"])
+        self.assertEqual(result["rejected_capabilities"][0]["reason"], "not_supported_by_adapter")
+        self.assertEqual(result["rejected_permissions"][0]["reason"], "adapter_is_read_only")
+
+    def test_router_agent_capability_negotiation_rejects_old_agents_and_unknown_adapters(self):
+        old = run("router_agent_capability_negotiation", {
+            "adapter_id": "openwrt", "agent_version": "0.9.0",
+            "advertised_capabilities": ["system.board"],
+            "requested_capabilities": ["system.board"],
+        })["result"]
+        self.assertEqual(old["status"], "version_incompatible")
+        self.assertEqual(old["negotiated_capabilities"], [])
+        unknown = run("router_agent_capability_negotiation", {
+            "adapter_id": "future-router", "agent_version": "1.0.0",
+            "requested_capabilities": ["system.board"],
+        })["result"]
+        self.assertEqual(unknown["status"], "unsupported_adapter")
+
+    def test_router_agent_capability_negotiation_validates_versions_and_duplicate_caps(self):
+        with self.assertRaisesRegex(ValueError, "major.minor.patch"):
+            run("router_agent_capability_negotiation", {
+                "adapter_id": "openwrt", "agent_version": "1.0",
+            })
+        with self.assertRaisesRegex(ValueError, "must be unique"):
+            run("router_agent_capability_negotiation", {
+                "adapter_id": "openwrt", "agent_version": "1.0.0",
+                "advertised_capabilities": ["system.board", "system.board"],
             })
 
 if __name__ == "__main__":

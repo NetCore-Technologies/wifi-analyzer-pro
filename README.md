@@ -103,6 +103,8 @@ The local HTTP service exposes:
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
 | `GET /api/sites/history/report` | Compare latest stored snapshots across sites; accepts optional comma-separated `site_ids` (maximum 20) |
 | `POST /api/sites/audit` | Run the consolidated, authenticated multi-site inventory/topology/gateway/radio/subnet audit |
+| `GET /api/adapters` | List installed versioned router-adapter manifests and read-only capabilities |
+| `POST /api/adapters/negotiate` | Negotiate an authenticated agent’s advertised capabilities against an installed adapter contract |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.

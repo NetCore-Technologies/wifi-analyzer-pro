@@ -18,10 +18,12 @@ if __package__:
     from .auth import AuthManager
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
+    from .router_adapters.registry import list_manifests as router_adapter_manifests
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
+    from router_adapters.registry import list_manifests as router_adapter_manifests
 
 OS = platform.system()
 APP_VERSION = "1.0.7"
@@ -694,6 +696,10 @@ class Handler(BaseHTTPRequestHandler):
                 "count": len(feature_catalog()),
                 "features": feature_catalog(),
             },
+            "/api/adapters": lambda: {
+                "count": len(router_adapter_manifests()),
+                "adapters": router_adapter_manifests(),
+            },
             "/api/capabilities": lambda: {
                 "name": "WiFi Analyzer Pro",
                 "version": APP_VERSION,
@@ -817,6 +823,17 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 401)
                 return
             self.send_json({"token": token, "status": AUTH.status(token)})
+            return
+
+        if path == "/api/adapters/negotiate":
+            if not self.require_auth():
+                return
+            try:
+                result = run_feature("router_agent_capability_negotiation", payload)
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json(result)
             return
 
         if path == "/api/sites/audit":

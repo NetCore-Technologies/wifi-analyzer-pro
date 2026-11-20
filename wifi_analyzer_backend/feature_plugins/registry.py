@@ -164,6 +164,7 @@ FEATURE_MODULES = (
     "feature_158_site_discovery_history_snapshot",
     "feature_159_site_to_site_change_report",
     "feature_160_consolidated_site_audit_report",
+    "feature_161_router_agent_capability_negotiation",
 )
 
 @lru_cache(maxsize=1)
