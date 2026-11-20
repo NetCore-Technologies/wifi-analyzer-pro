@@ -122,6 +122,7 @@ export default function PcapAnalyzer() {
 
   const summary = analysis?.summary || {};
   const capture = analysis?.capture || {};
+  const radio = analysis?.radiotap_observations || {};
 
   return (
     <div style={{ display: "grid", gap: 16, maxWidth: 1120, margin: "0 auto" }}>
@@ -244,7 +245,13 @@ export default function PcapAnalyzer() {
             <Metric label="Truncated / malformed" value={`${number(summary.truncated_packet_count)} / ${number(summary.malformed_frame_count)}`} detail="Capture quality"/>
           </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10 }}>
+            <Metric label="Average antenna signal" value={radio.signal?.average_dbm == null ? "—" : `${radio.signal.average_dbm} dBm`} detail={`${number(radio.signal?.sample_count)} radiotap samples`}/>
+            <Metric label="Average noise" value={radio.noise?.average_dbm == null ? "—" : `${radio.noise.average_dbm} dBm`} detail={`${number(radio.noise?.sample_count)} radiotap samples`}/>
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 12 }}>
+            <CountList title="Radiotap channel frequencies (MHz)" rows={radio.channel_frequency_mhz_counts}/>
             <CountList title="IP protocol distribution" rows={analysis.ip_protocol_counts}/>
             <CountList title="EtherType distribution" rows={analysis.ether_type_counts}/>
             <CountList title="DSCP distribution" rows={analysis.dscp_counts}/>
