@@ -145,11 +145,6 @@ const sin = (i, o = 0) => Math.sin(i * 0.4 + o) * 0.5 + 0.5;
 const rand = () => (Math.random() - 0.5);
 const genRSSI  = () => Array.from({length:40},(_,i)=>({ t:i, rssi:-(42+sin(i)*10+rand()*4), snr:38+sin(i,1)*10+rand()*3 }));
 const genSpeed = () => Array.from({length:24},(_,i)=>({ t:i, dl:890+sin(i,2)*80+rand()*40, ul:415+sin(i,3)*40+rand()*20 }));
-const genChan  = () => [
-  {ch:1,util:72},{ch:6,util:78},{ch:11,util:35},
-  {ch:36,util:22},{ch:40,util:8},{ch:44,util:15},{ch:48,util:41},{ch:100,util:18},
-];
-
 const s = {
   flex: {display:"flex"},
   col:  {display:"flex",flexDirection:"column"},
@@ -261,22 +256,35 @@ function Toast({ toasts, dismiss }) {
   );
 }
 
-function DashboardPanel({ rssiData, speedData, networks: netsProp, devices: devsProp, diag, alertsProp = [], isLive = false }) {
+function DashboardPanel({ speedData, networks: netsProp, devices: devsProp, diag, alertsProp = [], isLive = false }) {
+  const nets=Array.isArray(netsProp)?netsProp:NETWORKS;
+  const devs=Array.isArray(devsProp)?devsProp:DEVICES;
+  const measuredNetworks=nets.filter(network=>network.rssi!=null&&Number.isFinite(Number(network.rssi)));
+  const best=measuredNetworks.length?[...measuredNetworks].sort((a,b)=>Number(b.rssi)-Number(a.rssi))[0]:null;
+  const onlineCount=devs.filter(device=>device.online===true).length;
+  const offlineCount=devs.filter(device=>device.online===false).length;
+  const unknownStatusCount=devs.length-onlineCount-offlineCount;
+  const channelCountMap=nets.reduce((counts,network)=>{
+    const channel=Number(network.ch);
+    if(!Number.isInteger(channel)||channel<=0)return counts;
+    const label=`${network.band||"Unknown"} · ${channel}`;
+    counts[label]=(counts[label]||0)+1;
+    return counts;
+  },{});
+  const channelCounts=Object.entries(channelCountMap).map(([label,count])=>({label,count}));
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        {(()=>{const nets=netsProp||NETWORKS;const devs=devsProp||DEVICES;const best=nets.length?[...nets].sort((a,b)=>b.rssi-a.rssi)[0]:null;return(<>
-        <Stat label="Networks Found" value={nets.length} sub={nets.filter(n=>n.rogue).length>0?`${nets.filter(n=>n.rogue).length} rogue detected`:"All clear"} col={C.cyan} Icon={Wifi} delay={1}/>
-        <Stat label="Signal Strength" value={best?`${best.rssi} dBm`:"N/A"} sub={best?`${best.ssid} · ${best.band}`:"No scan"} col={C.green} Icon={Signal} delay={2}/>
-        <Stat label="Packet Loss" value={diag?`${diag.packet_loss_pct||0}%`:"—"} sub={diag?`Latency: ${diag.latency_ms||0}ms`:"Backend required"} col={diag&&(diag.packet_loss_pct||0)===0?C.green:C.yellow} Icon={Zap} delay={3}/>
-        <Stat label="Devices Online" value={`${devs.filter(d=>d.online!==false).length} / ${devs.length}`} sub={devs.filter(d=>!d.vendor||d.vendor==="???").length>0?"Unknown device flagged":"All identified"} col={C.yellow} Icon={Smartphone} delay={4}/>
-        </>);})()}
+        <Stat label="Networks Found" value={nets.length} sub={nets.some(n=>n.rogue===true)?`${nets.filter(n=>n.rogue===true).length} scanner candidate flag(s)`:"No scanner flags supplied"} col={C.cyan} Icon={Wifi} delay={1}/>
+        <Stat label="Strongest RSSI" value={best?`${Number(best.rssi)} dBm`:"—"} sub={best?`${best.ssid||best.bssid} · ${best.band}`:"No measured RSSI in scan"} col={C.green} Icon={Signal} delay={2}/>
+        <Stat label="Packet Loss" value={diag?.packet_loss_pct==null?"—":`${diag.packet_loss_pct}%`} sub={diag?.latency_ms==null?"No latency result":`Latency: ${diag.latency_ms} ms`} col={diag?.packet_loss_pct===0?C.green:C.yellow} Icon={Zap} delay={3}/>
+        <Stat label="Device Status" value={`${onlineCount} confirmed online`} sub={`${offlineCount} offline · ${unknownStatusCount} unknown`} col={C.yellow} Icon={Smartphone} delay={4}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:10}}>
         <div className="hover-card anim-fade-d2" style={s.card}>
-          <SHdr title="Live Signal History" sub="wlan0 · ManitNet-AX3600 · auto-refresh 2s"/>
+          <SHdr title={isLive?"Signal strength by observed BSS":"Signal chart preview"} sub={isLive?`${measuredNetworks.length} measured RSSI observations in current scan`:"Illustrative demo values; not live measurements"}/>
           <ResponsiveContainer width="100%" height={150}>
-            <AreaChart data={rssiData.slice(-20)} margin={{top:4,right:4,bottom:0,left:-20}}>
+            <AreaChart data={measuredNetworks.map((network,index)=>({t:network.ssid||network.bssid||`BSS ${index+1}`,rssi:Number(network.rssi)}))} margin={{top:4,right:4,bottom:0,left:-20}}>
               <defs>
                 <linearGradient id="gC" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor={C.cyan}   stopOpacity={0.35}/>
@@ -311,7 +319,7 @@ function DashboardPanel({ rssiData, speedData, networks: netsProp, devices: devs
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
         <div className="hover-card anim-fade-d3" style={s.card}>
-          <SHdr title="Nearby Networks" sub="7 found · best ch: 36 (5GHz)"/>
+          <SHdr title="Nearby Networks" sub={`${nets.length} BSS records in the current view`}/>
           {(netsProp||NETWORKS).slice(0,4).map((n,i)=>(
             <div key={i} style={{...s.bet,padding:"7px 0",borderBottom:i<3?`1px solid ${C.border}44`:"none"}}>
               <div style={{...s.row,gap:7}}>
@@ -319,20 +327,20 @@ function DashboardPanel({ rssiData, speedData, networks: netsProp, devices: devs
                 <span style={{fontSize:12,color:C.text,fontWeight:500}}>{n.ssid}</span>
                 <Tag text={n.band} col={n.band==="6GHz"?C.purple:n.band==="5GHz"?C.cyan:C.yellow}/>
               </div>
-              <AnimatedBars rssi={n.rssi}/>
+              {n.rssi==null?<span style={{fontSize:10,color:C.muted}}>RSSI unavailable</span>:<AnimatedBars rssi={n.rssi}/>} 
             </div>
           ))}
         </div>
         <div className="hover-card anim-fade-d4" style={s.card}>
-          <SHdr title="Channel Utilisation" sub="2.4 + 5 GHz"/>
+          <SHdr title={isLive?"Observed channel density":"Channel density preview"} sub={isLive?"Counts of BSS records per channel; airtime is not measured":"Illustrative example counts; not airtime utilisation"}/>
           <ResponsiveContainer width="100%" height={120}>
-            <BarChart data={genChan()} margin={{top:4,right:4,bottom:0,left:-24}}>
+            <BarChart data={channelCounts} margin={{top:4,right:4,bottom:0,left:-24}}>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal vertical={false}/>
-              <XAxis dataKey="ch" tick={{fontSize:9,fill:C.muted}}/>
-              <YAxis domain={[0,100]} tick={{fontSize:9,fill:C.muted}}/>
+              <XAxis dataKey="label" tick={{fontSize:9,fill:C.muted}}/>
+              <YAxis allowDecimals={false} tick={{fontSize:9,fill:C.muted}}/>
               <Tooltip contentStyle={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,fontSize:11}}
-                formatter={v=>[v+"%","Utilisation"]}/>
-              <Bar dataKey="util" fill={C.cyan} radius={[3,3,0,0]} opacity={0.82} animationDuration={800}/>
+                formatter={v=>[v,"Observed BSS records"]}/>
+              <Bar dataKey="count" fill={C.cyan} radius={[3,3,0,0]} opacity={0.82} animationDuration={800}/>
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -566,7 +574,7 @@ function SpeedPanel({ speedData }) {
               color:running?C.muted:"#000",border:"none",borderRadius:8,
               fontWeight:700,cursor:running?"not-allowed":"pointer",fontSize:13,
               transition:"all 0.2s",animation:running?"glow 1s ease-in-out infinite":"none"}}>
-            {running?`${phase==="upload"?"↑":"↓"} ${pct.toFixed(0)}%...`:"▶ Run Speed Test"}
+            {running?"Testing...":phase==="error"?"Retry Speed Test":"▶ Run Speed Test"}
           </button>
         </div>
         <div className="hover-card anim-fade-d3" style={s.card}>
