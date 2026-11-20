@@ -24,6 +24,7 @@ python3 -m venv .venv
 .venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements.txt pyinstaller
 .venv/bin/pyinstaller --clean --noconfirm --onefile \
+  --collect-submodules feature_plugins \
   --name wifi-analyzer-pro \
   --distpath build/binary \
   --workpath build/work \
