@@ -419,26 +419,17 @@ function WirelessPanel({ networks: netsProp, isLive = false }) {
           </table>
         </div>
       </div>
-      <div style={{...s.row,gap:10}}>
-        <div style={{...s.row,gap:8,padding:"10px 14px",background:C.redFaint,border:`1px solid ${C.red}44`,borderRadius:8,animation:"borderPulse 2s ease-in-out infinite"}}>
-          <AlertTriangle size={14} color={C.red}/>
-          <span style={{fontSize:12,color:C.red,fontWeight:600}}>Evil Twin Detected — DE:AD:BE:EF:00:01 is cloning ManitNet-AX3600. Do not connect.</span>
-        </div>
-        <div style={{...s.row,gap:8,padding:"10px 14px",background:C.greenFaint,border:`1px solid ${C.green}33`,borderRadius:8}}>
-          <CheckCircle size={14} color={C.green}/>
-          <span style={{fontSize:12,color:C.green}}>Best channel: 36 (5GHz) — only 22% utilised</span>
-        </div>
-      </div>
+      <div style={{...s.card,fontSize:11,color:C.muted}}>SSID similarity alone does not establish an Evil Twin. The observations above show nearby BSS records; they do not measure channel airtime utilisation or prove which channel is best. Verify BSSIDs and consult adapter/controller telemetry before taking action.</div>
     </div>
   );
 }
 
 function SignalPanel({ rssiData }) {
   const scores=[
-    {label:"Signal Quality",     val:94, col:C.green},
-    {label:"Stability",          val:88, col:C.cyan},
-    {label:"Reliability",        val:91, col:C.purple},
-    {label:"Overall Health",     val:91, col:C.green},
+    {label:"Signal Quality", val:null, col:C.green},
+    {label:"Stability", val:null, col:C.cyan},
+    {label:"Reliability", val:null, col:C.purple},
+    {label:"Overall Health", val:null, col:C.green},
   ];
   return (
     <div style={{...s.col,gap:14}}>
@@ -447,18 +438,18 @@ function SignalPanel({ rssiData }) {
           <div key={i} className={`hover-card anim-fade-d${i+1}`} style={s.card}>
             <div style={{fontSize:10,color:C.muted,marginBottom:8,letterSpacing:0.8,fontWeight:600}}>{sc.label.toUpperCase()}</div>
             <div style={{...s.row,gap:8,marginBottom:8}}>
-              <span style={{fontSize:26,fontWeight:700,color:sc.col,animation:"countUp 0.5s ease both"}}>{sc.val}</span>
-              <span style={{fontSize:12,color:C.muted}}>/100</span>
+              <span style={{fontSize:26,fontWeight:700,color:sc.col,animation:"countUp 0.5s ease both"}}>{sc.val==null?"—":sc.val}</span>
+              <span style={{fontSize:12,color:C.muted}}>{sc.val==null?"not measured":"/100"}</span>
             </div>
             <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}>
-              <div style={{width:`${sc.val}%`,height:"100%",background:sc.col,borderRadius:2,transition:"width 1.2s cubic-bezier(.4,0,.2,1)"}}/>
+              <div style={{width:`${sc.val==null?0:sc.val}%`,height:"100%",background:sc.col,borderRadius:2,transition:"width 1.2s cubic-bezier(.4,0,.2,1)"}}/>
             </div>
           </div>
         ))}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
         <div className="hover-card anim-fade-d2" style={s.card}>
-          <SHdr title="Live RSSI" sub="wlan0 · 40 samples"/>
+          <SHdr title="RSSI chart preview" sub="Illustrative samples; not measured from the current adapter"/>
           <ResponsiveContainer width="100%" height={170}>
             <AreaChart data={rssiData} margin={{top:4,right:4,bottom:0,left:-16}}>
               <defs>
@@ -477,7 +468,7 @@ function SignalPanel({ rssiData }) {
           </ResponsiveContainer>
         </div>
         <div className="hover-card anim-fade-d3" style={s.card}>
-          <SHdr title="SNR History" sub="Signal-to-Noise Ratio"/>
+          <SHdr title="SNR chart preview" sub="Illustrative values; measured SNR requires a noise-floor reading"/>
           <ResponsiveContainer width="100%" height={170}>
             <AreaChart data={rssiData} margin={{top:4,right:4,bottom:0,left:-16}}>
               <defs>
@@ -517,30 +508,32 @@ function SpeedPanel({ speedData }) {
   const [realDl,setRealDl]=useState(null);
   const [realUl,setRealUl]=useState(null);
   const [realPing,setRealPing]=useState(null);
+  const [testError,setTestError]=useState("");
   const run=async()=>{
     if(running)return;
-    setRunning(true);setPct(0);setPhase("download");setRealDl(null);setRealUl(null);setRealPing(null);
-    let p=0;
-    const t=setInterval(()=>{p+=1;setPct(p);if(p>=50)setPhase("upload");if(p>=99){clearInterval(t);}},120);
+    setRunning(true);setPct(0);setPhase("testing");setTestError("");setRealDl(null);setRealUl(null);setRealPing(null);
     try{
       const r=await apiFetch(`${API_BASE}/api/speedtest`,{signal:AbortSignal.timeout(60000)});
+      if(!r.ok)throw new Error(`Speed test returned HTTP ${r.status}`);
       const d=await r.json();
-      clearInterval(t);setPct(100);setPhase("done");
-      setRealDl(d.download);setRealUl(d.upload);setRealPing(d.ping);
-    }catch{
-      clearInterval(t);setPct(100);setPhase("done");
+      if(d.error)throw new Error(d.error);
+      const download=Number(d.download), upload=Number(d.upload), ping=Number(d.ping);
+      if(![download,upload,ping].every(value=>Number.isFinite(value)&&value>=0))throw new Error("Speed test returned invalid measurements");
+      setPct(100);setPhase("done");
+      setRealDl(download);setRealUl(upload);setRealPing(ping);
+    }catch(error){
+      setPhase("error");setTestError(error.message||"Speed test failed");
     }
     setRunning(false);
   };
-  const dlVal=phase==="done"&&realDl!=null?realDl:running?(pct/100*924).toFixed(0):924;
-  const ulVal=phase==="done"&&realUl!=null?realUl:running&&pct>50?((pct-50)/50*421).toFixed(0):(phase==="done"?421:0);
+  const dlVal=phase==="done"&&realDl!=null?realDl:running?"…":"—";
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label="Download" value="924 Mbps" sub="NBN 1000 · 92.4% efficiency" col={C.cyan}   Icon={ArrowDown} delay={1}/>
-        <Stat label="Upload"   value="421 Mbps" sub="Full duplex"                   col={C.purple} Icon={ArrowUp}   delay={2}/>
-        <Stat label="Ping"     value="8ms"       sub="Jitter: 1.2ms"                col={C.green}  Icon={Activity}  delay={3}/>
-        <Stat label="Bufferbloat" value="A+"     sub="Excellent under load"          col={C.green}  Icon={Gauge}     delay={4}/>
+        <Stat label="Download" value={realDl==null?"—":`${realDl} Mbps`} sub="Latest completed test" col={C.cyan} Icon={ArrowDown} delay={1}/>
+        <Stat label="Upload" value={realUl==null?"—":`${realUl} Mbps`} sub="Latest completed test" col={C.purple} Icon={ArrowUp} delay={2}/>
+        <Stat label="Ping" value={realPing==null?"—":`${realPing} ms`} sub="Single reachability timing" col={C.green} Icon={Activity} delay={3}/>
+        <Stat label="Bufferbloat" value="Not measured" sub="No loaded-latency test is run" col={C.muted} Icon={Gauge} delay={4}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.5fr",gap:10}}>
         <div className="hover-card anim-fade-d2" style={{...s.card,...s.cen,flexDirection:"column",gap:18}}>
@@ -562,10 +555,12 @@ function SpeedPanel({ speedData }) {
               <span style={{fontSize:36,fontWeight:700,color:phase==="upload"?C.purple:C.cyan,transition:"color 0.3s"}}>{dlVal}</span>
               <span style={{fontSize:12,color:C.muted}}>Mbps</span>
               <span style={{fontSize:10,color:C.textSec,marginTop:3,letterSpacing:0.5}}>
-                {running?(phase==="upload"?"UPLOAD":"DOWNLOAD"):phase==="done"?"DONE":"DOWNLOAD"}
+                {running?"TEST RUNNING":phase==="done"?"COMPLETE":phase==="error"?"FAILED":"READY"}
               </span>
             </div>
           </div>
+          {testError&&<div role="alert" style={{...s.card,border:`1px solid ${C.red}55`,color:C.red,fontSize:12}}>{testError}</div>}
+          <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>This test contacts Cloudflare and transfers test data over the internet.</div>
           <button onClick={run} disabled={running}
             style={{padding:"10px 28px",background:running?C.border:C.cyan,
               color:running?C.muted:"#000",border:"none",borderRadius:8,
@@ -575,7 +570,7 @@ function SpeedPanel({ speedData }) {
           </button>
         </div>
         <div className="hover-card anim-fade-d3" style={s.card}>
-          <SHdr title="Speed History" sub="Last 24 tests"/>
+          <SHdr title="Speed chart preview" sub="Illustrative sample series; completed runs are not stored yet"/>
           <ResponsiveContainer width="100%" height={190}>
             <LineChart data={speedData} margin={{top:4,right:4,bottom:0,left:-16}}>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
@@ -613,46 +608,7 @@ function DevicesPanel({ devices: devsProp }) {
         <Stat label="Vendors Found"   value={[...new Set(DEVS.map(d=>d.vendor).filter(Boolean))].length} sub="Unique manufacturers" col={C.green} Icon={CheckCircle} delay={3}/>
         <Stat label="Unknown"         value={DEVS.filter(d=>!d.vendor||d.vendor==="???").length} sub="Unidentified MAC vendor" col={C.red} Icon={AlertTriangle} delay={4}/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-        {DEVS.map((d,i)=>{
-          const Icon=ICONS[d.type]||Smartphone;
-          const col=COLS[d.type]||C.muted;
-          return (
-            <div key={i} className={`hover-card anim-fade-d${Math.min(i+1,5)}`}
-              style={{...s.card,border:`1px solid ${d.type==="Unknown"?C.red+"44":C.border}`,
-                background:d.type==="Unknown"?C.redFaint:C.card}}>
-              <div style={{...s.bet,marginBottom:10}}>
-                <div style={{...s.row,gap:9}}>
-                  <div style={{...s.cen,width:36,height:36,borderRadius:8,background:col+"20"}}>
-                    <Icon size={16} color={col}/>
-                  </div>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{d.name}</div>
-                    <div style={{fontSize:10,color:C.muted}}>{d.vendor}</div>
-                  </div>
-                </div>
-                <div style={{...s.row,gap:5}}>
-                  <PulseDot col={d.online?C.green:C.red}/>
-                  <span style={{fontSize:10,color:d.online?C.green:C.red,fontWeight:600}}>{d.online?"Online":"Offline"}</span>
-                </div>
-              </div>
-              <div style={{...s.col,gap:5,padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
-                {[["IP",d.ip,true],["MAC",d.mac,true],["Bandwidth",d.bw+" Mbps",false]].map(([k,v,mono])=>(
-                  <div key={k} style={s.bet}>
-                    <span style={{fontSize:10,color:C.muted}}>{k}</span>
-                    <span style={{fontSize:11,...(mono?s.mono:{}),color:k==="Bandwidth"?C.cyan:C.textSec}}>{v}</span>
-                  </div>
-                ))}
-                <div style={s.bet}>
-                  <span style={{fontSize:10,color:C.muted}}>Signal</span>
-                  <AnimatedBars rssi={d.rssi}/>
-                </div>
-                {d.gw&&<Tag text="GATEWAY" col={C.cyan}/>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <div style={{...s.card,fontSize:12,color:C.muted}}>Alert delivery integrations are not connected in this build. Current alerts are displayed locally and are not sent to Discord, email or MQTT.</div>
     </div>
   );
 }
@@ -740,15 +696,15 @@ function AlertsPanel({ alerts = [] }) {
 }
 
 function SystemPanel({ sysInfo }) {
-  const cpu = sysInfo?.cpu_pct ?? 23;
-  const ram = sysInfo?.ram_pct ?? 61;
-  const temp = sysInfo?.cpu_temp ?? 48;
-  const disk = sysInfo?.disk_pct ?? 38;
+  const cpu = sysInfo?.cpu_pct ?? null;
+  const ram = sysInfo?.ram_pct ?? null;
+  const temp = sysInfo?.cpu_temp ?? null;
+  const disk = sysInfo?.disk_pct ?? null;
   const gauges=[
-    {label:"CPU",  val:cpu,  col:C.cyan,   unit:"%",  detail:sysInfo?.cpu_model||"i5-6200U · 2.3 GHz"},
-    {label:"RAM",  val:ram,  col:C.purple, unit:"%",  detail:`${sysInfo?.ram_used_gb||"4.9"} GB / ${sysInfo?.ram_total_gb||"8"} GB`},
-    {label:"Temp", val:temp, col:C.yellow, unit:"°C", detail:`Throttle at ${sysInfo?.temp_max||80}°C`},
-    {label:"Disk", val:disk, col:C.green,  unit:"%",  detail:`${sysInfo?.disk_used_gb||"97"} GB / ${sysInfo?.disk_total_gb||"256"} GB`},
+    {label:"CPU", val:cpu, col:C.cyan, unit:"%", detail:"Host processor utilisation"},
+    {label:"RAM", val:ram, col:C.purple, unit:"%", detail:sysInfo?`${sysInfo.ram_used_gb??"—"} GB / ${sysInfo.ram_total_gb??"—"} GB`:"Unavailable"},
+    {label:"Temp", val:temp, col:C.yellow, unit:"°C", detail:temp==null?"Temperature sensor unavailable":"Host-reported CPU temperature"},
+    {label:"Disk", val:disk, col:C.green, unit:"%", detail:sysInfo?`${sysInfo.disk_used_gb??"—"} GB / ${sysInfo.disk_total_gb??"—"} GB`:"Unavailable"},
   ];
   return (
     <div style={{...s.col,gap:14}}>
@@ -757,25 +713,25 @@ function SystemPanel({ sysInfo }) {
           <div key={i} className={`hover-card anim-fade-d${i+1}`} style={s.card}>
             <div style={{...s.bet,marginBottom:10}}>
               <span style={{fontSize:10,color:C.muted,letterSpacing:0.8,fontWeight:600}}>{g.label.toUpperCase()}</span>
-              <span style={{fontSize:20,fontWeight:700,color:g.col}}>{g.val}<span style={{fontSize:11,fontWeight:400}}>{g.unit}</span></span>
+              <span style={{fontSize:20,fontWeight:700,color:g.col}}>{g.val==null?"—":g.val}<span style={{fontSize:11,fontWeight:400}}>{g.val==null?"":g.unit}</span></span>
             </div>
             <div style={{height:5,background:C.border,borderRadius:3,overflow:"hidden"}}>
-              <div style={{width:`${g.val}%`,height:"100%",background:g.col,borderRadius:3,transition:"width 1.2s cubic-bezier(.4,0,.2,1)"}}/>
+              <div style={{width:`${g.val==null?0:g.val}%`,height:"100%",background:g.col,borderRadius:3,transition:"width 1.2s cubic-bezier(.4,0,.2,1)"}}/>
             </div>
             <div style={{fontSize:10,color:C.muted,marginTop:5}}>{g.detail}</div>
           </div>
         ))}
       </div>
       <div className="anim-fade-d2" style={s.card}>
-        <SHdr title="System Info" sub={sysInfo?`${sysInfo.os||"Linux"} · ${sysInfo.hostname||"localhost"}`:"ThinkPad X1 Carbon Gen 5 · Linux Mint 22.3"}/>
+        <SHdr title="System Info" sub={sysInfo?`${sysInfo.os||"—"} · ${sysInfo.hostname||"—"}`:"Waiting for local host information"}/>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}}>
           {[
-            ["OS", sysInfo?.os||"Linux Mint 22.3"],
-            ["CPU", sysInfo?.cpu_model||"Intel i5-6200U · 2.3 GHz"],
-            ["Memory", `${sysInfo?.ram_total_gb||8} GB`],
-            ["Disk", `${sysInfo?.disk_total_gb||256} GB`],
-            ["Uptime", sysInfo?.uptime||"N/A"],
-            ["WiFi Adapter", sysInfo?.wifi_adapter||"Intel 8260 (iwlwifi)"],
+            ["OS", sysInfo?.os||"Unavailable"],
+            ["CPU", sysInfo?.cpu_model||"Unavailable"],
+            ["Memory", sysInfo?.ram_total_gb==null?"Unavailable":`${sysInfo.ram_total_gb} GB`],
+            ["Disk", sysInfo?.disk_total_gb==null?"Unavailable":`${sysInfo.disk_total_gb} GB`],
+            ["Uptime", sysInfo?.uptime||"Unavailable"],
+            ["WiFi Adapter", sysInfo?.wifi_adapter||"Unavailable"],
           ].map(([k,v])=>(
             <div key={k}>
               <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:0.5}}>{k.toUpperCase()}</div>
@@ -1103,7 +1059,7 @@ export default function App() {
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.textSec,
               padding:"4px 10px",background:C.card2,border:`1px solid ${C.border}`,borderRadius:6}}>
               <Signal size={11} color={C.cyan}/>
-              <span style={{fontFamily:"monospace"}}>ManitNet-AX3600 · 5GHz · Ch 36</span>
+              <span style={{fontFamily:"monospace"}}>{liveSystem?.wifi_interface||"No connected interface reported"}</span>
             </div>
             {!checking && (
               <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,
