@@ -1042,5 +1042,194 @@
       "allowed_channels": "integer[]",
       "networks": "network[]"
     }
+  },
+  {
+    "slug": "client_association_inventory",
+    "name": "Client association inventory",
+    "category": "Client operations",
+    "description": "Join AP/controller client associations to advertised BSS records and report unmatched associations.",
+    "parameters": {
+      "clients": "client[]",
+      "access_points": "AP[]"
+    }
+  },
+  {
+    "slug": "stale_client_detector",
+    "name": "Stale client detector",
+    "category": "Client operations",
+    "description": "Identify client records whose supplied last-seen timestamps exceed a configurable age threshold.",
+    "parameters": {
+      "clients": "client[]",
+      "now": "ISO-8601",
+      "stale_after_seconds": "number"
+    }
+  },
+  {
+    "slug": "airtime_fairness_summary",
+    "name": "Airtime fairness summary",
+    "category": "Client QoS",
+    "description": "Calculate measured per-client airtime allocation and Jain fairness from AP/controller counters.",
+    "parameters": {
+      "clients": "client[]"
+    }
+  },
+  {
+    "slug": "client_throughput_fairness",
+    "name": "Client throughput fairness",
+    "category": "Client QoS",
+    "description": "Calculate per-client transmit/receive throughput and Jain fairness from byte deltas over a measured interval.",
+    "parameters": {
+      "clients": "client[]",
+      "interval_seconds": "number"
+    }
+  },
+  {
+    "slug": "dscp_traffic_distribution",
+    "name": "DSCP traffic distribution",
+    "category": "Client QoS",
+    "description": "Summarise packet counts by observed six-bit DSCP value from a supplied capture or controller export.",
+    "parameters": {
+      "samples": "sample[]"
+    }
+  },
+  {
+    "slug": "application_qos_policy_audit",
+    "name": "Application QoS policy audit",
+    "category": "Client QoS",
+    "description": "Compare observed per-application DSCP markings with an explicit operator-supplied policy map.",
+    "parameters": {
+      "policy": "policy[]",
+      "observations": "observation[]"
+    }
+  },
+  {
+    "slug": "client_retry_rate",
+    "name": "Client retry rate",
+    "category": "Client QoS",
+    "description": "Calculate per-client retransmission ratios from AP-reported transmit and retry counters.",
+    "parameters": {
+      "clients": "client[]"
+    }
+  },
+  {
+    "slug": "phy_rate_asymmetry",
+    "name": "PHY rate asymmetry",
+    "category": "Client QoS",
+    "description": "Compare measured uplink and downlink PHY rates for associated clients.",
+    "parameters": {
+      "clients": "client[]"
+    }
+  },
+  {
+    "slug": "client_ap_capability_match",
+    "name": "Client/AP capability compatibility",
+    "category": "Client operations",
+    "description": "Compare advertised client and AP band/feature sets and list unsupported client requirements.",
+    "parameters": {
+      "clients": "client[]",
+      "access_points": "AP[]"
+    }
+  },
+  {
+    "slug": "ofdma_mu_mimo_evidence",
+    "name": "OFDMA and MU-MIMO evidence",
+    "category": "PHY analysis",
+    "description": "Summarise explicit AP/controller OFDMA and MU-MIMO support and usage counters.",
+    "parameters": {
+      "observations": "observation[]"
+    }
+  },
+  {
+    "slug": "twt_power_save_summary",
+    "name": "Target Wake Time summary",
+    "category": "PHY analysis",
+    "description": "Summarise explicitly advertised and active 802.11ax Target Wake Time sessions.",
+    "parameters": {
+      "clients": "client[]"
+    }
+  },
+  {
+    "slug": "bss_transition_capability_audit",
+    "name": "802.11k/v/r capability audit",
+    "category": "Roaming",
+    "description": "Report explicit neighbour-report, BSS-transition and fast-transition capabilities per AP.",
+    "parameters": {
+      "access_points": "AP[]"
+    }
+  },
+  {
+    "slug": "mobility_domain_consistency",
+    "name": "Mobility domain consistency",
+    "category": "Roaming",
+    "description": "Find same-ESS APs with missing or inconsistent 802.11r mobility-domain identifiers.",
+    "parameters": {
+      "access_points": "AP[]"
+    }
+  },
+  {
+    "slug": "dhcp_lease_audit",
+    "name": "DHCP lease audit",
+    "category": "Network operations",
+    "description": "Find expired leases and duplicate IP or MAC assignments in a supplied DHCP lease snapshot.",
+    "parameters": {
+      "leases": "lease[]",
+      "now": "ISO-8601"
+    }
+  },
+  {
+    "slug": "dns_resolver_latency_compare",
+    "name": "DNS resolver latency comparison",
+    "category": "Network operations",
+    "description": "Compare measured resolver lookup success, median and p95 latency across supplied probes.",
+    "parameters": {
+      "samples": "sample[]"
+    }
+  },
+  {
+    "slug": "gateway_reachability_matrix",
+    "name": "Gateway reachability matrix",
+    "category": "Network operations",
+    "description": "Summarise reachability and latency evidence from explicit gateway/next-hop probes.",
+    "parameters": {
+      "probes": "probe[]"
+    }
+  },
+  {
+    "slug": "roaming_interruption_analysis",
+    "name": "Roaming interruption analysis",
+    "category": "Roaming",
+    "description": "Measure disconnect-to-reconnect interruption duration for client handover event pairs.",
+    "parameters": {
+      "events": "event[]"
+    }
+  },
+  {
+    "slug": "disconnect_reason_summary",
+    "name": "Disconnect reason summary",
+    "category": "Client operations",
+    "description": "Classify and count IEEE 802.11 disassociation/deauthentication reason codes in supplied logs.",
+    "parameters": {
+      "events": "event[]"
+    }
+  },
+  {
+    "slug": "association_rejection_summary",
+    "name": "Association rejection summary",
+    "category": "Client operations",
+    "description": "Classify IEEE 802.11 association response status codes from supplied AP/controller logs.",
+    "parameters": {
+      "events": "event[]"
+    }
+  },
+  {
+    "slug": "connection_health_evidence",
+    "name": "Connection health evidence",
+    "category": "Client QoS",
+    "description": "Flag measured per-client link quality concerns using explicit and configurable signal, retry, rate, loss and latency evidence.",
+    "parameters": {
+      "clients": "client[]",
+      "diagnostics": "object",
+      "thresholds": "object"
+    }
   }
 ]
