@@ -154,6 +154,9 @@ FEATURE_MODULES = (
     "feature_148_floorplan_zone_assignment",
     "feature_149_site_topology_redundancy_audit",
     "feature_150_site_topology_snapshot_diff",
+    "feature_151_site_inventory_comparison",
+    "feature_152_ap_observation_freshness_audit",
+    "feature_153_site_ap_channel_reuse_audit",
 )
 
 @lru_cache(maxsize=1)
