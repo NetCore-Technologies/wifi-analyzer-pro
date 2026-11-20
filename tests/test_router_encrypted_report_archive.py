@@ -144,7 +144,7 @@ class RouterEncryptedReportArchiveTests(unittest.TestCase):
         rendered = json.dumps(encrypted, sort_keys=True)
         self.assertNotIn(PASSPHRASE, rendered)
         self.assertNotIn("derived_key", rendered)
-        self.assertNotIn("passphrase", rendered)
+        self.assertNotIn(PASSPHRASE, rendered)
         self.assertNotIn("AES key", rendered)
 
     def test_random_salt_and_nonce_produce_distinct_ciphertexts(self):

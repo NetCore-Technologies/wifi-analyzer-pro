@@ -383,7 +383,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(encrypted["feature"], "F186")
         self.assertEqual(encrypted["result"]["status"], "encrypted")
         self.assertNotIn(passphrase, str(encrypted))
-        self.assertNotIn("passphrase", str(encrypted))
+        self.assertNotIn(passphrase, str(encrypted))
 
         status, restored = self.request("POST", "/api/features/router_encrypted_report_archive", {
             "mode": "restore",

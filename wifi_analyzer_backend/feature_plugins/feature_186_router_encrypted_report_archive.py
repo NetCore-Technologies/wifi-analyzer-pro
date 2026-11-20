@@ -29,7 +29,11 @@ MAX_ARCHIVE_BYTES = 8 * 1024 * 1024
 MAX_PASSPHRASE_BYTES = 1024
 MIN_PASSPHRASE_BYTES = 12
 ARCHIVE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,63}$")
-AAD = f"{FORMAT}|{SCHEMA_VERSION}|{ALGORITHM}|{KDF}|{SCRYPT_N}|{SCRYPT_R}|{SCRYPT_P}".encode("ascii")
+AAD_PREFIX = f"{FORMAT}|{SCHEMA_VERSION}|{ALGORITHM}|{KDF}|{SCRYPT_N}|{SCRYPT_R}|{SCRYPT_P}".encode("ascii")
+
+
+def _associated_data(archive_id: str, created_at: str) -> bytes:
+    return AAD_PREFIX + b"|" + archive_id.encode("ascii") + b"|" + created_at.encode("ascii")
 
 
 def _timestamp(value: object, field: str) -> datetime:
@@ -123,7 +127,7 @@ def _encrypt(payload: dict) -> dict:
     salt = os.urandom(SALT_LENGTH)
     nonce = os.urandom(NONCE_LENGTH)
     key = _derive_key(passphrase, salt)
-    ciphertext = AESGCM(key).encrypt(nonce, plaintext, AAD)
+    ciphertext = AESGCM(key).encrypt(nonce, plaintext, _associated_data(archive_id, now.isoformat()))
     archive = {
         "format": FORMAT,
         "schema_version": SCHEMA_VERSION,
@@ -214,7 +218,7 @@ def _restore(payload: dict) -> dict:
 
     key = _derive_key(passphrase, salt)
     try:
-        plaintext = AESGCM(key).decrypt(nonce, ciphertext, AAD)
+        plaintext = AESGCM(key).decrypt(nonce, ciphertext, _associated_data(archive_id, created_at.isoformat()))
     except InvalidTag as error:
         raise ValueError("archive authentication failed: wrong passphrase or modified archive") from error
     if len(plaintext) > MAX_INPUT_BYTES:
