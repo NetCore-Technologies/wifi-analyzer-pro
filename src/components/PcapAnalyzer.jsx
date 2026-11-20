@@ -209,7 +209,7 @@ export default function PcapAnalyzer() {
             </div>
             <div>
               <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 800 }}>Packet capture analysis</div>
-              <div style={MUTED}>Offline PCAP inspection · F191</div>
+              <div style={MUTED}>Offline PCAP / PCAPNG inspection · F191</div>
             </div>
           </div>
           <span style={{
@@ -236,7 +236,7 @@ export default function PcapAnalyzer() {
               border: "1px solid #2a3f65", borderRadius: 9, padding: "10px 13px",
               color: "#e2e8f0", background: "#111827", fontSize: 12, fontWeight: 700,
             }}>
-              <Upload size={15} color="#50e3d2"/> Choose PCAP file
+              <Upload size={15} color="#50e3d2"/> Choose PCAP / PCAPNG file
             </button>
           ) : (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
