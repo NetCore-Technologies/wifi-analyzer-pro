@@ -861,7 +861,7 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(len(set(FEATURE_MODULES)), 187)
         self.assertEqual(count(), 187)
         self.assertEqual(len(entries), 187)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 186)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 187)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
