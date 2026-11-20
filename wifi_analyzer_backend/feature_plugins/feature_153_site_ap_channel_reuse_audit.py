@@ -1,6 +1,8 @@
 """Find same-site AP radio channel reuse and measured-frequency overlap."""
 from __future__ import annotations
 
+import math
+
 
 WIDTHS = {20, 40, 80, 160, 320}
 
@@ -54,11 +56,26 @@ def run(payload: dict) -> dict:
         width = _integer(radio.get("channel_width_mhz"), "channel_width_mhz")
         if width not in WIDTHS or (band == "2.4GHz" and width not in {20, 40}) or (band == "5GHz" and width == 320):
             raise ValueError("channel_width_mhz is not supported for the supplied band")
-        center = _center_frequency(band, channel)
+        _center_frequency(band, channel)  # Validate the advertised primary channel.
+        explicit_center = radio.get("center_frequency_mhz")
+        center_channel = radio.get("center_channel")
+        if explicit_center is not None:
+            try:
+                center = float(explicit_center)
+            except (TypeError, ValueError) as error:
+                raise ValueError("center_frequency_mhz must be numeric") from error
+            if not math.isfinite(center) or center <= 0:
+                raise ValueError("center_frequency_mhz must be finite and positive")
+        elif center_channel is not None:
+            center = _center_frequency(band, _integer(center_channel, "center_channel"))
+        elif width == 20:
+            center = _center_frequency(band, channel)
+        else:
+            raise ValueError("center_channel or center_frequency_mhz is required for channel widths above 20 MHz")
         normalized.append({
             "radio_id": radio_id, "ap_id": ap_id, "site_id": site_id,
             "band": band, "channel": channel, "channel_width_mhz": width,
-            "center_frequency_mhz": center,
+            "center_channel": center_channel, "center_frequency_mhz": center,
             "low_frequency_mhz": center - width / 2.0,
             "high_frequency_mhz": center + width / 2.0,
         })
