@@ -12,7 +12,7 @@ const styles = {
 };
 async function readResponse(response) {
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || \`Request failed (HTTP \${response.status})\`);
+  if (!response.ok) throw new Error(data.error || `Request failed (HTTP ${response.status})`);
   return data;
 }
 export default function AccountSecurityPanel() {
@@ -50,7 +50,7 @@ export default function AccountSecurityPanel() {
     if (busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const response = await apiFetch(\`\${API_BASE}/api/auth/mfa/setup\`, {
+      const response = await apiFetch(`${API_BASE}/api/auth/mfa/setup`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: setupPassword }), signal: AbortSignal.timeout(10000),
       });
@@ -67,7 +67,7 @@ export default function AccountSecurityPanel() {
     if (busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const response = await apiFetch(\`\${API_BASE}/api/auth/mfa/confirm\`, {
+      const response = await apiFetch(`${API_BASE}/api/auth/mfa/confirm`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: setupPassword, code: confirmCode.trim() }), signal: AbortSignal.timeout(10000),
       });
@@ -86,7 +86,7 @@ export default function AccountSecurityPanel() {
     if (busy) return;
     setBusy(true); setError(""); setNotice("");
     try {
-      const response = await apiFetch(\`\${API_BASE}/api/auth/mfa/disable\`, {
+      const response = await apiFetch(`${API_BASE}/api/auth/mfa/disable`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password: disablePassword, code: disableCode.trim() }), signal: AbortSignal.timeout(10000),
       });
@@ -100,7 +100,7 @@ export default function AccountSecurityPanel() {
 
   const copyRecoveryCodes = async () => {
     try {
-      await navigator.clipboard.writeText(recoveryCodes.join("\\n"));
+      await navigator.clipboard.writeText(recoveryCodes.join("\n"));
       setNotice("Recovery codes copied. Store them separately from this device.");
     } catch {
       setError("Clipboard access was blocked. Select and copy the displayed recovery codes.");
@@ -115,11 +115,11 @@ export default function AccountSecurityPanel() {
             <div style={{ fontSize: 16, fontWeight: 750 }}>Account security</div>
             <p style={{ ...styles.muted, margin: "5px 0 0" }}>Protect this account with an authenticator app and one-time recovery codes.</p>
           </div>
-          <span style={{ border: \`1px solid \${mfaEnabled ? "rgba(74,222,128,.45)" : "#334155"}\`, background: mfaEnabled ? "rgba(74,222,128,.08)" : "transparent", color: mfaEnabled ? "#4ade80" : "#94a3b8", borderRadius: 999, padding: "5px 9px", fontSize: 10, fontWeight: 750 }}>
+          <span style={{ border: `1px solid ${mfaEnabled ? "rgba(74,222,128,.45)" : "#334155"}`, background: mfaEnabled ? "rgba(74,222,128,.08)" : "transparent", color: mfaEnabled ? "#4ade80" : "#94a3b8", borderRadius: 999, padding: "5px 9px", fontSize: 10, fontWeight: 750 }}>
             {mfaEnabled ? "MFA ENABLED" : "MFA NOT ENABLED"}
           </span>
         </div>
-        <div style={{ ...styles.muted, marginTop: 12 }}>Signed in as <strong style={{ color: "#e2e8f0" }}>{identity?.username || "current user"}</strong>. {mfaEnabled ? \`\${recoveryRemaining} unused recovery code(s) remain.\` : "Password-only sign-in is active."}</div>
+        <div style={{ ...styles.muted, marginTop: 12 }}>Signed in as <strong style={{ color: "#e2e8f0" }}>{identity?.username || "current user"}</strong>. {mfaEnabled ? `${recoveryRemaining} unused recovery code(s) remain.` : "Password-only sign-in is active."}</div>
       </section>
 
       {error ? <div role="alert" style={{ color: "#f87171", border: "1px solid rgba(248,113,113,.3)", padding: 10, borderRadius: 8, fontSize: 12 }}>{error}</div> : null}
@@ -143,7 +143,7 @@ export default function AccountSecurityPanel() {
               <div style={{ fontFamily: "monospace", fontSize: 13, color: "#e2e8f0", overflowWrap: "anywhere", letterSpacing: 1 }}>{setupSecret}</div>
             </div>
             <label style={styles.muted} htmlFor="account-mfa-confirm-code">Current six-digit authenticator code</label>
-            <input id="account-mfa-confirm-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required style={styles.input} value={confirmCode} onChange={event => setConfirmCode(event.target.value.replace(/\\D/g, "").slice(0, 6))} />
+            <input id="account-mfa-confirm-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required style={styles.input} value={confirmCode} onChange={event => setConfirmCode(event.target.value.replace(/\D/g, "").slice(0, 6))} />
             <button type="submit" disabled={busy || confirmCode.length !== 6} style={styles.button}>{busy ? "Verifying…" : "Verify and enable MFA"}</button>
           </form>
         )}
