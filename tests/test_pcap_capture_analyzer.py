@@ -64,6 +64,17 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         self.assertEqual(result["capture"]["timestamp_resolution"], "nanosecond")
         self.assertEqual(result["summary"]["packet_count"], 1)
 
+    def test_supports_linux_cooked_v1_and_v2_link_types(self):
+        ipv4_payload = ethernet_ipv4_udp()[14:]
+        cooked_v1 = (b"\\x00" * 14) + bytes.fromhex("0800") + ipv4_payload
+        cooked_v2 = bytes.fromhex("0800") + (b"\\x00" * 18) + ipv4_payload
+        first = run({"capture_base64": make_capture(113, [cooked_v1])})
+        second = run({"capture_base64": make_capture(276, [cooked_v2])})
+        self.assertEqual(first["capture"]["link_type_name"], "linux_cooked")
+        self.assertEqual(second["capture"]["link_type_name"], "linux_cooked_v2")
+        self.assertEqual(first["dscp_counts"], {"46": 1})
+        self.assertEqual(second["ip_protocol_counts"], {"udp": 1})
+
     def test_analyses_raw_80211_management_beacons(self):
         result = run({"capture_base64": make_capture(105, [beacon_frame()])})
         self.assertEqual(result["capture"]["link_type_name"], "ieee80211")
