@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import hashlib
-import json
 import unittest
 
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report
