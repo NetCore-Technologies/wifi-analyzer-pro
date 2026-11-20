@@ -1,4 +1,4 @@
-# 170 WiFi Analyzer Pro feature tools (F001–F168, F170–F171)
+# 170 WiFi Analyzer Pro feature tools (F001–F168, F171–F172)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -189,6 +189,6 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 - Vendor identification uses a small bundled OUI subset and may return Unknown.
 - DNS and TLS probes perform read-only lookups/connections to the host provided in the tool input.
 
-| 170 | UniFi controller snapshot normalizer (`unifi_snapshot_normalizer`) | Router integrations | Import bounded, caller-supplied UniFi Network exports into the common AP, radio, client and network schema; omit secrets and make no controller connection. |
+| 171 | UniFi controller snapshot normalizer (`unifi_snapshot_normalizer`) | Router integrations | Import bounded, caller-supplied UniFi Network exports into the common AP, radio, client and network schema; omit secrets and make no controller connection. |
 
-| 171 | MikroTik RouterOS snapshot normalizer (`mikrotik_snapshot_normalizer`) | Router integrations | Import bounded RouterOS exports covering board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; omit secrets and make no router connection. |
+| 172 | MikroTik RouterOS snapshot normalizer (`mikrotik_snapshot_normalizer`) | Router integrations | Import bounded RouterOS exports covering board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; omit secrets and make no router connection. |

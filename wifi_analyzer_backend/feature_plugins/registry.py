@@ -172,8 +172,8 @@ FEATURE_MODULES = (
     "feature_166_router_agent_credential_scope",
     "feature_167_openwrt_snapshot_delivery_envelope",
     "feature_168_router_agent_negotiation_audit",
-    "feature_170_unifi_snapshot_normalizer",
-    "feature_171_mikrotik_snapshot_normalizer",
+    "feature_171_unifi_snapshot_normalizer",
+    "feature_172_mikrotik_snapshot_normalizer",
 )
 
 @lru_cache(maxsize=1)

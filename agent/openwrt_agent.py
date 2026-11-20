@@ -29,6 +29,7 @@ AGENT_VERSION = "1.0.0"
 ADAPTER_ID = "openwrt"
 CAPABILITIES = [
     "system.board",
+    "system.health",
     "network.interfaces",
     "network.routes",
     "wireless.radios",
@@ -439,9 +440,68 @@ class OpenWrtCollector:
                 result.append({"interface": interface, "stations": stations})
         return result
 
-    def collect(self) -> dict:
+    @staticmethod
+    def _system_health(value: object) -> dict:
+        if not isinstance(value, dict):
+            raise CollectorError("OpenWrt system info response is not an object", "SCAN_UNAVAILABLE")
+        uptime = value.get("uptime")
+        if isinstance(uptime, bool) or not isinstance(uptime, int) or not 0 <= uptime <= 9007199254740991:
+            raise CollectorError("OpenWrt system uptime is invalid", "SCAN_UNAVAILABLE")
+
+        load = value.get("load")
+        if not isinstance(load, list) or len(load) != 3:
+            raise CollectorError("OpenWrt system load averages are invalid", "SCAN_UNAVAILABLE")
+        load_averages = []
+        for item in load:
+            if isinstance(item, bool) or not isinstance(item, int) or not 0 <= item <= 4294967295:
+                raise CollectorError("OpenWrt system load averages are invalid", "SCAN_UNAVAILABLE")
+            # procd exposes Linux sysinfo load values in unsigned 16.16 fixed point.
+            load_averages.append(round(item / 65536.0, 2))
+
+        def byte_metrics(section: object, name: str, required: tuple[str, ...]) -> dict:
+            if not isinstance(section, dict):
+                raise CollectorError(f"OpenWrt system {name} metrics are invalid", "SCAN_UNAVAILABLE")
+            result = {}
+            for field in ("total", "free", "shared", "buffered", "available", "cached"):
+                raw = section.get(field)
+                if raw is None:
+                    if field in required:
+                        raise CollectorError(f"OpenWrt system {name}.{field} is missing", "SCAN_UNAVAILABLE")
+                    continue
+                if isinstance(raw, bool) or not isinstance(raw, int) or not 0 <= raw <= 9007199254740991:
+                    raise CollectorError(f"OpenWrt system {name}.{field} is invalid", "SCAN_UNAVAILABLE")
+                result[field] = raw
+            if result.get("total") is not None and result.get("free") is not None:
+                if result["free"] > result["total"]:
+                    raise CollectorError(f"OpenWrt system {name}.free exceeds total", "SCAN_UNAVAILABLE")
+            return result
+
+        memory = byte_metrics(value.get("memory"), "memory", ("total", "free"))
+        swap = byte_metrics(value.get("swap"), "swap", ("total", "free"))
+        return {
+            "uptime_seconds": uptime,
+            "load_average": {
+                "1m": load_averages[0],
+                "5m": load_averages[1],
+                "15m": load_averages[2],
+            },
+            "memory_bytes": memory,
+            "swap_bytes": swap,
+        }
+
+    def collect(self, *, include_system_health: bool = False) -> dict:
         self.warnings = []
         board_raw = self._json_command(["ubus", "call", "system", "board", "{}"])
+        system_health = None
+        if include_system_health:
+            health_raw = self._json_command(["ubus", "call", "system", "info", "{}"], optional=True)
+            if health_raw is None:
+                self.warnings.append("system_health_unavailable")
+            else:
+                try:
+                    system_health = self._system_health(health_raw)
+                except CollectorError:
+                    self.warnings.append("system_health_invalid")
         interfaces_raw = self._json_command(["ubus", "call", "network.interface", "dump", "{}"], optional=True)
         wireless_raw = self._json_command(["ubus", "call", "network.wireless", "status", "{}"], optional=True)
         if interfaces_raw is None:
@@ -466,7 +526,7 @@ class OpenWrtCollector:
             self.warnings.append("ipv6_routes_unavailable")
         routes = self._routes(routes4) + self._routes(routes6, ipv6=True)
         associations = self._associations(radios)
-        return {
+        snapshot = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
             "board": self._board(board_raw),
             "interfaces": interfaces,
@@ -474,6 +534,9 @@ class OpenWrtCollector:
             "associations": associations,
             "routes": routes,
         }
+        if system_health is not None:
+            snapshot["system_health"] = system_health
+        return snapshot
 
 
 class DurableOutbox:
@@ -654,11 +717,12 @@ class OpenWrtAgent:
         return delivery
 
     @staticmethod
-    def _require_snapshot_scope(heartbeat: dict) -> None:
+    def _require_snapshot_scope(heartbeat: dict) -> list[str]:
         agent = heartbeat.get("agent") if isinstance(heartbeat, dict) else None
         accepted = agent.get("capabilities", []) if isinstance(agent, dict) else []
         if not isinstance(accepted, list) or "inventory.snapshot" not in accepted:
             raise AgentConfigError("Agent credential is not scoped for inventory.snapshot")
+        return accepted
 
     def run_once(self) -> dict:
         pending = self.outbox.load()
@@ -668,7 +732,7 @@ class OpenWrtAgent:
             heartbeat = self._heartbeat(heartbeat_status, heartbeat_error)
         except AgentTransportError:
             return {"status": "pending" if pending is not None else "offline", "pending": pending is not None}
-        self._require_snapshot_scope(heartbeat)
+        accepted_capabilities = self._require_snapshot_scope(heartbeat)
 
         if pending is not None:
             try:
@@ -678,7 +742,9 @@ class OpenWrtAgent:
             return {"status": "delivered_pending", "pending": False, "delivery": delivery}
 
         try:
-            snapshot = self.collector.collect()
+            snapshot = self.collector.collect(
+                include_system_health="system.health" in accepted_capabilities
+            )
         except CollectorError as error:
             self._heartbeat("degraded", error.error_code)
             return {"status": "degraded", "error_code": error.error_code, "pending": False}

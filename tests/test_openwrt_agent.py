@@ -42,6 +42,12 @@ class FakeRunner:
     def __init__(self):
         self.calls = []
         self.results = {
+            ("ubus", "call", "system", "info", "{}"): {
+                "uptime": 1234,
+                "load": [65536, 32768, 16384],
+                "memory": {"total": 1048576, "free": 524288, "shared": 8192, "buffered": 16384, "available": 540672, "cached": 32768},
+                "swap": {"total": 262144, "free": 131072},
+            },
             ("ubus", "call", "system", "board", "{}"): {
                 "model": "Example OpenWrt Router",
                 "board_name": "vendor,router",
@@ -114,6 +120,35 @@ class FakeRunner:
 
 
 class CollectorTests(unittest.TestCase):
+    def test_collector_only_reads_system_health_when_requested_and_converts_fixed_point_load(self):
+        runner = FakeRunner()
+        collector = OpenWrtCollector(runner=runner)
+        without_health = collector.collect()
+        self.assertNotIn("system_health", without_health)
+        self.assertNotIn(("ubus", "call", "system", "info", "{}"), [tuple(argv) for argv, _ in runner.calls])
+
+        runner = FakeRunner()
+        collector = OpenWrtCollector(runner=runner)
+        with_health = collector.collect(include_system_health=True)
+        self.assertEqual(with_health["system_health"]["uptime_seconds"], 1234)
+        self.assertEqual(with_health["system_health"]["load_average"], {"1m": 1.0, "5m": 0.5, "15m": 0.25})
+        self.assertEqual(with_health["system_health"]["memory_bytes"]["available"], 540672)
+        self.assertEqual(with_health["system_health"]["swap_bytes"]["total"], 262144)
+        self.assertIn(("ubus", "call", "system", "info", "{}"), [tuple(argv) for argv, _ in runner.calls])
+        self.assertEqual(collector.warnings, [])
+
+    def test_collector_rejects_invalid_system_health_without_losing_base_inventory(self):
+        runner = FakeRunner()
+        runner.results[("ubus", "call", "system", "info", "{}")] = {
+            "uptime": 12, "load": [-1, 2, 3],
+            "memory": {"total": 1024, "free": 256}, "swap": {"total": 0, "free": 0},
+        }
+        collector = OpenWrtCollector(runner=runner)
+        snapshot = collector.collect(include_system_health=True)
+        self.assertNotIn("system_health", snapshot)
+        self.assertIn("system_health_invalid", collector.warnings)
+        self.assertEqual(snapshot["board"]["model"], "Example OpenWrt Router")
+
     def test_collector_uses_read_only_allowlisted_commands_and_produces_normalisable_data(self):
         runner = FakeRunner()
         collector = OpenWrtCollector(runner=runner)
@@ -270,9 +305,11 @@ class FakeCollector:
         self.snapshot = snapshot
         self.warnings = []
         self.calls = 0
+        self.health_requests = []
 
-    def collect(self):
+    def collect(self, *, include_system_health=False):
         self.calls += 1
+        self.health_requests.append(include_system_health)
         return self.snapshot
 
 
@@ -325,6 +362,7 @@ class AgentRuntimeTests(unittest.TestCase):
             self.assertEqual(second["status"], "delivered_pending")
             self.assertFalse(outbox.path.exists())
             self.assertEqual(collector.calls, 1)
+            self.assertEqual(collector.health_requests, [True])
             self.assertEqual(len(client.deliveries), 2)
             self.assertEqual(client.deliveries[0]["delivery_id"], client.deliveries[1]["delivery_id"])
             self.assertEqual(client.deliveries[0], client.deliveries[1])
@@ -337,6 +375,16 @@ class AgentRuntimeTests(unittest.TestCase):
                     "/api/agents/snapshots/batch",
                 ],
             )
+
+    def test_agent_does_not_collect_system_health_without_negotiated_capability(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = make_config(directory)
+            collector = FakeCollector(self._snapshot())
+            client = FakeClient(accepted_capabilities=["system.board", "inventory.snapshot"])
+            agent = OpenWrtAgent(config, collector=collector, client=client)
+            result = agent.run_once()
+            self.assertEqual(result["status"], "delivered")
+            self.assertEqual(collector.health_requests, [False])
 
     def test_agent_does_not_submit_snapshot_without_negotiated_inventory_scope(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -354,7 +402,7 @@ class AgentRuntimeTests(unittest.TestCase):
         class BrokenCollector:
             warnings = []
 
-            def collect(self):
+            def collect(self, *, include_system_health=False):
                 raise CollectorError("No telemetry source", "SCAN_UNAVAILABLE")
 
         with tempfile.TemporaryDirectory() as directory:

@@ -648,10 +648,17 @@ class RouterAgentHealthStore:
                     raise ValueError("agent must send an authenticated heartbeat before submitting snapshots")
                 if agent["adapter_id"] != snapshot["adapter_id"] or credential["adapter_id"] != snapshot["adapter_id"]:
                     raise AgentAuthenticationError("Agent authentication required")
-                if "inventory.snapshot" not in json.loads(credential["allowed_capabilities"]):
+                credential_capabilities = set(json.loads(credential["allowed_capabilities"]))
+                heartbeat_capabilities = set(json.loads(agent["capabilities"]))
+                if "inventory.snapshot" not in credential_capabilities:
                     raise ValueError("Agent credential does not include the inventory.snapshot capability")
-                if "inventory.snapshot" not in json.loads(agent["capabilities"]):
+                if "inventory.snapshot" not in heartbeat_capabilities:
                     raise ValueError("agent has not negotiated the inventory.snapshot capability")
+                if "system_health" in snapshot:
+                    if "system.health" not in credential_capabilities:
+                        raise ValueError("Agent credential does not include the system.health capability")
+                    if "system.health" not in heartbeat_capabilities:
+                        raise ValueError("agent has not negotiated the system.health capability")
 
                 if delivery_id is not None:
                     existing_delivery = connection.execute(

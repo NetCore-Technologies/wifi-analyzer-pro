@@ -46,11 +46,8 @@ _ADAPTERS = {
         "read_only": True,
         "supported_permissions": ["read"],
         "capabilities": [
-            "controller.devices",
-            "controller.networks",
-            "wireless.radios",
-            "wireless.associations",
-            "inventory.snapshot",
+            "controller.devices", "controller.networks", "wireless.radios",
+            "wireless.associations", "inventory.snapshot",
         ],
         "notes": (
             "Offline import of caller-supplied UniFi Network export data. It does not open a controller "
@@ -68,19 +65,13 @@ _ADAPTERS = {
         "read_only": True,
         "supported_permissions": ["read"],
         "capabilities": [
-            "system.board",
-            "system.health",
-            "network.interfaces",
-            "network.addresses",
-            "network.vlans",
-            "network.dhcp_leases",
-            "wireless.radios",
-            "wireless.associations",
-            "inventory.snapshot",
+            "system.board", "system.health", "network.interfaces", "network.addresses",
+            "network.vlans", "network.dhcp_leases", "wireless.radios",
+            "wireless.associations", "inventory.snapshot",
         ],
         "notes": (
-            "Offline import of caller-supplied RouterOS export data. This manifest does not establish "
-            "a RouterOS session, execute scripts, request credentials, or permit configuration writes."
+            "Offline import of caller-supplied RouterOS export data. It does not establish a router "
+            "session, execute scripts, request credentials, or permit configuration writes."
         ),
     },
 }

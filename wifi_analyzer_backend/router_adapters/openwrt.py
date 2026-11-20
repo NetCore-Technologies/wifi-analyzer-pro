@@ -51,6 +51,16 @@ def _timestamp(value):
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+def _integer(value, field, minimum=0, maximum=9007199254740991):
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{field} must be an integer")
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{field} is outside the supported range")
+    return value
+
+
 def _ip_interface(item, field, version):
     if not isinstance(item,dict): raise ValueError(f"{field} entries must be objects")
     address=item.get("address")
@@ -150,6 +160,46 @@ def normalize_snapshot(payload):
             "up":record.get("up") if isinstance(record.get("up"),bool) else None,
         })
 
+    system_health = payload.get("system_health")
+    if system_health is not None:
+        if not isinstance(system_health, dict):
+            raise ValueError("system_health must be an object")
+        uptime = _integer(system_health.get("uptime_seconds"), "system_health.uptime_seconds")
+        if uptime is None:
+            raise ValueError("system_health.uptime_seconds is required")
+        raw_load = system_health.get("load_average")
+        if not isinstance(raw_load, dict):
+            raise ValueError("system_health.load_average must be an object")
+        load_average = {}
+        for period in ("1m", "5m", "15m"):
+            value = _number(raw_load.get(period), f"system_health.load_average.{period}", 0, 1000000)
+            if value is None:
+                raise ValueError(f"system_health.load_average.{period} is required")
+            load_average[period] = value
+
+        def health_bytes(name, required):
+            value = system_health.get(name)
+            if not isinstance(value, dict):
+                raise ValueError(f"system_health.{name} must be an object")
+            result = {}
+            for field in ("total", "free", "shared", "buffered", "available", "cached"):
+                parsed = _integer(value.get(field), f"system_health.{name}.{field}")
+                if parsed is None and field in required:
+                    raise ValueError(f"system_health.{name}.{field} is required")
+                if parsed is not None:
+                    result[field] = parsed
+            if result.get("total") is not None and result.get("free") is not None:
+                if result["free"] > result["total"]:
+                    raise ValueError(f"system_health.{name}.free cannot exceed total")
+            return result
+
+        system_health = {
+            "uptime_seconds": uptime,
+            "load_average": load_average,
+            "memory_bytes": health_bytes("memory_bytes", ("total", "free")),
+            "swap_bytes": health_bytes("swap_bytes", ("total", "free")),
+        }
+
     associations=[]
     seen=set()
     invalid=0
@@ -198,6 +248,7 @@ def normalize_snapshot(payload):
     return {
         "adapter_id":"openwrt","captured_at":captured_at,"board":normalised_board,
         "interfaces":interfaces,"wireless_radios":radios,"associations":associations,"routes":routes,
+        **({"system_health":system_health} if system_health is not None else {}),
         "summary":{"interface_count":len(interfaces),"wireless_radio_count":len(radios),
                    "association_count":len(associations),"invalid_association_count":invalid,"route_count":len(routes)},
         "note":"Normalised from caller-supplied OpenWrt data. Unrecognised and credential-like fields are not copied; no router connection is opened and raw input is not persisted.",
