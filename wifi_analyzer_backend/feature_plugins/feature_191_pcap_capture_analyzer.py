@@ -563,14 +563,15 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
                 raise ValueError("PCAPNG simple packet block has no interface description")
             interface = interfaces[0]
             original_length = _integer(capture, cursor + 8, 4, byteorder)
-            interface_snaplen = interface["snap_length_bytes"] or MAX_FRAME_BYTES
+            interface_snaplen_value = interface["snap_length_bytes"]
+            interface_snaplen = interface_snaplen_value or MAX_FRAME_BYTES
+            if interface_snaplen_value == 0 and original_length > MAX_FRAME_BYTES:
+                raise ValueError("PCAPNG simple packet exceeds the analyzer frame limit")
             included_length = min(original_length, interface_snaplen)
-            if included_length > MAX_FRAME_BYTES:
-                raise ValueError("PCAPNG simple packet exceeds the frame limit")
             packet_start = cursor + 12
             padded_packet_end = packet_start + ((included_length + 3) & ~3)
-            if padded_packet_end > block_end - 4:
-                raise ValueError("PCAPNG simple packet data exceeds its block")
+            if padded_packet_end != block_end - 4:
+                raise ValueError("PCAPNG simple packet data length does not match its block")
             if packets_read >= maximum_packets:
                 raise ValueError(f"capture exceeds the {maximum_packets}-packet analysis limit")
             frame = capture[packet_start:packet_start + included_length]
