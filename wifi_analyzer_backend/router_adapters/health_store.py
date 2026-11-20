@@ -28,6 +28,7 @@ MAX_NEGOTIATIONS_TOTAL = 5000
 DEFAULT_AGENT_TOKEN_TTL_DAYS = 90
 MAX_AGENT_TOKEN_TTL_DAYS = 365
 _AGENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+_SITE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _CAPABILITY = re.compile(r"^[a-z][a-z0-9_.-]{0,79}$")
 _STATUSES = {"healthy", "degraded", "unhealthy"}
@@ -123,6 +124,11 @@ class RouterAgentHealthStore:
             )
             """
         )
+        credential_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(router_agent_credentials)")
+        }
+        if "site_id" not in credential_columns:
+            connection.execute("ALTER TABLE router_agent_credentials ADD COLUMN site_id TEXT")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS router_agent_negotiations (
@@ -185,8 +191,10 @@ class RouterAgentHealthStore:
     def enroll_agent(
         self, *, agent_id: str, adapter_id: str, agent_version: str,
         allowed_capabilities: list[str], ttl_days: int = DEFAULT_AGENT_TOKEN_TTL_DAYS,
-        negotiation: dict | None = None,
+        negotiation: dict | None = None, site_id: str | None = None,
     ) -> dict:
+        if site_id is not None and (not isinstance(site_id, str) or not _SITE_ID.fullmatch(site_id)):
+            raise ValueError("site_id must be a 1 to 128 character identifier")
         if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
             raise ValueError("agent_id must be a 1 to 64 character identifier")
         if not isinstance(adapter_id, str) or not adapter_id.strip():
@@ -328,8 +336,8 @@ class RouterAgentHealthStore:
                 """
                 INSERT INTO router_agent_credentials
                     (agent_id, adapter_id, agent_version, token_hash, allowed_capabilities,
-                     created_at, expires_at, revoked_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                     created_at, expires_at, revoked_at, site_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     adapter_id = excluded.adapter_id,
                     agent_version = excluded.agent_version,
@@ -337,10 +345,11 @@ class RouterAgentHealthStore:
                     allowed_capabilities = excluded.allowed_capabilities,
                     created_at = excluded.created_at,
                     expires_at = excluded.expires_at,
-                    revoked_at = NULL
+                    revoked_at = NULL,
+                    site_id = excluded.site_id
                 """,
                 (agent_id, adapter_id, agent_version, token_hash,
-                 json.dumps(sorted(seen), separators=(",", ":")), created_at, expires_at),
+                 json.dumps(sorted(seen), separators=(",", ":")), created_at, expires_at, site_id),
             )
             connection.execute("DELETE FROM router_agent_heartbeats WHERE agent_id = ?", (agent_id,))
             connection.execute(
@@ -373,7 +382,7 @@ class RouterAgentHealthStore:
         return {
             "agent_id": agent_id, "adapter_id": adapter_id, "agent_version": agent_version,
             "allowed_capabilities": sorted(seen), "created_at": created_at,
-            "expires_at": expires_at, "token": token,
+            "expires_at": expires_at, "site_id": site_id, "token": token,
         }
 
 
@@ -438,7 +447,7 @@ class RouterAgentHealthStore:
         token_hash = self._agent_token_hash(token)
         with self._connection() as connection:
             credential = connection.execute(
-                "SELECT adapter_id, agent_version, allowed_capabilities, revoked_at "
+                "SELECT adapter_id, agent_version, allowed_capabilities, revoked_at, site_id "
                 "FROM router_agent_credentials WHERE agent_id = ?",
                 (agent_id,),
             ).fetchone()
@@ -454,7 +463,8 @@ class RouterAgentHealthStore:
             "agent_id": agent_id, "adapter_id": credential["adapter_id"],
             "agent_version": credential["agent_version"],
             "allowed_capabilities": json.loads(credential["allowed_capabilities"]),
-            "created_at": created_at, "expires_at": expires_at, "token": token,
+            "created_at": created_at, "expires_at": expires_at,
+            "site_id": credential["site_id"], "token": token,
         }
 
     def revoke_agent_credential(self, agent_id: str) -> dict:
@@ -476,7 +486,7 @@ class RouterAgentHealthStore:
             rows = connection.execute(
                 """
                 SELECT agent_id, adapter_id, agent_version, allowed_capabilities,
-                       created_at, expires_at, revoked_at
+                       created_at, expires_at, revoked_at, site_id
                 FROM router_agent_credentials ORDER BY agent_id LIMIT ?
                 """,
                 (MAX_AGENTS,),
@@ -493,9 +503,34 @@ class RouterAgentHealthStore:
                 "agent_version": row["agent_version"],
                 "allowed_capabilities": json.loads(row["allowed_capabilities"]),
                 "created_at": row["created_at"], "expires_at": row["expires_at"],
-                "revoked_at": row["revoked_at"], "status": status,
+                "revoked_at": row["revoked_at"], "site_id": row["site_id"],
+                "status": status,
             })
         return results
+
+    def get_agent_scope(self, agent_id: str) -> dict | None:
+        if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
+            raise ValueError("agent_id must be a 1 to 64 character identifier")
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT agent_id, site_id FROM router_agent_credentials WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
+        return {"agent_id": row["agent_id"], "site_id": row["site_id"]} if row else None
+
+    def assign_agent_site(self, agent_id: str, site_id: str | None) -> dict:
+        if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
+            raise ValueError("agent_id must be a 1 to 64 character identifier")
+        if site_id is not None and (not isinstance(site_id, str) or not _SITE_ID.fullmatch(site_id)):
+            raise ValueError("site_id must be null or a 1 to 128 character identifier")
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE router_agent_credentials SET site_id = ? WHERE agent_id = ?",
+                (site_id, agent_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Agent credential was not found")
+        return {"agent_id": agent_id, "site_id": site_id, "updated": True}
 
     def _require_agent_credential(self, connection, agent_id: str, token: str):
         token_hash = self._agent_token_hash(token)
@@ -768,8 +803,10 @@ class RouterAgentHealthStore:
         with self._connection() as connection:
             rows = connection.execute(
                 """
-                SELECT s.id, s.agent_id, s.adapter_id, s.captured_at, s.received_at, s.payload
+                SELECT s.id, s.agent_id, s.adapter_id, s.captured_at, s.received_at, s.payload,
+                       c.site_id
                 FROM agent_router_snapshots AS s
+                LEFT JOIN router_agent_credentials AS c ON c.agent_id = s.agent_id
                 WHERE s.id = (
                     SELECT MAX(latest.id) FROM agent_router_snapshots AS latest
                     WHERE latest.agent_id = s.agent_id
@@ -783,6 +820,7 @@ class RouterAgentHealthStore:
             summary = json.loads(row["payload"]).get("summary", {})
             results.append({
                 "id": row["id"], "agent_id": row["agent_id"], "adapter_id": row["adapter_id"],
+                "site_id": row["site_id"],
                 "captured_at": row["captured_at"], "received_at": row["received_at"],
                 "interface_count": summary.get("interface_count", 0),
                 "wireless_radio_count": summary.get("wireless_radio_count", 0),
@@ -799,9 +837,12 @@ class RouterAgentHealthStore:
         with self._connection() as connection:
             rows = connection.execute(
                 """
-                SELECT id, agent_id, adapter_id, captured_at, received_at, payload
-                FROM agent_router_snapshots WHERE agent_id = ?
-                ORDER BY id DESC LIMIT ?
+                SELECT s.id, s.agent_id, s.adapter_id, s.captured_at, s.received_at, s.payload,
+                       c.site_id
+                FROM agent_router_snapshots AS s
+                LEFT JOIN router_agent_credentials AS c ON c.agent_id = s.agent_id
+                WHERE s.agent_id = ?
+                ORDER BY s.id DESC LIMIT ?
                 """,
                 (agent_id, limit),
             ).fetchall()
@@ -810,6 +851,7 @@ class RouterAgentHealthStore:
                 "id": row["id"],
                 "agent_id": row["agent_id"],
                 "adapter_id": row["adapter_id"],
+                "site_id": row["site_id"],
                 "captured_at": row["captured_at"],
                 "received_at": row["received_at"],
                 "snapshot": json.loads(row["payload"]),
@@ -823,9 +865,12 @@ class RouterAgentHealthStore:
         with self._connection() as connection:
             row = connection.execute(
                 """
-                SELECT id, agent_id, adapter_id, captured_at, received_at, payload
-                FROM agent_router_snapshots WHERE agent_id = ?
-                ORDER BY id DESC LIMIT 1
+                SELECT s.id, s.agent_id, s.adapter_id, s.captured_at, s.received_at, s.payload,
+                       c.site_id
+                FROM agent_router_snapshots AS s
+                LEFT JOIN router_agent_credentials AS c ON c.agent_id = s.agent_id
+                WHERE s.agent_id = ?
+                ORDER BY s.id DESC LIMIT 1
                 """,
                 (agent_id,),
             ).fetchone()
@@ -833,6 +878,7 @@ class RouterAgentHealthStore:
             return None
         return {
             "id": row["id"], "agent_id": row["agent_id"], "adapter_id": row["adapter_id"],
+            "site_id": row["site_id"],
             "captured_at": row["captured_at"], "received_at": row["received_at"],
             "snapshot": json.loads(row["payload"]),
         }
@@ -841,15 +887,18 @@ class RouterAgentHealthStore:
         with self._connection() as connection:
             rows = connection.execute(
                 """
-                SELECT agent_id, adapter_id, agent_version, status, error_code,
-                       last_seen_at, capabilities
-                FROM router_agent_heartbeats ORDER BY agent_id
+                SELECT h.agent_id, h.adapter_id, h.agent_version, h.status, h.error_code,
+                       h.last_seen_at, h.capabilities, c.site_id
+                FROM router_agent_heartbeats AS h
+                LEFT JOIN router_agent_credentials AS c ON c.agent_id = h.agent_id
+                ORDER BY h.agent_id
                 """
             ).fetchall()
         return [
             {
                 "agent_id": row["agent_id"],
                 "adapter_id": row["adapter_id"],
+                "site_id": row["site_id"],
                 "agent_version": row["agent_version"],
                 "status": row["status"],
                 "error_code": row["error_code"],
