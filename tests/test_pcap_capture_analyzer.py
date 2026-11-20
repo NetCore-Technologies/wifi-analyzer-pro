@@ -83,7 +83,7 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
 
     def test_extracts_radiotap_signal_noise_and_channel_frequency(self):
         present = (1 << 3) | (1 << 5) | (1 << 6)
-        radiotap = bytes((0, 0)) + struct.pack("<HIHHbb", 18, present, 2412, 0x00A0, -48, -95)
+        radiotap = bytes((0, 0)) + struct.pack("<HIHHbb", 14, present, 2412, 0x00A0, -48, -95)
         result = run({"capture_base64": make_capture(127, [radiotap + beacon_frame()])})
         observations = result["radiotap_observations"]
         self.assertEqual(observations["signal"], {"sample_count": 1, "average_dbm": -48.0})
