@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import json
+import os
 from urllib.request import Request, urlopen
 
 
-BASE_URL = "http://127.0.0.1:199"
+BASE_URL = os.environ.get("WIFI_ANALYZER_SMOKE_URL", "http://127.0.0.1:199").rstrip("/")
 PASSWORD = "packaged-smoke-test-password-2026"
 REQUIRED_FEATURES = {
     "router_webhook_subscription_router",
