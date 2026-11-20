@@ -19,6 +19,7 @@ import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
 import TeamAccessPanel from "./components/TeamAccessPanel.jsx";
 import SecurityAuditPanel from "./components/SecurityAuditPanel.jsx";
 import AccountSecurityPanel from "./components/AccountSecurityPanel.jsx";
+import WebhookDeliveryPanel from "./components/WebhookDeliveryPanel.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -878,6 +879,7 @@ const NAV=[
     {id:"system",label:"System",           Icon:Monitor},
     {id:"router",label:"Router Support",   Icon:Server},
     {id:"agents",label:"Router Agents",    Icon:Shield},
+    {id:"webhookDelivery",label:"Webhook Delivery",Icon:Network},
     {id:"teamAccess",label:"Team Access",   Icon:Users},
     {id:"accountSecurity",label:"Account Security",Icon:Lock},
     {id:"securityAudit",label:"Security Audit",Icon:ClipboardList},
@@ -1126,6 +1128,7 @@ export default function App() {
     teamAccess:   <TeamAccessPanel/>,
     securityAudit:<SecurityAuditPanel/>,
     accountSecurity:<AccountSecurityPanel/>,
+    webhookDelivery:<WebhookDeliveryPanel/>,
     dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
@@ -1198,7 +1201,8 @@ export default function App() {
         <div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
           {NAV
             .map(group => ({ ...group, items: group.items.filter(item =>
-              !["teamAccess", "securityAudit"].includes(item.id) || ["owner", "admin"].includes(identity?.role)
+              (!["teamAccess", "securityAudit"].includes(item.id) || ["owner", "admin"].includes(identity?.role))
+              && (item.id !== "webhookDelivery" || ["owner", "admin", "network_admin", "analyst"].includes(identity?.role))
             ) }))
             .filter(group => group.items.length > 0)
             .map(group=>(

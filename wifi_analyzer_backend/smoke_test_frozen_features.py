@@ -12,8 +12,9 @@ REQUIRED_FEATURES = {
     "router_webhook_subscription_router",
     "router_scheduled_report_delivery_package",
     "pcap_capture_analyzer",
+    "router_webhook_delivery_orchestrator",
 }
-MINIMUM_FEATURE_COUNT = 188
+MINIMUM_FEATURE_COUNT = 189
 PCAP_FIXTURE = "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"
 
 
@@ -46,6 +47,50 @@ def main() -> None:
     )
     if result.get("feature") != "F191" or result.get("result", {}).get("status") != "analysed":
         raise SystemExit("Frozen PCAP analyzer did not execute successfully")
+
+    now = "2026-11-20T10:00:00Z"
+    webhook = request(
+        "/api/features/router_webhook_delivery_orchestrator",
+        {
+            "now": now,
+            "subscriptions": [{
+                "subscription_id": "smoke-home",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "key_id": "smoke-key",
+                "event_types": ["router.health"],
+                "minimum_severity": "warning",
+                "site_allowlist": ["home"],
+            }],
+            "events": [{
+                "event_id": "a" * 64,
+                "event_type": "router.health",
+                "severity": "warning",
+                "occurred_at": "2026-11-20T09:59:00Z",
+                "site_id": "home",
+                "router_id": "smoke-router",
+                "summary": "Frozen webhook smoke event",
+            }],
+            "signing_keys": {"smoke-key": "smoke-signing-key-material-with-at-least-32-bytes"},
+            "egress_evidence": [{
+                "subscription_id": "smoke-home",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "resolution_at": "2026-11-20T09:59:55Z",
+                "connected_at": now,
+                "resolved_addresses": ["1.1.1.1"],
+                "peer_ip": "1.1.1.1",
+                "connected_port": 443,
+                "tls_version": "TLSv1.3",
+                "tls_verified": True,
+                "hostname_verified": True,
+                "redirect_location": None,
+            }],
+        },
+        token=token,
+    )
+    if webhook.get("feature") != "F192" or webhook.get("result", {}).get("status") != "prepared":
+        raise SystemExit("Frozen multi-subscription webhook orchestrator did not execute successfully")
     print(f"Frozen feature smoke test passed ({catalog['count']} registered features)")
 
 

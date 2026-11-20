@@ -207,7 +207,7 @@ Scheduled-report jobs are stored in the local SQLite outbox and claimed using ex
 
 The authenticated delivery-package endpoint remains available for external integrations. It verifies the active lease and prepares the signed envelope using supplied DNS/TLS evidence; it does not transmit network traffic. The built-in worker and external dispatchers must not share the same claimed lease.
 
-F190 maps normalized events into bounded, deterministic subscription batches. F192 now prepares a separate HMAC-signed delivery for each matched subscription only when its signing key and matching fresh DNS/TLS evidence are provided. It does not send network requests or store secrets; the downstream dispatcher must re-resolve and re-verify at send time. The built-in pinned-TLS report worker remains single-destination per process, so persistent multi-subscription fan-out and a dedicated dispatcher are still planned. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.
+F190 maps normalized events into bounded, deterministic subscription batches. F192 and the Webhook Delivery Center now prepare a separate HMAC-signed delivery for each matched subscription only when its signing key and matching fresh DNS/TLS evidence are provided. It does not send network requests or store secrets; the downstream dispatcher must re-resolve and re-verify at send time. The built-in pinned-TLS report worker remains single-destination per process, so persistent multi-subscription fan-out and a dedicated dispatcher are still planned. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.
 
 
 ### API request limits
@@ -229,3 +229,11 @@ at rest with password-derived AES-256-GCM key material, and ten single-use
 recovery codes are provided. Password resets clear MFA so it must be enrolled
 again. Use this alongside VPN/reverse-proxy access controls and protected
 backups of the local account file.
+
+
+The **Webhook Delivery Center** in the System navigation exposes the F190/F192
+multi-subscription preparation workflow to network operators. It shows prepared
+and blocked subscription batches, copies prepared envelopes on request, and
+clears the submitted signing-key map from the editor after a successful run.
+It does not send HTTP requests; persistent fan-out, retry/dead-letter delivery
+and an operational dispatcher remain separate deployment work.

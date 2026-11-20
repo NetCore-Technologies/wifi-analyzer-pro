@@ -50,3 +50,15 @@ single-use. Password resets clear active/pending MFA and recovery codes, so the
 account must enrol a new authenticator. Keep a protected backup of the auth
 file and store recovery codes separately. MFA does not replace HTTPS for
 remote access or protect against a compromised host.
+
+
+## Webhook signing-key handling
+
+The Webhook Delivery Center accepts a signing-key map for one local preparation
+request and clears it from the editor after success. Keys are passed in the
+authenticated request body and are not written to the security audit metadata or
+returned by the orchestrator. Treat them as secrets in transit: use local loopback
+or a protected VPN/HTTPS reverse proxy for remote operation, avoid browser
+extensions or shared workstations, and use a dedicated secret manager for
+production automation. Prepared envelopes are copied or exported only when an
+operator explicitly requests it. The browser UI is not a persistent secret store.

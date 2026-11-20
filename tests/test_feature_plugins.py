@@ -871,9 +871,9 @@ PAYLOADS = {
             "peer_ip": "1.1.1.1",
             "connected_port": 443,
             "tls_version": "TLSv1.3",
-            "tls_verified": true,
-            "hostname_verified": true,
-            "redirect_location": null
+            "tls_verified": True,
+            "hostname_verified": True,
+            "redirect_location": None
         }]
     },
     "router_agent_negotiation_audit": {

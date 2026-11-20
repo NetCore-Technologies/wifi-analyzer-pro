@@ -91,7 +91,9 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         self.assertIn("router_webhook_subscription_router", smoke_helper)
         self.assertIn("router_scheduled_report_delivery_package", smoke_helper)
         self.assertIn("pcap_capture_analyzer", smoke_helper)
+        self.assertIn("router_webhook_delivery_orchestrator", smoke_helper)
         self.assertIn('result.get("feature") != "F191"', smoke_helper)
+        self.assertIn('webhook.get("feature") != "F192"', smoke_helper)
 
 
 if __name__ == "__main__":
