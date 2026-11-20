@@ -723,7 +723,6 @@ function AlertsPanel({ alerts = [] }) {
         </div>
       </div>
       <div style={{...s.card,fontSize:12,color:C.muted}}>Alert delivery is not connected in this build. Current alerts are displayed locally and are not sent to Discord, email or MQTT.</div>
-      </div>
     </div>
   );
 }
