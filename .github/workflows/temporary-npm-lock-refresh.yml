@@ -1,0 +1,35 @@
+name: Temporary npm lockfile refresh
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/temporary-npm-lock-refresh.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Generate lockfile from package.json
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Publish generated lockfile artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wifi-analyzer-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Verify clean install and frontend production build
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
