@@ -55,6 +55,7 @@ class RouterReportJobStore:
             try:
                 os.chmod(parent, 0o700)
             except OSError:
+                # Some filesystems do not support POSIX permission changes.
                 pass
         connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
         connection.row_factory = sqlite3.Row
@@ -107,6 +108,7 @@ class RouterReportJobStore:
                 try:
                     os.chmod(self.path, 0o600)
                 except OSError:
+                    # Do not mask the primary database operation during cleanup.
                     pass
 
     @staticmethod
