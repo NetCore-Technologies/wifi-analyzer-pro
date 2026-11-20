@@ -295,6 +295,60 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(report["summary"]["added_access_point_count"], 1)
         self.assertEqual(report["summary"]["removed_access_point_count"], 1)
 
+    def test_site_scope_filters_saved_history_and_blocks_cross_site_reads_and_inputs(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+        home = server.HISTORY.record({
+            "site_id": "home", "captured_at": "2026-11-20T10:00:00Z",
+            "access_points": [], "links": [],
+        })
+        branch = server.HISTORY.record({
+            "site_id": "branch", "captured_at": "2026-11-20T10:01:00Z",
+            "access_points": [], "links": [],
+        })
+        status, created = self.request("POST", "/api/users", {
+            "username": "home.viewer", "password": "home viewer password",
+            "role": "viewer", "all_sites": False, "site_ids": ["home"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        viewer_token = self.request(
+            "POST", "/api/auth/login",
+            {"username": "home.viewer", "password": "home viewer password"},
+        )[1]["token"]
+
+        status, catalog = self.request("GET", "/api/sites", token=viewer_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(catalog["site_ids"], ["home"])
+        status, listing = self.request("GET", "/api/sites/history?limit=50", token=viewer_token)
+        self.assertEqual(status, 200)
+        self.assertEqual({item["site_id"] for item in listing["snapshots"]}, {"home"})
+        status, listing = self.request("GET", "/api/sites/history?site_id=branch", token=viewer_token)
+        self.assertEqual(status, 403)
+        status, detail = self.request("GET", f"/api/sites/history/{branch['id']}", token=viewer_token)
+        self.assertEqual(status, 404)
+        status, report = self.request("GET", "/api/sites/history/report", token=viewer_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(report["reported_site_count"], 1)
+        status, denied = self.request(
+            "GET", "/api/sites/history/report?site_ids=home,branch", token=viewer_token,
+        )
+        self.assertEqual(status, 403)
+        status, denied = self.request("POST", "/api/sites/audit", {
+            "sites": [{"site_id": "branch", "access_points": [], "links": []}],
+        }, token=viewer_token)
+        self.assertEqual(status, 403)
+        status, denied = self.request("POST", "/api/sites/history", {
+            "site_id": "branch", "captured_at": "2026-11-20T10:02:00Z",
+            "access_points": [], "links": [],
+        }, token=viewer_token)
+        self.assertEqual(status, 403)
+        status, denied = self.request("POST", "/api/features/site_to_site_change_report", {
+            "sites": [{"site_id": "branch"}],
+        }, token=viewer_token)
+        self.assertEqual(status, 403)
+        self.assertEqual(server.HISTORY.get(home["id"])["site_id"], "home")
     def test_saved_history_report_requires_auth_and_limits_site_count(self):
         status, denied = self.request("GET", "/api/sites/history/report")
         self.assertEqual(status, 401)

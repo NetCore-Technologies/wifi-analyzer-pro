@@ -43,7 +43,8 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
-- ✅ Team Access UI for creating users, changing assigned roles and disabling/enabling accounts.
+- ✅ Team Access UI for creating users, changing assigned roles, disabling/enabling accounts and assigning per-user site scopes with least-privilege defaults. Existing accounts retain pre-upgrade all-site access.
+- 🚧 Site-scope enforcement now filters saved site history and constrains site-audit and site-aware feature inputs; per-agent inventory and report-job scoping remain in progress.
 - ✅ Local append-only SQLite security audit ledger with SHA-256 event chaining, row update/delete triggers, bounded event filtering/pagination, chain verification, an owner/administrator audit viewer and Ed25519-signed offline checkpoints with public-key fingerprint verification.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
 - ✅ Docker and standalone Linux packaging include the auth and feature modules.

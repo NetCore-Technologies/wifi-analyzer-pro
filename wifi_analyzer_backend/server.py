@@ -623,6 +623,29 @@ def serve_static(handler, path):
 
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
+def _collect_site_ids(value):
+    """Extract declared site identifiers from nested site/feature request payloads."""
+    found = []
+
+    def visit(item):
+        if isinstance(item, dict):
+            for key, child in item.items():
+                if key == "site_id":
+                    found.append(child.strip() if isinstance(child, str) else None)
+                elif key == "site_ids":
+                    if isinstance(child, list):
+                        found.extend(value.strip() if isinstance(value, str) else None for value in child)
+                    else:
+                        found.append(None)
+                else:
+                    visit(child)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return list(dict.fromkeys(found))
+
 class Handler(BaseHTTPRequestHandler):
     MAX_JSON_BODY = 1024 * 1024
 
@@ -706,6 +729,21 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def require_site_access(self, site_ids, *, require_explicit=False):
+        scope = AUTH.site_access(self.bearer_token())
+        if scope is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if scope["all_sites"]:
+            return True
+        if not isinstance(site_ids, list) or (require_explicit and not site_ids):
+            self.send_json({"error": "An explicit site assignment is required for this operation"}, 403)
+            return False
+        if any(not isinstance(site_id, str) or site_id not in scope["site_ids"] for site_id in site_ids):
+            self.send_json({"error": "One or more sites are outside your assigned access scope"}, 403)
+            return False
+        return True
+
     def read_json_body(self):
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -754,7 +792,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path.startswith("/api/sites/history"):
+            elif path == "/api/sites" or path.startswith("/api/sites/history"):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -940,6 +978,13 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"checkpoint": checkpoint})
             elif path == "/api/security/audit/summary":
                 self.send_json({"summary": AUDIT.summary()})
+            elif path == "/api/sites":
+                scope = AUTH.site_access(self.bearer_token())
+                discovered = HISTORY.site_ids(limit=100)
+                site_ids = discovered if scope["all_sites"] else [
+                    site_id for site_id in discovered if site_id in scope["site_ids"]
+                ]
+                self.send_json({"site_ids": site_ids, "all_sites": scope["all_sites"]})
             elif path == "/api/sites/history/report":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
                 values = params.get("site_ids", [])
@@ -948,9 +993,16 @@ class Handler(BaseHTTPRequestHandler):
                 if values and values[0].strip():
                     site_ids = [item.strip() for item in values[0].split(",") if item.strip()]
                 else:
-                    site_ids = HISTORY.site_ids(limit=20)
+                    scope = AUTH.site_access(self.bearer_token())
+                    discovered = HISTORY.site_ids(limit=100)
+                    site_ids = discovered if scope["all_sites"] else [
+                        site_id for site_id in discovered if site_id in scope["site_ids"]
+                    ]
+                    site_ids = site_ids[:20]
                 if len(site_ids) > 20:
                     raise ValueError("site_ids may contain no more than 20 sites")
+                if not self.require_site_access(site_ids):
+                    return
                 pairs = HISTORY.latest_pairs(site_ids)
                 report = run_feature("site_to_site_change_report", {"sites": pairs})
                 self.send_json({
@@ -973,7 +1025,17 @@ class Handler(BaseHTTPRequestHandler):
                     before_id = None if raw_before_id is None else int(raw_before_id)
                 except ValueError as error:
                     raise ValueError("limit and before_id must be integers") from error
-                snapshots = HISTORY.list(site_id=raw_site_id, limit=limit, before_id=before_id)
+                scope = AUTH.site_access(self.bearer_token())
+                if raw_site_id is not None:
+                    if not self.require_site_access([raw_site_id]):
+                        return
+                    snapshots = HISTORY.list(site_id=raw_site_id, limit=limit, before_id=before_id)
+                elif scope["all_sites"]:
+                    snapshots = HISTORY.list(limit=limit, before_id=before_id)
+                else:
+                    snapshots = HISTORY.list(
+                        site_ids=scope["site_ids"], limit=limit, before_id=before_id
+                    )
                 self.send_json({
                     "snapshots": snapshots,
                     "next_before_id": snapshots[-1]["id"] if len(snapshots) == limit else None,
@@ -989,7 +1051,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"error": "Snapshot not found"}, 404)
                     return
                 snapshot = HISTORY.get(snapshot_id)
-                if snapshot is None:
+                if snapshot is None or not AUTH.can_access_site(
+                    self.bearer_token(), snapshot["site_id"]
+                ):
                     self.send_json({"error": "Snapshot not found"}, 404)
                 else:
                     self.send_json({"snapshot": snapshot})
@@ -1080,6 +1144,8 @@ class Handler(BaseHTTPRequestHandler):
                 user = AUTH.create_user(
                     self.bearer_token(), payload.get("username"),
                     payload.get("password"), payload.get("role"),
+                    all_sites=payload.get("all_sites", False),
+                    site_ids=payload.get("site_ids", []),
                 )
             except PermissionError as error:
                 self.send_json({"error": str(error)}, 403)
@@ -1104,6 +1170,8 @@ class Handler(BaseHTTPRequestHandler):
                     role=payload.get("role"),
                     enabled=payload.get("enabled"),
                     password=payload.get("password"),
+                    all_sites=payload.get("all_sites"),
+                    site_ids=payload.get("site_ids"),
                 )
             except PermissionError as error:
                 self.send_json({"error": str(error)}, 403)
@@ -1413,7 +1481,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/sites/audit":
-            if not self.require_auth("diagnostics.run"): 
+            if not self.require_auth("diagnostics.run"):
+                return
+            if not self.require_site_access(_collect_site_ids(payload), require_explicit=True):
                 return
             try:
                 report = run_feature("consolidated_site_audit_report", payload)
@@ -1428,10 +1498,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/sites/history":
-            if not self.require_auth("sites.manage"): 
+            if not self.require_auth("sites.manage"):
+                return
+            if not self.require_site_access(_collect_site_ids(payload), require_explicit=True):
                 return
             try:
                 prepared = run_feature("site_discovery_history_snapshot", payload)["result"]
+                if not self.require_site_access(_collect_site_ids(prepared), require_explicit=True):
+                    return
                 saved = HISTORY.record(prepared)
             except DuplicateSnapshotError as error:
                 self.send_json({"error": str(error)}, 409)
@@ -1450,6 +1524,9 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth("diagnostics.run"): 
                 return
             slug = unquote(path[len("/api/features/"):]).strip("/")
+            scoped_sites = _collect_site_ids(payload)
+            if scoped_sites and not self.require_site_access(scoped_sites):
+                return
             if not slug or "/" in slug:
                 self.send_json({"error": "Unknown feature"}, 404)
                 return
