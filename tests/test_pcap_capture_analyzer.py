@@ -32,9 +32,9 @@ def pcapng_block(block_type, body, *, byteorder="<"):
     )
 
 
-def pcapng_section(*, byteorder="<"):
+def pcapng_section(*, byteorder="<", section_length=-1):
     bom = bytes.fromhex("4d3c2b1a") if byteorder == "<" else bytes.fromhex("1a2b3c4d")
-    body = bom + struct.pack(byteorder + "HHq", 1, 0, -1)
+    body = bom + struct.pack(byteorder + "HHq", 1, 0, section_length)
     return pcapng_block(0x0A0D0D0A, body, byteorder=byteorder)
 
 
@@ -157,6 +157,31 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         truncated = run({"capture_base64": base64.b64encode(header + record).decode("ascii")})
         self.assertEqual(truncated["summary"]["truncated_packet_count"], 1)
         self.assertEqual(truncated["summary"]["wire_bytes"], len(frame) + 12)
+
+    def test_validates_pcapng_declared_section_length(self):
+        interface = pcapng_interface(1)
+        valid = pcapng_section(section_length=len(interface)) + interface
+        result = run({"capture_base64": base64.b64encode(valid).decode("ascii")})
+        self.assertEqual(result["capture"]["format"], "pcapng")
+        self.assertEqual(result["capture"]["interface_count"], 1)
+
+        with self.assertRaisesRegex(ValueError, "block extends beyond its declared section length"):
+            malformed = pcapng_section(section_length=len(interface) - 4) + interface
+            run({"capture_base64": base64.b64encode(malformed).decode("ascii")})
+        with self.assertRaisesRegex(ValueError, "section length does not match"):
+            truncated_section = pcapng_section(section_length=len(interface) + 4) + interface
+            run({"capture_base64": base64.b64encode(truncated_section).decode("ascii")})
+        with self.assertRaisesRegex(ValueError, "non-negative multiple of four"):
+            unaligned = pcapng_section(section_length=3)
+            run({"capture_base64": base64.b64encode(unaligned).decode("ascii")})
+
+    def test_validates_section_length_at_next_pcapng_section_header(self):
+        interface = pcapng_interface(1)
+        first = pcapng_section(section_length=len(interface)) + interface
+        second = pcapng_section() + interface
+        result = run({"capture_base64": base64.b64encode(first + second).decode("ascii")})
+        self.assertEqual(result["capture"]["section_count"], 2)
+        self.assertEqual(result["capture"]["interface_count"], 2)
 
     def test_parses_pcapng_enhanced_packet_with_nanosecond_interface_resolution(self):
         timestamp = 1760000000 * 1_000_000_000 + 123_456_789
