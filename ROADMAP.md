@@ -60,9 +60,10 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - 📋 Enable/disable and safe reload for third-party plugins.
 - 📋 Example plugin and developer guide.
 - ✅ Explicit interface selection for local tcpdump/libpcap capture with fixed filter profiles, operator confirmation, duration/packet/snaplen/file-size bounds, stop control and PCAP download into the offline analyzer.
-- 🚧 Per-site authorization is enforced across sites, agents, reports and feature inputs. Full tenant isolation (separate tenant identities, storage boundaries, billing and cross-tenant operational controls) remains planned.
+- ✅ Per-site authorization is enforced across sites, agents, reports and feature inputs. Full tenant isolation (separate tenant identities, storage boundaries, billing and cross-tenant operational controls) remains planned.
 - 📋 Enterprise identity: OIDC/SAML SSO, MFA/WebAuthn, SCIM provisioning, external SIEM forwarding and centralised retention.
 - 📋 Multi-site dashboards for distributed local agents.
+- ✅ Bounded token-bucket API rate limits for setup/login, scans, speed tests, feature execution, site audits, capture startup and report enqueue; authenticated limits are per account and return HTTP 429 with Retry-After.
 - 📋 Authenticated WebSocket streaming for live multi-site updates.
 - 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
 

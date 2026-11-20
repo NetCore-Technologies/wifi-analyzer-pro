@@ -69,7 +69,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.RATE_LIMIT_POLICIES = self.previous_rate_policies
         self.temp.cleanup()
 
-    def request(self, method, path, payload=None, token=None, origin=None):
+    def request(self, method, path, payload=None, token=None, origin=None, extra_headers=None):
         headers = {}
         body = None
         if payload is not None:
@@ -79,6 +79,8 @@ class AuthenticatedApiTests(unittest.TestCase):
             headers["Authorization"] = f"Bearer {token}"
         if origin:
             headers["Origin"] = origin
+        if extra_headers:
+            headers.update(extra_headers)
         connection = HTTPConnection("127.0.0.1", self.port, timeout=3)
         try:
             connection.request(method, path, body=body, headers=headers)
@@ -139,6 +141,54 @@ class AuthenticatedApiTests(unittest.TestCase):
             self.assertEqual(payload["retry_after_seconds"], 30)
         finally:
             connection.close()
+
+    def test_login_rate_limit_uses_peer_ip_and_ignores_spoofed_forwarding_headers(self):
+        server.RATE_LIMIT_POLICIES["auth.login"] = (1, 60)
+        status, first = self.request(
+            "POST", "/api/auth/login",
+            {"username": "ip.rate.user", "password": "incorrect password"},
+            extra_headers={"X-Forwarded-For": "198.51.100.10"},
+        )
+        self.assertEqual(status, 401)
+        self.assertIn("error", first)
+
+        status, limited = self.request(
+            "POST", "/api/auth/login",
+            {"username": "ip.rate.user", "password": "incorrect password"},
+            extra_headers={"X-Forwarded-For": "203.0.113.20"},
+        )
+        self.assertEqual(status, 429)
+        self.assertEqual(limited["retry_after_seconds"], 60)
+
+    def test_expensive_feature_budget_is_isolated_by_stable_account_identity(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "correct horse battery staple",
+        })
+        owner_token = setup["token"]
+        status, created = self.request("POST", "/api/users", {
+            "username": "isolated.analyst",
+            "password": "isolated analyst password",
+            "role": "analyst",
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        _, login = self.request("POST", "/api/auth/login", {
+            "username": "isolated.analyst",
+            "password": "isolated analyst password",
+        })
+        analyst_token = login["token"]
+
+        server.RATE_LIMIT_POLICIES["api.feature.execution"] = (1, 60)
+        for token in (owner_token, analyst_token):
+            status, result = self.request("POST", "/api/features/frequency_to_channel", {
+                "frequency_mhz": 5975,
+            }, token=token)
+            self.assertEqual(status, 200, result)
+
+        status, limited = self.request("POST", "/api/features/frequency_to_channel", {
+            "frequency_mhz": 2412,
+        }, token=owner_token)
+        self.assertEqual(status, 429)
+        self.assertEqual(limited["retry_after_seconds"], 60)
 
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")
