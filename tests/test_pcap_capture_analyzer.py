@@ -263,6 +263,34 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         self.assertEqual(result["summary"]["packet_count"], 1)
         self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
 
+    def test_pcapng_simple_packet_respects_unlimited_snaplen_hard_cap(self):
+        frame = ethernet_ipv4_udp()
+        valid = (
+            pcapng_section()
+            + pcapng_interface(1, snaplen=0)
+            + pcapng_simple_packet(frame)
+        )
+        result = run({"capture_base64": base64.b64encode(valid).decode("ascii")})
+        self.assertEqual(result["summary"]["packet_count"], 1)
+        self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
+
+        malformed_block = pcapng_block(
+            3,
+            struct.pack("<I", len(frame)) + frame + b"\\x00" * 4,
+        )
+        malformed = pcapng_section() + pcapng_interface(1, snaplen=0) + malformed_block
+        with self.assertRaisesRegex(ValueError, "data length does not match"):
+            run({"capture_base64": base64.b64encode(malformed).decode("ascii")})
+
+        oversized = b"\\x00" * (262144 + 1)
+        too_large = (
+            pcapng_section()
+            + pcapng_interface(1, snaplen=0)
+            + pcapng_simple_packet(oversized)
+        )
+        with self.assertRaisesRegex(ValueError, "analyzer frame limit"):
+            run({"capture_base64": base64.b64encode(too_large).decode("ascii")})
+
     def test_pcapng_interface_metadata_limit_applies_across_sections(self):
         sixty_four_interfaces = b"".join(pcapng_interface(1) for _ in range(64))
         capture = (
