@@ -240,7 +240,7 @@ class RouterFleetHealthAuditTests(unittest.TestCase):
                 "router_id": "r1",
                 "snapshot": {"adapter_id": "unifi", "captured_at": NOW},
             }]})
-        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
             run({"now": NOW, "snapshots": [{
                 "router_id": "r1",
                 "snapshot": {"adapter_id": "unifi", "captured_at": "2026-11-20T10:00:00"},
