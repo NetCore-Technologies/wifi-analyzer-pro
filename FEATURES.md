@@ -188,3 +188,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 - SNR is calculated only if a real noise measurement is present.
 - Vendor identification uses a small bundled OUI subset and may return Unknown.
 - DNS and TLS probes perform read-only lookups/connections to the host provided in the tool input.
+
+| 170 | UniFi controller snapshot normalizer (`unifi_snapshot_normalizer`) | Router integrations | Import bounded, caller-supplied UniFi Network exports into the common AP, radio, client and network schema; omit secrets and make no controller connection. |

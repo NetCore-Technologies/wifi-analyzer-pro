@@ -351,6 +351,26 @@ PAYLOADS = {
         }
     }
 ,
+    "unifi_snapshot_normalizer": {
+        "captured_at": "2026-11-20T10:00:00Z",
+        "controller": {"model": "Cloud Gateway", "version": "9.0.1"},
+        "devices": [{
+            "_id": "ap-office", "mac": "00:11:22:33:44:55", "name": "Office AP",
+            "model": "U7 Pro", "state": 1,
+            "radio_table": [
+                {"radio": "ng", "channel": 6, "ht": "HT20"},
+                {"radio": "na", "channel": 36, "ht": "VHT80"}
+            ]
+        }],
+        "clients": [{
+            "mac": "aa:bb:cc:dd:ee:01", "ap_mac": "00:11:22:33:44:55",
+            "essid": "Office", "signal": -57
+        }],
+        "networks": [{
+            "_id": "network-office", "name": "Office", "vlan": 20,
+            "ip_subnet": "192.0.2.0/24"
+        }]
+    },
     "router_agent_negotiation_audit": {
         "agent_id": "openwrt-home",
         "adapter_id": "openwrt",
@@ -370,14 +390,14 @@ PAYLOADS = {
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_eight_distinct_features_are_registered(self):
+    def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 168)
-        self.assertEqual(len(set(FEATURE_MODULES)), 168)
-        self.assertEqual(count(), 168)
-        self.assertEqual(len(entries), 168)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 168)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 169)])
+        self.assertEqual(len(FEATURE_MODULES), 169)
+        self.assertEqual(len(set(FEATURE_MODULES)), 169)
+        self.assertEqual(count(), 169)
+        self.assertEqual(len(entries), 169)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 169)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 169)] + ["F170"])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():

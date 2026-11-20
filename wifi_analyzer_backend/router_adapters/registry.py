@@ -34,7 +34,29 @@ _ADAPTERS = {
             "Capability negotiation only. It does not connect to a router, execute shell commands, "
             "change configuration, or collect credentials."
         ),
-    }
+    },
+    "unifi": {
+        "adapter_id": "unifi",
+        "display_name": "UniFi Network controller export",
+        "platform_family": "Ubiquiti UniFi",
+        "adapter_version": "0.1.0",
+        "minimum_agent_version": "1.0.0",
+        "capability_schema_version": "1.0",
+        "transport": "controller_export",
+        "read_only": True,
+        "supported_permissions": ["read"],
+        "capabilities": [
+            "controller.devices",
+            "controller.networks",
+            "wireless.radios",
+            "wireless.associations",
+            "inventory.snapshot",
+        ],
+        "notes": (
+            "Offline import of caller-supplied UniFi Network export data. It does not open a controller "
+            "session, request credentials, or change network configuration."
+        ),
+    },
 }
 
 
