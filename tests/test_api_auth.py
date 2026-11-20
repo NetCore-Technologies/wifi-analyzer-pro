@@ -76,8 +76,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 163)
-        self.assertEqual(len(catalog["features"]), 163)
+        self.assertEqual(catalog["count"], 164)
+        self.assertEqual(len(catalog["features"]), 164)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -88,6 +88,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("router_agent_capability_negotiation", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_snapshot_normalizer", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_health_report", {item["slug"] for item in catalog["features"]})
+        self.assertIn("openwrt_agent_snapshot_ingest", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -356,6 +357,70 @@ class AuthenticatedApiTests(unittest.TestCase):
             status, response = self.request("POST", "/api/agents/heartbeat", bad, token=setup["token"])
             self.assertEqual(status, 400)
             self.assertIn(field, response["error"])
+
+
+    def test_openwrt_agent_snapshot_is_retained_and_only_normalised_data_is_returned(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        token = setup["token"]
+        status, heartbeat = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"openwrt-home","adapter_id":"openwrt","agent_version":"1.2.0",
+            "status":"healthy","capabilities":["inventory.snapshot"],
+        }, token=token)
+        self.assertEqual(status, 201)
+        raw_snapshot = {
+            "captured_at":"2026-11-20T10:00:00Z",
+            "board":{"model":"OpenWrt sample","release":{"distribution":"OpenWrt","version":"24.10.0"}},
+            "interfaces":[{"interface":"lan","ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
+            "wireless":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":5180,"channel":36,"channel_width_mhz":80,"password":"never-store-me"}],
+            "associations":[],
+            "routes":[{"target":"0.0.0.0/0","nexthop":"192.168.1.1","device":"eth0"}],
+        }
+        status, saved = self.request("POST", "/api/agents/snapshot", {
+            "agent_id":"openwrt-home","snapshot":raw_snapshot,
+        }, token=token)
+        self.assertEqual(status, 201)
+        self.assertEqual(saved["snapshot"]["wireless_radio_count"], 1)
+        status, latest = self.request("GET", "/api/agents/snapshots/openwrt-home", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(latest["snapshot"]["snapshot"]["adapter_id"], "openwrt")
+        self.assertNotIn("password", latest["snapshot"]["snapshot"]["wireless_radios"][0])
+        status, listing = self.request("GET", "/api/agents/snapshots", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(listing["snapshots"]), 1)
+        self.assertEqual(listing["snapshots"][0]["agent_id"], "openwrt-home")
+        status, duplicate = self.request("POST", "/api/agents/snapshot", {
+            "agent_id":"openwrt-home","snapshot":raw_snapshot,
+        }, token=token)
+        self.assertEqual(status, 409)
+        self.assertIn("already exists", duplicate["error"])
+
+    def test_openwrt_agent_snapshot_requires_registered_agent_and_authentication(self):
+        status, denied = self.request("POST", "/api/agents/snapshot", {
+            "agent_id":"missing","snapshot":{"captured_at":"2026-11-20T10:00:00Z"}
+        })
+        self.assertEqual(status, 401)
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        status, rejected = self.request("POST", "/api/agents/snapshot", {
+            "agent_id":"missing","snapshot":{"captured_at":"2026-11-20T10:00:00Z"}
+        }, token=setup["token"])
+        self.assertEqual(status, 400)
+        self.assertIn("heartbeat", rejected["error"])
+
+
+    def test_openwrt_agent_snapshot_requires_negotiated_inventory_capability(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        token = setup["token"]
+        status, _ = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"openwrt-no-inventory","adapter_id":"openwrt","agent_version":"1.2.0",
+            "status":"healthy","capabilities":["system.board"],
+        }, token=token)
+        self.assertEqual(status, 201)
+        status, rejected = self.request("POST", "/api/agents/snapshot", {
+            "agent_id":"openwrt-no-inventory",
+            "snapshot":{"captured_at":"2026-11-20T10:00:00Z","board":{}},
+        }, token=token)
+        self.assertEqual(status, 400)
+        self.assertIn("inventory.snapshot", rejected["error"])
 
 if __name__ == "__main__":
     unittest.main()

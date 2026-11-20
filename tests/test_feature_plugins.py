@@ -291,18 +291,30 @@ PAYLOADS = {
             {"agent_id":"openwrt-branch","adapter_id":"openwrt","agent_version":"1.0.0","status":"degraded","last_seen_at":"2026-11-20T09:50:00Z","capabilities":["system.board"]}
         ]
     }
+,
+    "openwrt_agent_snapshot_ingest": {
+        "agent_id": "openwrt-home",
+        "snapshot": {
+            "captured_at":"2026-11-20T10:00:00Z",
+            "board":{"model":"OpenWrt sample","release":{"distribution":"OpenWrt","version":"24.10.0"}},
+            "interfaces":[{"interface":"lan","ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
+            "wireless":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":5180,"channel":36,"channel_width_mhz":80,"password":"never-store-me"}],
+            "associations":[],
+            "routes":[{"target":"0.0.0.0/0","nexthop":"192.168.1.1","device":"eth0"}]
+        }
+    }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_three_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_four_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 163)
-        self.assertEqual(len(set(FEATURE_MODULES)), 163)
-        self.assertEqual(count(), 163)
-        self.assertEqual(len(entries), 163)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 163)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 164)])
+        self.assertEqual(len(FEATURE_MODULES), 164)
+        self.assertEqual(len(set(FEATURE_MODULES)), 164)
+        self.assertEqual(count(), 164)
+        self.assertEqual(len(entries), 164)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 164)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 165)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -941,6 +953,19 @@ class FeatureCatalogTests(unittest.TestCase):
             ]})
         with self.assertRaisesRegex(ValueError, "between 10 and 86400"):
             run("router_agent_health_report", {"now":"2026-11-20T10:00:00Z","stale_after_seconds":5})
+
+    def test_openwrt_agent_snapshot_ingest_normalises_envelope_and_drops_secret_fields(self):
+        result = run("openwrt_agent_snapshot_ingest", PAYLOADS["openwrt_agent_snapshot_ingest"])["result"]
+        self.assertEqual(result["agent_id"], "openwrt-home")
+        self.assertEqual(result["snapshot"]["adapter_id"], "openwrt")
+        self.assertEqual(result["summary"]["wireless_radio_count"], 1)
+        self.assertNotIn("password", result["snapshot"]["wireless_radios"][0])
+
+    def test_openwrt_agent_snapshot_ingest_rejects_invalid_agent_identity(self):
+        with self.assertRaisesRegex(ValueError, "agent_id"):
+            run("openwrt_agent_snapshot_ingest", {
+                "agent_id":"../admin", "snapshot":{"captured_at":"2026-11-20T10:00:00Z"}
+            })
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,13 +20,13 @@ if __package__:
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
-    from .router_adapters.health_store import RouterAgentHealthStore
+    from .router_adapters.health_store import DuplicateAgentSnapshotError, RouterAgentHealthStore
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
-    from router_adapters.health_store import RouterAgentHealthStore
+    from router_adapters.health_store import DuplicateAgentSnapshotError, RouterAgentHealthStore
 
 OS = platform.system()
 APP_VERSION = "1.0.7"
@@ -726,7 +726,19 @@ class Handler(BaseHTTPRequestHandler):
             "/health": lambda: {"status": "ok", "version": APP_VERSION, "os": OS, "mode": "demo" if DEMO_MODE else "live"},
         }
         try:
-            if path == "/api/sites/history/report":
+            if path == "/api/agents/snapshots":
+                self.send_json({"snapshots": AGENT_HEALTH.list_latest_snapshots()})
+            elif path.startswith("/api/agents/snapshots/"):
+                agent_id = unquote(path[len("/api/agents/snapshots/"):])
+                if not agent_id or "/" in agent_id:
+                    self.send_json({"error": "Agent snapshot not found"}, 404)
+                    return
+                snapshot = AGENT_HEALTH.get_latest_snapshot(agent_id)
+                if snapshot is None:
+                    self.send_json({"error": "Agent snapshot not found"}, 404)
+                else:
+                    self.send_json({"snapshot": snapshot})
+            elif path == "/api/sites/history/report":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
                 values = params.get("site_ids", [])
                 if len(values) > 1:
@@ -843,6 +855,25 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 400)
                 return
             self.send_json({"agent": heartbeat}, 201 if heartbeat["created"] else 200)
+            return
+
+        if path == "/api/agents/snapshot":
+            if not self.require_auth():
+                return
+            try:
+                result = run_feature("openwrt_agent_snapshot_ingest", payload)["result"]
+                saved = AGENT_HEALTH.record_snapshot(result["agent_id"], result["snapshot"])
+            except DuplicateAgentSnapshotError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception as error:
+                print(f"[AGENT SNAPSHOT ERROR] {error}")
+                self.send_json({"error": "Agent snapshot ingestion failed"}, 500)
+                return
+            self.send_json({"snapshot": saved}, 201)
             return
 
         if path == "/api/adapters/openwrt/normalise":

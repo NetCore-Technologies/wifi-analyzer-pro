@@ -1,4 +1,4 @@
-# 163 WiFi Analyzer Pro feature tools
+# 164 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -170,6 +170,7 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 161 | Router agent capability negotiation (`router_agent_capability_negotiation`) | Router integrations | Negotiate versioned, advertised read-only capabilities against the OpenWrt adapter manifest and reject unsupported operations or write permissions. |
 | 162 | OpenWrt snapshot normalizer (`openwrt_snapshot_normalizer`) | Router integrations | Normalise bounded board, interface, radio, station and route snapshots into a credential-free common schema. |
 | 163 | Router agent health report (`router_agent_health_report`) | Router integrations | Track authenticated agent heartbeats and classify healthy, degraded, unhealthy, stale and future-dated status using server timestamps. |
+| 164 | OpenWrt agent snapshot ingestion (`openwrt_agent_snapshot_ingest`) | Router integrations | Accept authenticated snapshots from registered agents, normalise before persistence, retain bounded history, and expose latest inventory data. |
 
 
 ## Authentication and UI
