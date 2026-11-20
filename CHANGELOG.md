@@ -5,9 +5,9 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 144 independently callable feature modules (F001–F144), a stable registry, metadata catalogue and searchable Feature Workbench.
-- Add multi-site AP inventory snapshots and evidence-only AP topology relationships with duplicate/orphan/cycle diagnostics.
-- Add explicit AP management-subnet correlation, gateway validation, floor-plan anchor bounds and collocated-position reporting.
+- Add 148 independently callable feature modules (F001–F148), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add multi-site AP inventory snapshots, explicit topology relationships, inventory drift comparison and subnet capacity analysis.
+- Add gateway redundancy auditing, AP management-subnet correlation, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
 - Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.
 - Add HTTP integration tests for setup, authenticated catalogue access, feature execution, logout and rejected origins.
