@@ -177,19 +177,20 @@ PAYLOADS = {
 
     "site_ap_channel_reuse_audit": {"radios":[{"radio_id":"r1","ap_id":"a","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20},{"radio_id":"r2","ap_id":"b","site_id":"home","band":"2.4GHz","channel":3,"channel_width_mhz":20},{"radio_id":"r3","ap_id":"c","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20}]} ,
     "site_topology_history_timeline": {"snapshots":[{"captured_at":"2026-11-20T09:00:00Z","access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"b","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"b","relationship":"wired_uplink"}]},{"captured_at":"2026-11-20T10:00:00Z","access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"c","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"c","relationship":"mesh_backhaul"}]}]},
+    "site_topology_gateway_path_audit": {"access_points":[{"ap_id":"gw","site_id":"home"},{"ap_id":"ap-2","site_id":"home"},{"ap_id":"isolated","site_id":"home"},{"ap_id":"remote","site_id":"branch"}],"gateway_ap_ids":["gw"],"links":[{"from_ap_id":"gw","to_ap_id":"ap-2","relationship":"wired_uplink"},{"from_ap_id":"gw","to_ap_id":"isolated","relationship":"rf_neighbor"},{"from_ap_id":"ap-2","to_ap_id":"remote","relationship":"mesh_backhaul"}]},
 
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_fifty_four_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_fifty_five_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 154)
-        self.assertEqual(len(set(FEATURE_MODULES)), 154)
-        self.assertEqual(count(), 154)
-        self.assertEqual(len(entries), 154)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 154)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 155)])
+        self.assertEqual(len(FEATURE_MODULES), 155)
+        self.assertEqual(len(set(FEATURE_MODULES)), 155)
+        self.assertEqual(count(), 155)
+        self.assertEqual(len(entries), 155)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 155)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 156)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -554,6 +555,46 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(result["summary"]["snapshot_count"], 1)
         self.assertEqual(result["summary"]["comparison_count"], 0)
         self.assertEqual(result["summary"]["total_topology_changes"], 0)
+
+
+    def test_site_gateway_path_audit_distinguishes_reachable_unreachable_and_unknown(self):
+        result = run("site_topology_gateway_path_audit", {
+            "access_points": [
+                {"ap_id": "gw", "site_id": "home"},
+                {"ap_id": "ap-2", "site_id": "home"},
+                {"ap_id": "isolated", "site_id": "home"},
+                {"ap_id": "remote", "site_id": "branch"},
+            ],
+            "gateway_ap_ids": ["gw"],
+            "links": [
+                {"from_ap_id": "gw", "to_ap_id": "ap-2", "relationship": "wired_uplink"},
+                {"from_ap_id": "gw", "to_ap_id": "isolated", "relationship": "rf_neighbor"},
+                {"from_ap_id": "ap-2", "to_ap_id": "remote", "relationship": "mesh_backhaul"},
+            ],
+        })["result"]
+        self.assertEqual(result["summary"]["reachable_count"], 2)
+        self.assertEqual(result["summary"]["unreachable_count"], 1)
+        self.assertEqual(result["summary"]["unknown_count"], 1)
+        self.assertEqual(result["summary"]["excluded_rf_neighbor_link_count"], 1)
+        self.assertEqual(result["summary"]["excluded_cross_site_link_count"], 1)
+        by_id = {item["ap_id"]: item for item in result["access_points"]}
+        self.assertEqual(by_id["ap-2"]["path_ap_ids"], ["ap-2", "gw"])
+        self.assertEqual(by_id["ap-2"]["path_relationships"], ["wired_uplink"])
+        self.assertEqual(by_id["isolated"]["status"], "unreachable")
+        self.assertEqual(by_id["remote"]["status"], "unknown")
+
+    def test_site_gateway_path_audit_rejects_duplicate_gateways_and_preserves_unknown_ids(self):
+        payload = {
+            "access_points": [{"ap_id": "gw", "site_id": "home"}],
+            "links": [],
+        }
+        with self.assertRaisesRegex(ValueError, "must be unique"):
+            run("site_topology_gateway_path_audit", {**payload, "gateway_ap_ids": ["gw", "gw"]})
+        result = run("site_topology_gateway_path_audit", {
+            **payload, "gateway_ap_ids": ["missing"]
+        })["result"]
+        self.assertEqual(result["summary"]["unknown_gateway_ap_ids"], ["missing"])
+        self.assertEqual(result["access_points"][0]["status"], "unknown")
 
 
 if __name__ == "__main__":
