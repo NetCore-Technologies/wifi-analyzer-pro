@@ -11,6 +11,8 @@ WORKDIR /app
 COPY wifi_analyzer_backend/requirements.txt ./requirements.txt
 RUN python -m pip install --no-cache-dir -r requirements.txt
 COPY wifi_analyzer_backend/server.py ./server.py
+COPY wifi_analyzer_backend/auth.py ./auth.py
+COPY wifi_analyzer_backend/feature_plugins ./feature_plugins
 COPY --from=frontend /src/dist ./dist
 EXPOSE 199
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:199/health', timeout=3)"
