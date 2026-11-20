@@ -46,7 +46,7 @@ class LiveCaptureManagerTests(unittest.TestCase):
         self.addCleanup(self.which.stop)
         self.inventory = patch(
             "wifi_analyzer_backend.live_capture.subprocess.run",
-            return_value=type("Result", (), {"returncode": 0, "stdout": "1.eth0 [Up]\\n2.wlan0 [Up]\\n3.any [Up]\\n"})(),
+            return_value=type("Result", (), {"returncode": 0, "stdout": "1.eth0 [Up]\n2.wlan0 [Up]\n3.any [Up]\n"})(),
         )
         self.inventory.start()
         self.addCleanup(self.inventory.stop)

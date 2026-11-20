@@ -9,6 +9,7 @@ import threading
 import unittest
 from pathlib import Path
 from http.client import HTTPConnection
+from unittest.mock import Mock
 
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
@@ -26,6 +27,16 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_agent_health = server.AGENT_HEALTH
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
+        self.previous_live_capture = server.LIVE_CAPTURE
+        server.LIVE_CAPTURE = Mock()
+        server.LIVE_CAPTURE.list_interfaces.return_value = {
+            "available": True,
+            "interfaces": [{"name": "eth0", "description": "1.eth0"}],
+            "maximum_duration_seconds": 60,
+            "maximum_packets": 1000,
+            "maximum_capture_bytes": 512 * 1024,
+        }
+        server.LIVE_CAPTURE.status.return_value = {"capture": None}
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
@@ -48,6 +59,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.AGENT_HEALTH = self.previous_agent_health
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
+        server.LIVE_CAPTURE = self.previous_live_capture
         self.temp.cleanup()
 
     def request(self, method, path, payload=None, token=None, origin=None):
@@ -1547,6 +1559,69 @@ class AuthenticatedApiTests(unittest.TestCase):
         tampered = dict(bundle)
         tampered["checkpoint"] = {**bundle["checkpoint"], "event_count": bundle["checkpoint"]["event_count"] + 1}
         self.assertFalse(verify_signed_checkpoint(tampered)["valid"])
+
+    def test_live_capture_routes_require_diagnostics_run_and_pass_only_bounded_options(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "username": "capture.owner", "password": "capture owner password",
+        })
+        owner_token = setup["token"]
+        status, created = self.request("POST", "/api/users", {
+            "username": "capture.viewer", "password": "capture viewer password", "role": "viewer",
+        }, token=owner_token)
+        self.assertEqual(status, 201)
+        self.assertEqual(created["user"]["role"], "viewer")
+        _, login = self.request("POST", "/api/auth/login", {
+            "username": "capture.viewer", "password": "capture viewer password",
+        })
+        viewer_token = login["token"]
+
+        status, _ = self.request("GET", "/api/capture/interfaces", token=viewer_token)
+        self.assertEqual(status, 403)
+        status, _ = self.request("GET", "/api/capture/status", token=viewer_token)
+        self.assertEqual(status, 403)
+        status, _ = self.request("POST", "/api/capture/start", {
+            "interface": "eth0",
+        }, token=viewer_token)
+        self.assertEqual(status, 403)
+        status, _ = self.request("POST", "/api/capture/stop", {
+            "capture_id": "a" * 32,
+        }, token=viewer_token)
+        self.assertEqual(status, 403)
+        server.LIVE_CAPTURE.start.assert_not_called()
+        server.LIVE_CAPTURE.stop.assert_not_called()
+
+        status, inventory = self.request("GET", "/api/capture/interfaces", token=owner_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(inventory["interfaces"][0]["name"], "eth0")
+        status, current = self.request("GET", "/api/capture/status", token=owner_token)
+        self.assertEqual(status, 200)
+        self.assertIsNone(current["capture"])
+
+        started = {
+            "capture_id": "b" * 32, "interface": "eth0", "filter_profile": "dns",
+            "duration_limit_seconds": 15, "packet_limit": 250, "state": "running",
+            "started_at": "2026-11-21T00:00:00Z", "finished_at": None,
+            "captured_bytes": 0, "error": None,
+        }
+        server.LIVE_CAPTURE.start.return_value = started
+        status, response = self.request("POST", "/api/capture/start", {
+            "interface": "eth0", "duration_seconds": 15,
+            "packet_limit": 250, "filter_profile": "dns",
+        }, token=owner_token)
+        self.assertEqual(status, 201)
+        self.assertEqual(response["capture"]["capture_id"], "b" * 32)
+        server.LIVE_CAPTURE.start.assert_called_once_with(
+            interface="eth0", duration_seconds=15, packet_limit=250, filter_profile="dns",
+        )
+
+        stopped = {**started, "state": "completed", "captured_bytes": 24}
+        server.LIVE_CAPTURE.stop.return_value = stopped
+        status, response = self.request("POST", "/api/capture/stop", {
+            "capture_id": "b" * 32,
+        }, token=owner_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(response["capture"]["state"], "completed")
+        server.LIVE_CAPTURE.stop.assert_called_once_with("b" * 32)
 
     def test_agent_negotiations_are_persisted_versioned_and_append_only(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
