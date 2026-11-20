@@ -1,0 +1,852 @@
+[
+  {
+    "slug": "interface_inventory",
+    "name": "Interface inventory",
+    "category": "Discovery",
+    "description": "List local interfaces, addresses, status and MTU.",
+    "parameters": {}
+  },
+  {
+    "slug": "wireless_interface_inventory",
+    "name": "Wireless interface inventory",
+    "category": "Discovery",
+    "description": "Find Linux wireless interfaces without assuming a specific adapter name.",
+    "parameters": {}
+  },
+  {
+    "slug": "wifi_scan",
+    "name": "Wi-Fi scan execution",
+    "category": "Discovery",
+    "description": "Run the existing platform scanner, or validate supplied scan observations in a test/import workflow.",
+    "parameters": {
+      "networks": "optional network[]"
+    }
+  },
+  {
+    "slug": "normalise_bssid",
+    "name": "Normalise BSSID",
+    "category": "Scan data",
+    "description": "Validate and canonicalise a BSSID/MAC address.",
+    "parameters": {
+      "bssid": "string"
+    }
+  },
+  {
+    "slug": "normalise_ssid",
+    "name": "Normalise SSID",
+    "category": "Scan data",
+    "description": "Remove control characters and preserve hidden SSIDs as an empty string.",
+    "parameters": {
+      "ssid": "string"
+    }
+  },
+  {
+    "slug": "classify_frequency_band",
+    "name": "Classify frequency band",
+    "category": "RF analysis",
+    "description": "Map a frequency in MHz to 2.4, 5 or 6 GHz.",
+    "parameters": {
+      "frequency_mhz": "number"
+    }
+  },
+  {
+    "slug": "frequency_to_channel",
+    "name": "Frequency to channel",
+    "category": "RF analysis",
+    "description": "Convert a Wi-Fi frequency in MHz to its channel number.",
+    "parameters": {
+      "frequency_mhz": "number"
+    }
+  },
+  {
+    "slug": "channel_to_frequency",
+    "name": "Channel to frequency",
+    "category": "RF analysis",
+    "description": "Convert a channel to MHz when its band is specified.",
+    "parameters": {
+      "channel": "number",
+      "band": "2.4GHz|5GHz|6GHz"
+    }
+  },
+  {
+    "slug": "signal_quality",
+    "name": "Signal quality score",
+    "category": "RF analysis",
+    "description": "Calculate a bounded 0–100 RSSI quality score.",
+    "parameters": {
+      "rssi": "number"
+    }
+  },
+  {
+    "slug": "classify_signal",
+    "name": "Signal strength class",
+    "category": "RF analysis",
+    "description": "Classify RSSI using conservative signal-strength bands.",
+    "parameters": {
+      "rssi": "number"
+    }
+  },
+  {
+    "slug": "measured_snr",
+    "name": "Measured SNR",
+    "category": "RF analysis",
+    "description": "Calculate SNR only when a real noise measurement was supplied.",
+    "parameters": {
+      "rssi": "number",
+      "noise": "number"
+    }
+  },
+  {
+    "slug": "sort_networks_by_signal",
+    "name": "Sort by signal",
+    "category": "Scan data",
+    "description": "Sort detected access points from strongest to weakest RSSI.",
+    "parameters": {}
+  },
+  {
+    "slug": "filter_networks_by_band",
+    "name": "Filter by band",
+    "category": "Scan data",
+    "description": "Filter the current scan by 2.4, 5 or 6 GHz.",
+    "parameters": {
+      "band": "2.4GHz|5GHz|6GHz"
+    }
+  },
+  {
+    "slug": "filter_networks_by_security",
+    "name": "Filter by security",
+    "category": "Scan data",
+    "description": "Filter networks by a security label, case-insensitively.",
+    "parameters": {
+      "security": "string"
+    }
+  },
+  {
+    "slug": "open_access_points",
+    "name": "Open access points",
+    "category": "Security",
+    "description": "List networks that advertise no link-layer security.",
+    "parameters": {}
+  },
+  {
+    "slug": "wpa3_access_points",
+    "name": "WPA3 access points",
+    "category": "Security",
+    "description": "List networks advertising WPA3 or SAE.",
+    "parameters": {}
+  },
+  {
+    "slug": "hidden_networks",
+    "name": "Hidden SSIDs",
+    "category": "Scan data",
+    "description": "List BSS entries that do not disclose an SSID.",
+    "parameters": {}
+  },
+  {
+    "slug": "deduplicate_scan",
+    "name": "Deduplicate scan",
+    "category": "Scan data",
+    "description": "Keep one record per BSSID, preferring the strongest observation.",
+    "parameters": {}
+  },
+  {
+    "slug": "scan_delta",
+    "name": "Compare scans",
+    "category": "Scan history",
+    "description": "Compare current and previous scans by BSSID.",
+    "parameters": {
+      "current": "network[]",
+      "previous": "network[]"
+    }
+  },
+  {
+    "slug": "scan_summary",
+    "name": "Scan summary",
+    "category": "Scan data",
+    "description": "Summarise network counts, bands, security and average measured RSSI.",
+    "parameters": {}
+  },
+  {
+    "slug": "strongest_networks",
+    "name": "Strongest networks",
+    "category": "Scan data",
+    "description": "Return the top N strongest networks.",
+    "parameters": {
+      "limit": "integer"
+    }
+  },
+  {
+    "slug": "weakest_networks",
+    "name": "Weakest networks",
+    "category": "Scan data",
+    "description": "Return the weakest N networks to identify edge-of-coverage APs.",
+    "parameters": {
+      "limit": "integer"
+    }
+  },
+  {
+    "slug": "group_by_ssid",
+    "name": "Group by SSID",
+    "category": "Scan data",
+    "description": "Group BSS records by visible SSID, preserving hidden entries separately.",
+    "parameters": {}
+  },
+  {
+    "slug": "strongest_per_ssid",
+    "name": "Strongest BSSID per SSID",
+    "category": "Scan data",
+    "description": "Select the strongest BSSID observation for each SSID.",
+    "parameters": {}
+  },
+  {
+    "slug": "oui_vendor_lookup",
+    "name": "OUI vendor lookup",
+    "category": "Discovery",
+    "description": "Resolve common locally bundled OUI prefixes without making a network call.",
+    "parameters": {
+      "bssid": "MAC address"
+    }
+  },
+  {
+    "slug": "locally_administered_mac",
+    "name": "Locally administered MAC check",
+    "category": "Security",
+    "description": "Inspect the locally-administered and multicast bits in a MAC address.",
+    "parameters": {
+      "mac": "MAC address"
+    }
+  },
+  {
+    "slug": "randomized_mac_detect",
+    "name": "Randomised MAC indicator",
+    "category": "Security",
+    "description": "Flag MAC addresses whose locally-administered bit is set.",
+    "parameters": {
+      "mac": "MAC address"
+    }
+  },
+  {
+    "slug": "channel_congestion",
+    "name": "Channel congestion map",
+    "category": "RF planning",
+    "description": "Count nearby BSS and adjacent 2.4 GHz channel overlap.",
+    "parameters": {}
+  },
+  {
+    "slug": "overlap_24ghz",
+    "name": "2.4 GHz overlap analysis",
+    "category": "RF planning",
+    "description": "Estimate co-channel and adjacent-channel overlap using 20 MHz channel spacing.",
+    "parameters": {}
+  },
+  {
+    "slug": "recommend_24ghz_channel",
+    "name": "Recommend 2.4 GHz channel",
+    "category": "RF planning",
+    "description": "Rank channels 1, 6 and 11 by observed adjacent BSS count.",
+    "parameters": {}
+  },
+  {
+    "slug": "recommend_5ghz_channel",
+    "name": "Recommend 5 GHz channel",
+    "category": "RF planning",
+    "description": "Rank common non-DFS 5 GHz channels by observed occupancy.",
+    "parameters": {}
+  },
+  {
+    "slug": "recommend_6ghz_channel",
+    "name": "Recommend 6 GHz channel",
+    "category": "RF planning",
+    "description": "Rank 6 GHz preferred scanning channels by observed occupancy.",
+    "parameters": {}
+  },
+  {
+    "slug": "channel_quality",
+    "name": "Channel quality score",
+    "category": "RF planning",
+    "description": "Calculate relative channel score from observed congestion counts.",
+    "parameters": {
+      "band": "string",
+      "channel": "integer"
+    }
+  },
+  {
+    "slug": "dfs_channel_detect",
+    "name": "DFS channel check",
+    "category": "RF planning",
+    "description": "Identify common 5 GHz DFS channels.",
+    "parameters": {
+      "channel": "integer"
+    }
+  },
+  {
+    "slug": "six_ghz_psc_detect",
+    "name": "6 GHz PSC check",
+    "category": "RF planning",
+    "description": "Check whether a 6 GHz channel is a Preferred Scanning Channel.",
+    "parameters": {
+      "channel": "integer"
+    }
+  },
+  {
+    "slug": "recommend_channel_width",
+    "name": "Recommend channel width",
+    "category": "RF planning",
+    "description": "Suggest a conservative channel width using observations from the selected band.",
+    "parameters": {
+      "band": "2.4GHz|5GHz|6GHz"
+    }
+  },
+  {
+    "slug": "band_distribution",
+    "name": "Band distribution",
+    "category": "RF planning",
+    "description": "Count BSS entries in each Wi-Fi band.",
+    "parameters": {}
+  },
+  {
+    "slug": "security_distribution",
+    "name": "Security distribution",
+    "category": "Security",
+    "description": "Count observed networks by advertised security label.",
+    "parameters": {}
+  },
+  {
+    "slug": "vendor_distribution",
+    "name": "Vendor distribution",
+    "category": "Discovery",
+    "description": "Count networks by locally known OUI vendor prefix.",
+    "parameters": {}
+  },
+  {
+    "slug": "parse_iw_scan",
+    "name": "Parse iw scan output",
+    "category": "Parsers",
+    "description": "Parse Linux iw BSS blocks into structured network observations.",
+    "parameters": {
+      "text": "iw scan output"
+    }
+  },
+  {
+    "slug": "parse_iwlist_scan",
+    "name": "Parse iwlist scan output",
+    "category": "Parsers",
+    "description": "Parse common iwlist scan cells.",
+    "parameters": {
+      "text": "iwlist scan output"
+    }
+  },
+  {
+    "slug": "parse_netsh_scan",
+    "name": "Parse Windows netsh scan output",
+    "category": "Parsers",
+    "description": "Parse netsh wlan show networks mode=bssid text.",
+    "parameters": {
+      "text": "netsh scan output"
+    }
+  },
+  {
+    "slug": "parse_airport_scan",
+    "name": "Parse macOS airport scan output",
+    "category": "Parsers",
+    "description": "Parse the legacy airport -s tabular output.",
+    "parameters": {
+      "text": "airport -s output"
+    }
+  },
+  {
+    "slug": "parse_system_profiler",
+    "name": "Parse macOS system_profiler JSON",
+    "category": "Parsers",
+    "description": "Extract nearby wireless networks from system_profiler JSON.",
+    "parameters": {
+      "text": "system_profiler JSON"
+    }
+  },
+  {
+    "slug": "parse_station_dump",
+    "name": "Parse iw station dump",
+    "category": "Parsers",
+    "description": "Extract station counters from iw station dump output.",
+    "parameters": {
+      "text": "iw station dump"
+    }
+  },
+  {
+    "slug": "parse_iw_link",
+    "name": "Parse iw link",
+    "category": "Parsers",
+    "description": "Extract connected SSID, BSSID, frequency and signal from iw link.",
+    "parameters": {
+      "text": "iw link output"
+    }
+  },
+  {
+    "slug": "parse_ethtool",
+    "name": "Parse ethtool link details",
+    "category": "Parsers",
+    "description": "Parse speed, duplex, link state and autonegotiation from ethtool output.",
+    "parameters": {
+      "text": "ethtool output"
+    }
+  },
+  {
+    "slug": "parse_route_table",
+    "name": "Parse Linux IPv4 default route",
+    "category": "Parsers",
+    "description": "Extract gateway and interface from ip route output.",
+    "parameters": {
+      "text": "ip route output"
+    }
+  },
+  {
+    "slug": "parse_arp_linux",
+    "name": "Parse Linux ARP/neighbour table",
+    "category": "Parsers",
+    "description": "Parse common arp -an output into IP/MAC pairs.",
+    "parameters": {
+      "text": "arp -an output"
+    }
+  },
+  {
+    "slug": "parse_arp_windows",
+    "name": "Parse Windows ARP table",
+    "category": "Parsers",
+    "description": "Parse arp -a IPv4 entries on Windows.",
+    "parameters": {
+      "text": "Windows arp -a output"
+    }
+  },
+  {
+    "slug": "parse_resolv_conf",
+    "name": "Parse resolv.conf",
+    "category": "Parsers",
+    "description": "Extract valid nameserver IPs from resolv.conf text.",
+    "parameters": {
+      "text": "resolv.conf text"
+    }
+  },
+  {
+    "slug": "parse_ping_output",
+    "name": "Parse ping output",
+    "category": "Parsers",
+    "description": "Extract transmitted, received, loss and RTT summary from ping text.",
+    "parameters": {
+      "text": "ping output"
+    }
+  },
+  {
+    "slug": "parse_traceroute",
+    "name": "Parse traceroute output",
+    "category": "Parsers",
+    "description": "Extract hop number, host and RTT samples from traceroute text.",
+    "parameters": {
+      "text": "traceroute output"
+    }
+  },
+  {
+    "slug": "validate_network_record",
+    "name": "Validate network record",
+    "category": "Data quality",
+    "description": "Validate essential fields and report missing/invalid observations.",
+    "parameters": {
+      "network": "object"
+    }
+  },
+  {
+    "slug": "validate_scan",
+    "name": "Validate scan payload",
+    "category": "Data quality",
+    "description": "Check a list of network records and return valid/invalid counts.",
+    "parameters": {}
+  },
+  {
+    "slug": "subnet_summary",
+    "name": "Subnet summary",
+    "category": "Diagnostics",
+    "description": "Summarise an IPv4 or IPv6 interface/CIDR.",
+    "parameters": {
+      "cidr": "IP/prefix"
+    }
+  },
+  {
+    "slug": "ip_in_subnet",
+    "name": "IP in subnet check",
+    "category": "Diagnostics",
+    "description": "Check whether an address belongs to a supplied subnet.",
+    "parameters": {
+      "ip": "IP address",
+      "subnet": "CIDR"
+    }
+  },
+  {
+    "slug": "default_gateway_from_route",
+    "name": "Default gateway lookup",
+    "category": "Diagnostics",
+    "description": "Extract the first default gateway from supplied route output.",
+    "parameters": {
+      "text": "route output"
+    }
+  },
+  {
+    "slug": "dns_servers_from_config",
+    "name": "DNS server extraction",
+    "category": "Diagnostics",
+    "description": "Collect DNS resolver addresses from resolv.conf or supplied list.",
+    "parameters": {}
+  },
+  {
+    "slug": "reverse_dns_lookup",
+    "name": "Reverse DNS lookup",
+    "category": "Diagnostics",
+    "description": "Resolve a supplied IP address using the system resolver.",
+    "parameters": {
+      "ip": "IP address"
+    }
+  },
+  {
+    "slug": "dns_lookup_timing",
+    "name": "DNS lookup timing",
+    "category": "Diagnostics",
+    "description": "Time a hostname lookup using the system resolver.",
+    "parameters": {
+      "host": "hostname"
+    }
+  },
+  {
+    "slug": "latency_summary",
+    "name": "Latency summary",
+    "category": "Diagnostics",
+    "description": "Summarise latency samples with min, median, p95 and max.",
+    "parameters": {
+      "samples_ms": "number[]"
+    }
+  },
+  {
+    "slug": "packet_loss_calculator",
+    "name": "Packet loss calculator",
+    "category": "Diagnostics",
+    "description": "Calculate packet loss percentage from sent and received counters.",
+    "parameters": {
+      "sent": "integer",
+      "received": "integer"
+    }
+  },
+  {
+    "slug": "jitter_calculator",
+    "name": "Jitter calculator",
+    "category": "Diagnostics",
+    "description": "Calculate mean absolute consecutive RTT variation.",
+    "parameters": {
+      "samples_ms": "number[]"
+    }
+  },
+  {
+    "slug": "interface_counter_delta",
+    "name": "Interface counter delta",
+    "category": "Diagnostics",
+    "description": "Calculate monotonic counter deltas and handle counter resets.",
+    "parameters": {
+      "before": "object",
+      "after": "object"
+    }
+  },
+  {
+    "slug": "interface_throughput",
+    "name": "Interface throughput",
+    "category": "Diagnostics",
+    "description": "Calculate RX/TX throughput in Mbps from byte-counter snapshots.",
+    "parameters": {
+      "before": "object",
+      "after": "object",
+      "interval_seconds": "number"
+    }
+  },
+  {
+    "slug": "packet_error_rate",
+    "name": "Packet error rate",
+    "category": "Diagnostics",
+    "description": "Compute RX/TX error ratio from interface packet counters.",
+    "parameters": {
+      "stats": "object"
+    }
+  },
+  {
+    "slug": "inspect_url",
+    "name": "URL inspection",
+    "category": "Diagnostics",
+    "description": "Validate a URL scheme and return parsed host, port and path without fetching it.",
+    "parameters": {
+      "url": "HTTP(S) URL"
+    }
+  },
+  {
+    "slug": "tls_certificate_expiry",
+    "name": "TLS certificate expiry",
+    "category": "Diagnostics",
+    "description": "Read the expiry date of a TLS certificate with a short connection timeout.",
+    "parameters": {
+      "host": "hostname",
+      "port": "integer"
+    }
+  },
+  {
+    "slug": "security_rank",
+    "name": "Security strength rank",
+    "category": "Security",
+    "description": "Rank a network security mode from open through WPA3.",
+    "parameters": {
+      "security": "string"
+    }
+  },
+  {
+    "slug": "security_warnings",
+    "name": "Security warnings",
+    "category": "Security",
+    "description": "Generate transparent warnings for open, WEP and legacy WPA observations.",
+    "parameters": {}
+  },
+  {
+    "slug": "rogue_ap_candidates",
+    "name": "Rogue AP candidates",
+    "category": "Security",
+    "description": "Flag same-SSID BSSIDs that are not in a supplied trusted BSSID list.",
+    "parameters": {
+      "networks": "network[]",
+      "trusted_bssids": "string[]",
+      "trusted_networks": "network[]"
+    }
+  },
+  {
+    "slug": "evil_twin_candidates",
+    "name": "Evil-twin similarity check",
+    "category": "Security",
+    "description": "Find different BSSIDs advertising the same non-empty SSID.",
+    "parameters": {}
+  },
+  {
+    "slug": "duplicate_bssid_check",
+    "name": "Duplicate BSSID check",
+    "category": "Security",
+    "description": "Detect duplicate BSSID records in one scan.",
+    "parameters": {}
+  },
+  {
+    "slug": "weak_signal_alerts",
+    "name": "Weak signal alerts",
+    "category": "Alerts",
+    "description": "Generate alerts for networks below a configurable RSSI threshold.",
+    "parameters": {
+      "threshold_dbm": "number"
+    }
+  },
+  {
+    "slug": "open_wifi_alerts",
+    "name": "Open Wi-Fi alerts",
+    "category": "Alerts",
+    "description": "Create alert records for open access points.",
+    "parameters": {}
+  },
+  {
+    "slug": "transition_mode_detect",
+    "name": "WPA2/WPA3 transition mode",
+    "category": "Security",
+    "description": "Identify networks advertising both SAE and PSK transition security.",
+    "parameters": {}
+  },
+  {
+    "slug": "redact_mac",
+    "name": "Redact MAC address",
+    "category": "Privacy",
+    "description": "Mask the final three octets of a MAC address for sharing.",
+    "parameters": {
+      "mac": "MAC address"
+    }
+  },
+  {
+    "slug": "redact_ssid",
+    "name": "Redact SSID",
+    "category": "Privacy",
+    "description": "Replace visible SSIDs with stable labels for sharing.",
+    "parameters": {}
+  },
+  {
+    "slug": "anonymise_scan",
+    "name": "Anonymise scan",
+    "category": "Privacy",
+    "description": "Redact SSIDs and BSSIDs before exporting a scan.",
+    "parameters": {}
+  },
+  {
+    "slug": "ssid_hash",
+    "name": "Stable SSID hash",
+    "category": "Privacy",
+    "description": "Create a non-reversible SHA-256 fingerprint of an SSID.",
+    "parameters": {
+      "ssid": "string"
+    }
+  },
+  {
+    "slug": "scan_fingerprint",
+    "name": "Scan fingerprint",
+    "category": "Privacy",
+    "description": "Fingerprint a canonicalised scan for integrity/change tracking.",
+    "parameters": {}
+  },
+  {
+    "slug": "alert_severity",
+    "name": "Alert severity classifier",
+    "category": "Alerts",
+    "description": "Assign a severity for common Wi-Fi alert types.",
+    "parameters": {
+      "type": "string"
+    }
+  },
+  {
+    "slug": "deduplicate_alerts",
+    "name": "Deduplicate alerts",
+    "category": "Alerts",
+    "description": "Remove repeated alerts by type, BSSID and message.",
+    "parameters": {
+      "alerts": "object[]"
+    }
+  },
+  {
+    "slug": "alert_threshold",
+    "name": "Alert threshold evaluator",
+    "category": "Alerts",
+    "description": "Compare a numeric metric with a configured warning/critical threshold.",
+    "parameters": {
+      "value": "number",
+      "warning": "number",
+      "critical": "number"
+    }
+  },
+  {
+    "slug": "export_json",
+    "name": "Export JSON",
+    "category": "Reports",
+    "description": "Serialise current networks and optional metadata as formatted JSON.",
+    "parameters": {}
+  },
+  {
+    "slug": "export_csv",
+    "name": "Export CSV",
+    "category": "Reports",
+    "description": "Export network records as RFC-compliant CSV.",
+    "parameters": {}
+  },
+  {
+    "slug": "export_html",
+    "name": "Export HTML report",
+    "category": "Reports",
+    "description": "Generate an escaped standalone HTML table report from scan observations.",
+    "parameters": {}
+  },
+  {
+    "slug": "prometheus_metrics",
+    "name": "Prometheus scan metrics",
+    "category": "Integrations",
+    "description": "Export counts and RSSI gauges in Prometheus text format.",
+    "parameters": {}
+  },
+  {
+    "slug": "network_report",
+    "name": "Network health report",
+    "category": "Reports",
+    "description": "Build a concise evidence-based report from supplied live observations.",
+    "parameters": {}
+  },
+  {
+    "slug": "history_window",
+    "name": "Trim signal history window",
+    "category": "History",
+    "description": "Return only the most recent N signal history samples.",
+    "parameters": {
+      "history": "array",
+      "limit": "integer"
+    }
+  },
+  {
+    "slug": "signal_trend",
+    "name": "Signal trend",
+    "category": "History",
+    "description": "Estimate signal trend from ordered RSSI samples using least-squares slope.",
+    "parameters": {
+      "samples_dbm": "number[]"
+    }
+  },
+  {
+    "slug": "signal_percentiles",
+    "name": "Signal percentiles",
+    "category": "History",
+    "description": "Calculate RSSI p10, median and p90 for the provided sample set.",
+    "parameters": {
+      "samples_dbm": "number[]"
+    }
+  },
+  {
+    "slug": "channel_rank",
+    "name": "Rank channels",
+    "category": "RF planning",
+    "description": "Rank observed channel occupancy within a requested band.",
+    "parameters": {
+      "band": "2.4GHz|5GHz|6GHz"
+    }
+  },
+  {
+    "slug": "format_bytes",
+    "name": "Format bytes",
+    "category": "Utilities",
+    "description": "Format a byte count using IEC units.",
+    "parameters": {
+      "bytes": "integer"
+    }
+  },
+  {
+    "slug": "format_duration",
+    "name": "Format duration",
+    "category": "Utilities",
+    "description": "Format elapsed seconds as days, hours, minutes and seconds.",
+    "parameters": {
+      "seconds": "number"
+    }
+  },
+  {
+    "slug": "safe_filename",
+    "name": "Safe filename",
+    "category": "Utilities",
+    "description": "Normalise a name for a local export filename.",
+    "parameters": {
+      "name": "string"
+    }
+  },
+  {
+    "slug": "validate_settings",
+    "name": "Validate application settings",
+    "category": "Utilities",
+    "description": "Validate polling and scan settings before saving.",
+    "parameters": {
+      "refresh_interval_seconds": "number",
+      "scan_timeout_seconds": "number",
+      "max_history": "integer"
+    }
+  },
+  {
+    "slug": "health_report",
+    "name": "Backend health report",
+    "category": "System",
+    "description": "Return runtime version, mode and feature-plugin count.",
+    "parameters": {}
+  },
+  {
+    "slug": "wifi_generation_classify",
+    "name": "Wi-Fi generation classifier",
+    "category": "RF analysis",
+    "description": "Infer the highest advertised PHY generation from supplied PHY capability flags.",
+    "parameters": {
+      "capabilities": "object",
+      "band": "string"
+    }
+  }
+]
