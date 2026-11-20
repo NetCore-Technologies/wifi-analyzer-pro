@@ -433,6 +433,7 @@ class OpenWrtCollector:
             seen.add(interface)
             output = self._run(["iw", "dev", interface, "station", "dump"], optional=True)
             if output is None:
+                self.warnings.append("wireless_associations_unavailable")
                 continue
             stations = self._parse_stations(output)
             if stations:
@@ -491,6 +492,8 @@ class DurableOutbox:
             os.chmod(self.directory, 0o700)
 
     def load(self) -> dict | None:
+        if self.directory.is_symlink():
+            raise AgentError("Agent state directory must not be a symbolic link")
         if not self.path.exists():
             return None
         if self.path.is_symlink():
@@ -651,18 +654,16 @@ class OpenWrtAgent:
 
     def run_once(self) -> dict:
         pending = self.outbox.load()
+        heartbeat_status = pending.get("agent_status", "healthy") if pending is not None else "healthy"
+        heartbeat_error = pending.get("error_code") if pending is not None else None
         try:
-            heartbeat = self._heartbeat("healthy")
+            heartbeat = self._heartbeat(heartbeat_status, heartbeat_error)
         except AgentTransportError:
             return {"status": "pending" if pending is not None else "offline", "pending": pending is not None}
         self._require_snapshot_scope(heartbeat)
 
         if pending is not None:
             try:
-                heartbeat = self._heartbeat(
-                    pending.get("agent_status", "healthy"), pending.get("error_code")
-                )
-                self._require_snapshot_scope(heartbeat)
                 delivery = self._flush_pending()
             except AgentTransportError:
                 return {"status": "pending", "pending": True}
@@ -676,10 +677,10 @@ class OpenWrtAgent:
 
         error_code = None
         if self.collector.warnings:
-            if any("wireless" in warning or "optional_command" in warning for warning in self.collector.warnings):
-                error_code = "RADIO_UNAVAILABLE"
-            elif any("network" in warning or "route" in warning for warning in self.collector.warnings):
+            if any("network" in warning or "route" in warning for warning in self.collector.warnings):
                 error_code = "NETWORK_TIMEOUT"
+            elif any("wireless" in warning or "optional_command" in warning for warning in self.collector.warnings):
+                error_code = "RADIO_UNAVAILABLE"
             else:
                 error_code = "SCAN_UNAVAILABLE"
 
