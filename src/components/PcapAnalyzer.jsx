@@ -231,7 +231,7 @@ export default function PcapAnalyzer() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
               <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 800 }}>Capture summary</div>
-              <div style={MUTED}>{capture.link_type_name} · {capture.byte_order}-endian · {capture.timestamp_resolution} timestamps</div>
+              <div style={MUTED}>{String(capture.format || "pcap").toUpperCase()} · {capture.link_type_name} · {capture.byte_order}-endian · {capture.timestamp_resolution} timestamps · {number(capture.interface_count || 1)} interface{capture.interface_count === 1 || !capture.interface_count ? "" : "s"}{capture.section_count ? ` · ${number(capture.section_count)} sections` : ""}</div>
             </div>
             <div style={{ ...MUTED, display: "flex", alignItems: "center", gap: 6 }}>
               <CheckCircle2 size={14} color="#50e3d2"/> Analysis complete
