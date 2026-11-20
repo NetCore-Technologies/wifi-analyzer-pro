@@ -3,11 +3,12 @@
 All notable changes to WiFi Analyzer Pro are documented here.
 
 ## [1.0.7] — Unreleased
+- Add F191: a bounded offline classic-PCAP analyzer for Ethernet, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap summaries. It enforces file/packet limits and omits packet payloads and endpoint addresses; it does not perform live capture or support PCAPNG.
 - Add the Signal Pulse application mark and product-site identity, with browser-persistent refresh interval, compact navigation, demo-data visibility and reduced-motion controls.
 - Expose authenticated worker lease renewal and database-verified scheduled-report delivery packaging; the server now loads the current unexpired SQLite lease rather than trusting a caller-supplied claimed-job object.
 
 ### Feature library and local account
-- Add 187 independently callable feature modules (F001–F168 and F172–F190; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 188 independently callable feature modules (F001–F168 and F172–F191; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
