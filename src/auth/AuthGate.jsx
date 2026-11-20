@@ -25,7 +25,7 @@ export default function AuthGate({ children }) {
     setMode('checking');
     setError('');
     try {
-      const response = await fetch(`${apiBase()}/api/auth/status`, {
+      const response = await fetch(`${window.location.protocol}//${window.location.hostname}:199/api/auth/status`, {
         headers: getSessionToken() ? { Authorization: `Bearer ${getSessionToken()}` } : {},
         signal: AbortSignal.timeout(5000),
       });
