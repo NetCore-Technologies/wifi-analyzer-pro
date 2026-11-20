@@ -153,6 +153,12 @@ def run(payload: dict) -> dict:
             "routes": _collection_diff(before_routes, current_routes, ("target", "device", "metric"), "routes"),
         }
     else:
+        # Validate stable identities even for the first baseline. A baseline is not a
+        # diff, but it must not silently accept duplicate interfaces/radios/routes.
+        _collection_diff(current_interfaces, current_interfaces, ("interface",), "interfaces")
+        _collection_diff(current_radios, current_radios, ("interface",), "wireless_radios")
+        _collection_diff(current_associations, current_associations, ("interface", "client_mac"), "associations")
+        _collection_diff(current_routes, current_routes, ("target", "device", "metric"), "routes")
         changes = {
             "interfaces": _empty_diff(),
             "wireless_radios": _empty_diff(),
