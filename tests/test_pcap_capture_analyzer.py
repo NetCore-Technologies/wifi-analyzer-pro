@@ -305,7 +305,7 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         too_many_interfaces = pcapng_section() + b"".join(
             pcapng_interface(1) for _ in range(129)
         )
-        with self.assertRaisesRegex(ValueError, "128-interface-per-section limit"):
+        with self.assertRaisesRegex(ValueError, "128-interface metadata limit"):
             run({"capture_base64": base64.b64encode(too_many_interfaces).decode("ascii")})
 
         too_many_sections = b"".join(pcapng_section() for _ in range(65))
