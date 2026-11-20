@@ -23,6 +23,49 @@ def make_capture(link_type, frames=(), *, byteorder="<", nano=False, snaplen=655
     return base64.b64encode(header + b"".join(records)).decode("ascii")
 
 
+def pcapng_block(block_type, body, *, byteorder="<"):
+    total_length = 8 + len(body) + 4
+    return (
+        struct.pack(byteorder + "II", block_type, total_length)
+        + body
+        + struct.pack(byteorder + "I", total_length)
+    )
+
+
+def pcapng_section(*, byteorder="<"):
+    bom = bytes.fromhex("4d3c2b1a") if byteorder == "<" else bytes.fromhex("1a2b3c4d")
+    body = bom + struct.pack(byteorder + "HHq", 1, 0, -1)
+    return pcapng_block(0x0A0D0D0A, body, byteorder=byteorder)
+
+
+def pcapng_option(code, value, *, byteorder="<"):
+    padding = b"\x00" * ((-len(value)) % 4)
+    return struct.pack(byteorder + "HH", code, len(value)) + value + padding
+
+
+def pcapng_interface(link_type, *, snaplen=65535, options=b"", byteorder="<"):
+    body = struct.pack(byteorder + "HHI", link_type, 0, snaplen) + options
+    return pcapng_block(1, body, byteorder=byteorder)
+
+
+def pcapng_enhanced_packet(interface_id, frame, *, timestamp=1760000000500000, byteorder="<"):
+    high = (timestamp >> 32) & 0xFFFFFFFF
+    low = timestamp & 0xFFFFFFFF
+    padding = b"\x00" * ((-len(frame)) % 4)
+    body = (
+        struct.pack(byteorder + "IIIII", interface_id, high, low, len(frame), len(frame))
+        + frame
+        + padding
+    )
+    return pcapng_block(6, body, byteorder=byteorder)
+
+
+def pcapng_simple_packet(frame, *, original_length=None, byteorder="<"):
+    original_length = len(frame) if original_length is None else original_length
+    padding = b"\x00" * ((-len(frame)) % 4)
+    return pcapng_block(3, struct.pack(byteorder + "I", original_length) + frame + padding, byteorder=byteorder)
+
+
 def ethernet_ipv4_udp():
     ethernet = bytes.fromhex("00112233445566778899aabb0800")
     ipv4 = (
@@ -114,6 +157,83 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         truncated = run({"capture_base64": base64.b64encode(header + record).decode("ascii")})
         self.assertEqual(truncated["summary"]["truncated_packet_count"], 1)
         self.assertEqual(truncated["summary"]["wire_bytes"], len(frame) + 12)
+
+    def test_parses_pcapng_enhanced_packet_with_nanosecond_interface_resolution(self):
+        timestamp = 1760000000 * 1_000_000_000 + 123_456_789
+        options = pcapng_option(9, b"\x09")
+        capture = (
+            pcapng_section()
+            + pcapng_interface(1, options=options)
+            + pcapng_enhanced_packet(0, ethernet_ipv4_udp(), timestamp=timestamp)
+        )
+        result = run({"capture_base64": base64.b64encode(capture).decode("ascii")})
+        self.assertEqual(result["capture"]["format"], "pcapng")
+        self.assertEqual(result["capture"]["version"], "1.0")
+        self.assertEqual(result["capture"]["link_type_name"], "ethernet")
+        self.assertEqual(result["capture"]["interface_count"], 1)
+        self.assertEqual(result["summary"]["packet_count"], 1)
+        self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
+        self.assertEqual(result["dscp_counts"], {"46": 1})
+        self.assertTrue(result["summary"]["first_packet_at"].endswith(".123456Z"))
+        self.assertEqual(result["capture"]["interfaces"][0]["timestamp_resolution"], "10^-9 seconds")
+
+    def test_parses_big_endian_pcapng_and_per_interface_timestamp_offset(self):
+        timestamp = 1760000000 * 1_000_000 + 500000
+        offset = struct.pack(">" + "q", 60)
+        options = pcapng_option(14, offset, byteorder=">")
+        capture = (
+            pcapng_section(byteorder=">")
+            + pcapng_interface(105, options=options, byteorder=">")
+            + pcapng_enhanced_packet(0, beacon_frame(), timestamp=timestamp, byteorder=">")
+        )
+        result = run({"capture_base64": base64.b64encode(capture).decode("ascii")})
+        self.assertEqual(result["capture"]["byte_order"], "big")
+        self.assertEqual(result["capture"]["link_type_name"], "ieee80211")
+        self.assertEqual(result["capture"]["interfaces"][0]["timestamp_offset_seconds"], 60)
+        self.assertEqual(result["wireless_subtype_counts"], {"beacon": 1})
+        self.assertTrue(result["summary"]["first_packet_at"].endswith("Z"))
+
+    def test_parses_pcapng_simple_packet_and_multiple_interface_link_types(self):
+        ethernet = ethernet_ipv4_udp()
+        radiotap = bytes.fromhex("0000080000000000") + beacon_frame()
+        capture = (
+            pcapng_section()
+            + pcapng_interface(1)
+            + pcapng_interface(127)
+            + pcapng_simple_packet(ethernet)
+            + pcapng_enhanced_packet(1, radiotap)
+        )
+        result = run({"capture_base64": base64.b64encode(capture).decode("ascii")})
+        self.assertEqual(result["capture"]["interface_count"], 2)
+        self.assertEqual(result["capture"]["link_type"], None)
+        self.assertEqual(result["capture"]["link_type_name"], "multiple")
+        self.assertEqual(result["summary"]["packet_count"], 2)
+        self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
+        self.assertEqual(result["wireless_subtype_counts"], {"beacon": 1})
+        self.assertEqual(result["summary"]["first_packet_at"], result["summary"]["last_packet_at"])
+
+    def test_rejects_corrupt_pcapng_block_lengths_and_packet_limit(self):
+        capture = (
+            pcapng_section()
+            + pcapng_interface(1)
+            + pcapng_enhanced_packet(0, ethernet_ipv4_udp())
+            + pcapng_enhanced_packet(0, ethernet_ipv4_udp())
+        )
+        with self.assertRaisesRegex(ValueError, "packet limit"):
+            run({"capture_base64": base64.b64encode(capture).decode("ascii"), "maximum_packets": 1})
+
+        corrupt = bytearray(pcapng_section() + pcapng_interface(1))
+        corrupt[4:8] = struct.pack("<I", 24)
+        with self.assertRaisesRegex(ValueError, "section header block has an invalid total length"):
+            run({"capture_base64": base64.b64encode(corrupt).decode("ascii")})
+
+    def test_rejects_pcapng_unsupported_interface_and_bad_timestamp_resolution(self):
+        unsupported = pcapng_section() + pcapng_interface(999)
+        with self.assertRaisesRegex(ValueError, "unsupported PCAPNG interface link type"):
+            run({"capture_base64": base64.b64encode(unsupported).decode("ascii")})
+        invalid_resolution = pcapng_section() + pcapng_interface(1, options=pcapng_option(9, b"\xff"))
+        with self.assertRaisesRegex(ValueError, "binary timestamp resolution is out of range"):
+            run({"capture_base64": base64.b64encode(invalid_resolution).decode("ascii")})
 
     def test_rejects_invalid_base64_format_link_type_version_and_snap_length(self):
         for payload, message in (
