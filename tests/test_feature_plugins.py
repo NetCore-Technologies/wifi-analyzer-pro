@@ -310,8 +310,8 @@ PAYLOADS = {
             "snapshot": {
                 "adapter_id":"openwrt",
                 "board":{"model":"Example router","kernel":"6.6.1"},
-                "interfaces":[{"interface":"lan","device":"br-lan","protocol":"static","up":true,"ipv4_addresses":["192.168.1.1/24"],"ipv6_addresses":[]}],
-                "wireless_radios":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","band":"5GHz","channel":36,"frequency_mhz":5180,"channel_width_mhz":80,"tx_power_dbm":20,"signal_dbm":-50,"noise_dbm":-95,"security":"WPA3","up":true}],
+                "interfaces":[{"interface":"lan","device":"br-lan","protocol":"static","up":True,"ipv4_addresses":["192.168.1.1/24"],"ipv6_addresses":[]}],
+                "wireless_radios":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","band":"5GHz","channel":36,"frequency_mhz":5180,"channel_width_mhz":80,"tx_power_dbm":20,"signal_dbm":-50,"noise_dbm":-95,"security":"WPA3","up":True}],
                 "associations":[],
                 "routes":[{"target":"0.0.0.0/0","gateway":"192.168.1.1","device":"eth0","metric":10}]
             }
@@ -321,8 +321,8 @@ PAYLOADS = {
             "snapshot": {
                 "adapter_id":"openwrt",
                 "board":{"model":"Example router","kernel":"6.6.2"},
-                "interfaces":[{"interface":"lan","device":"br-lan","protocol":"static","up":false,"ipv4_addresses":["192.168.1.1/24"],"ipv6_addresses":[]}],
-                "wireless_radios":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","band":"5GHz","channel":40,"frequency_mhz":5200,"channel_width_mhz":80,"tx_power_dbm":20,"signal_dbm":-51,"noise_dbm":-95,"security":"WPA3","up":true}],
+                "interfaces":[{"interface":"lan","device":"br-lan","protocol":"static","up":False,"ipv4_addresses":["192.168.1.1/24"],"ipv6_addresses":[]}],
+                "wireless_radios":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","band":"5GHz","channel":40,"frequency_mhz":5200,"channel_width_mhz":80,"tx_power_dbm":20,"signal_dbm":-51,"noise_dbm":-95,"security":"WPA3","up":True}],
                 "associations":[{"interface":"phy0-ap0","client_mac":"AA:BB:CC:DD:EE:01","signal_dbm":-60,"tx_rate_mbps":433,"rx_rate_mbps":600}],
                 "routes":[{"target":"0.0.0.0/0","gateway":"192.168.1.254","device":"eth0","metric":10}]
             }
