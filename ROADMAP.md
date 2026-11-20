@@ -15,44 +15,76 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.2 | Device discovery |
 | ✅ v1.0.3 | Speed test |
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
-| ✅ v1.0.5 | 17 feature categories, animated UI, mobile app (beta), AI health summary, REST API, WebSocket stream |
+| ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
+| ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
+| 🚧 v1.0.7 (unreleased) | 100 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
-## v1.0.x: Stabilise (now)
+## v1.0.x: Stabilise (current)
 
-Goal: make what already exists reliable before adding more.
+Goal: keep the existing dashboard dependable and make shipped functionality verifiable.
 
-- 🚧 Sync version numbers across `package.json`, the README badge, `CHANGELOG.md` and the backend
-- 🚧 Fix README links that still point to the old `manit6752025/wifi-analyzer-pro` path
-- 📋 Add automated tests for the backend (scan parsing, PHY parsing, alert rules)
-- 📋 Add a CI workflow that runs lint, tests and a frontend build on every pull request
-- 📋 Add a clear "Demo Mode" banner so fake data is never mistaken for live data
-- 📋 Graceful errors when `iw`, `iwconfig` or `pywifi` is missing or lacks permission
-- 📋 Document which features need root or Administrator
-- 📋 Publish the first GitHub Release with built assets
+- ✅ Frontend lint and production build run in GitHub Actions on pushes and pull requests.
+- ✅ Python compilation and regression tests run on Python 3.10–3.13.
+- ✅ Resolve the npm manifest/lockfile mismatch and the ESM Vite alias.
+- ✅ Remove the old repository path from active README links.
+- 🚧 Audit all demo placeholders and clearly separate examples from live measurements.
+- 📋 Improve diagnostics when `iw`, `iwconfig` or platform Wi-Fi APIs are missing or lack permission.
+- 📋 Document operating-system permissions and commands required for each live data source.
+- 📋 Publish v1.0.7 only after release assets and a clean release workflow are verified.
 
 ---
 
 ## v1.1.0: Extensibility and capture
 
-- 📋 **Plugin SDK**
-  - Stable plugin interface for custom scanners, alerts and dashboard panels
-  - Plugin loader with enable/disable in the UI
-  - Example plugin and developer guide
-- 📋 **Packet capture (pcap)**
-  - Start/stop capture from the dashboard
-  - Export to `.pcap` for Wireshark
-  - Capture filters and size limits
-- 📋 **Multi-user remote monitoring**
-  - Login and role-based access (admin, viewer)
-  - Per-site dashboards for multiple Pi agents
-- 📋 **API security**
-  - Token authentication for REST and WebSocket
-  - Configurable bind address and CORS
-  - Rate limiting on heavy endpoints (speed test, port scan)
+### Shipped in the current main branch
+- ✅ 100 distinct built-in feature tools (F001–F100), each in its own module with a stable slug and metadata.
+- ✅ Central feature registry and searchable Feature Workbench.
+- ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
+- ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
+- ✅ Docker and standalone Linux packaging include the auth and feature modules.
+- ✅ Unit and HTTP integration tests cover the account gate, feature catalogue, tool execution, logout and rejected browser origins.
+
+### Remaining v1.1.0 scope
+- 📋 External plugin SDK with a stable manifest, version checks, permissions and lifecycle hooks.
+- 📋 Enable/disable and safe reload for third-party plugins.
+- 📋 Example plugin and developer guide.
+- 📋 Packet capture with explicit interface selection, bounded file size, capture filters and PCAP export.
+- 📋 Multi-user roles (admin/viewer) and per-site dashboards for multiple local agents.
+- 📋 Authenticated WebSocket streaming and API rate limits for expensive diagnostics.
+- 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
 
 ---
+
+## Feature expansion roadmap: F101–F200
+
+These are planned deliverables, not implemented features. IDs are reserved only when a tool is implemented and tested; each tool must include a pure-function test, an API integration test where relevant, a catalog entry and a UI path.
+
+| Wave | Planned range | Scope | Target | Estimate | Dependencies |
+|---|---:|---|---|---:|---|
+| 1 | F101–F120 | Channel-width geometry, regulatory constraints, Wi-Fi 7/EHT and MLO evidence, richer RF observations | 2026-12-18 | 3–4 weeks | F001–F100 registry; adapter capability inputs |
+| 2 | F121–F140 | Roaming event comparison, sticky-client indicators, band-steering evidence and hand-off timelines | 2027-01-22 | 4–5 weeks | Wave 1; timestamped observation history |
+| 3 | F141–F160 | Multi-AP site inventory, topology relationships, subnet and gateway correlation, floor-plan anchors | 2027-02-26 | 4–5 weeks | SQLite history; consented local discovery |
+| 4 | F161–F180 | Router adapters, read-only OpenWrt/UniFi/MikroTik integrations, agent health and capability negotiation | 2027-04-09 | 5–6 weeks | Authenticated API; per-adapter contract tests |
+| 5 | F181–F200 | Scheduled reports, alert policies, webhook delivery, report comparison and backup/restore | 2027-05-07 | 4–5 weeks | Waves 2–4; encrypted local settings |
+
+### Longer-range direction (F201–F1100)
+
+The next 900 candidates are grouped into ten reviewable 90-feature waves. These are domain targets, not a promise to ship 900 unchecked stubs:
+
+1. F201–F290 — Advanced RF diagnostics and channel planning.
+2. F291–F380 — Client roaming, QoS and application experience.
+3. F381–F470 — Multi-site topology and network inventory.
+4. F471–F560 — Router and controller integrations.
+5. F561–F650 — Security posture, detection evidence and audit trails.
+6. F651–F740 — Capture workflows and packet-level analysis.
+7. F741–F830 — Historical analytics, capacity planning and forecasting.
+8. F831–F920 — Reports, alert routing and operational automation.
+9. F921–F1010 — Mobile/desktop workflows and offline operation.
+10. F1011–F1100 — Plugin ecosystem, accessibility, localisation and deployment tooling.
+
+A candidate is promoted to an F-number only after checking that it is distinct from existing tools, technically supportable on documented hardware/OS combinations, privacy-safe and testable. Avoid duplicate feature counts, simulated measurements presented as live data, and network-changing operations without explicit confirmation.
 
 ## v1.2.0: Analysis depth
 
@@ -123,4 +155,4 @@ These aren't committed. Open an issue to discuss or vote.
 
 Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a public issue.
 
-*Last updated: November 2026*
+*Last updated: November 20, 2026*
