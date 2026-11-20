@@ -108,10 +108,11 @@ The local HTTP service exposes:
 |---|---|
 | `GET /health` | Basic server health (public) |
 | `GET /api/auth/status` | First-run account and session status |
-| `POST /api/auth/setup` | Create the one local password during first-run setup |
+| `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
 | `GET /api/features` | Authenticated catalogue of the 188 built-in tools |
+| `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates and disable/enable controls |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `GET /api/reports/jobs` | List authenticated scheduled-report jobs and state counts |
 | `POST /api/reports/jobs/enqueue` | Queue a hash-validated report occurrence idempotently |
@@ -157,9 +158,9 @@ For a Vite development server accessed from another device, add its exact origin
 
 ## Security and privacy
 
-WiFi Analyzer Pro is intended to run close to the network being diagnosed. Network scans and system diagnostics are performed by the local host. No cloud account is required for local use. First-run setup stores a salted scrypt password verifier outside the repository with owner-only file permissions; session tokens are process-local and expire after a fixed lifetime. Five consecutive failed logins trigger a temporary lockout.
+WiFi Analyzer Pro is intended to run close to the network being diagnosed. Network scans and system diagnostics are performed by the local host. No cloud account is required for local use. First-run setup creates a local workspace owner and stores individual salted scrypt password verifiers outside the repository with owner-only file permissions. Existing version-1 single-password files migrate to an `admin` owner identity without resetting the credential. Sessions are process-local, expire after a fixed lifetime and are revoked when an account is disabled or its password is reset. Five consecutive failed logins trigger a temporary lockout.
 
-The built-in local account gate protects API endpoints, but this is not enterprise SSO or multi-user role-based access. Do not expose port `199` directly to the public internet. For team or remote access, place it behind a VPN or an authenticated reverse proxy, restrict network access, and explicitly configure allowed CORS origins. Review [SECURITY.md](SECURITY.md) before deployment.
+The local directory supports named accounts and role-based API permissions: owner, administrator, network administrator, analyst and read-only viewer. Sensitive agent, report, site-history and diagnostic operations enforce explicit permissions server-side; the Team Access screen manages users and roles. This is an initial single-workspace RBAC implementation, not site-isolated multi-tenancy, enterprise SSO, MFA/WebAuthn or centralised identity federation. Do not expose port `199` directly to the public internet. For team or remote access, place it behind a VPN or an authenticated reverse proxy, restrict network access, and explicitly configure allowed CORS origins. Review [SECURITY.md](SECURITY.md) before deployment.
 
 Only scan networks and devices you own or are authorised to assess. A Wi-Fi adapter may require OS-specific permissions for full scan details.
 

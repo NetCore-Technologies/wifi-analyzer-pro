@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 import tempfile
@@ -5,7 +6,7 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from wifi_analyzer_backend.auth import AuthManager
+from wifi_analyzer_backend.auth import AuthManager, ROLE_PERMISSIONS
 
 
 class AuthManagerTests(unittest.TestCase):
@@ -22,10 +23,12 @@ class AuthManagerTests(unittest.TestCase):
         self.assertFalse(self.auth.validate("arbitrary-token"))
         self.assertFalse(self.auth.status()["authenticated"])
 
-    def test_first_run_setup_creates_protected_verifier_and_session(self):
+    def test_first_run_setup_creates_protected_owner_and_session(self):
         self.assertFalse(self.auth.configured())
         token = self.auth.setup("correct horse battery staple")
         self.assertTrue(self.auth.validate(token))
+        self.assertEqual(self.auth.identity(token)["role"], "owner")
+        self.assertEqual(self.auth.identity(token)["username"], "admin")
         self.assertTrue(self.auth.configured())
         self.assertTrue(Path(self.auth_path).exists())
         if os.name != "nt":
@@ -36,6 +39,21 @@ class AuthManagerTests(unittest.TestCase):
         restarted = AuthManager(path=self.auth_path, session_ttl_seconds=300)
         token = restarted.login("correct horse battery staple")
         self.assertTrue(restarted.validate(token))
+        self.assertEqual(restarted.identity(token)["role"], "owner")
+
+    def test_legacy_version_one_password_file_migrates_without_resetting_owner_password(self):
+        salt = b"0123456789abcdef"
+        verifier = AuthManager._derive("correct horse battery staple", salt)
+        Path(self.auth_path).write_text(json.dumps({
+            "version": 1, "salt": salt.hex(), "verifier": verifier.hex(), "created_at": 123,
+        }), encoding="utf-8")
+        migrated = AuthManager(path=self.auth_path)
+        token = migrated.login("correct horse battery staple")
+        self.assertEqual(migrated.identity(token)["role"], "owner")
+        saved = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
+        self.assertEqual(saved["version"], 2)
+        self.assertEqual(saved["users"][0]["username"], "admin")
+        self.assertEqual(saved["users"][0]["created_at"], 123)
 
     def test_session_expiry_revokes_token(self):
         token = self.auth.setup("correct horse battery staple")
@@ -89,7 +107,6 @@ class AuthManagerTests(unittest.TestCase):
                 return self.auth.setup("correct horse battery staple")
             except RuntimeError:
                 return None
-
         with ThreadPoolExecutor(max_workers=2) as pool:
             tokens = list(pool.map(lambda _index: setup(), range(2)))
         accepted = [token for token in tokens if token]
@@ -105,6 +122,70 @@ class AuthManagerTests(unittest.TestCase):
             self.auth.login("wrong passphrase")
         with self.assertRaisesRegex(PermissionError, "try again later"):
             self.auth.login("correct horse battery staple")
+
+    def test_named_users_have_distinct_credentials_and_role_permissions(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        analyst = self.auth.create_user(owner, "Wireless.Analyst", "analyst password secure", "analyst")
+        viewer = self.auth.create_user(owner, "read.only", "viewer password secure", "viewer")
+        analyst_token = self.auth.login("analyst password secure", "WIRELESS.ANALYST")
+        viewer_token = self.auth.login("viewer password secure", "read.only")
+        self.assertEqual(analyst["username"], "wireless.analyst")
+        self.assertTrue(self.auth.has_permission(analyst_token, "diagnostics.run"))
+        self.assertFalse(self.auth.has_permission(analyst_token, "agents.manage"))
+        self.assertTrue(self.auth.has_permission(viewer_token, "sites.read"))
+        self.assertFalse(self.auth.has_permission(viewer_token, "diagnostics.run"))
+        self.assertFalse(self.auth.has_permission(viewer_token, "users.manage"))
+
+    def test_network_admin_can_manage_network_operations_but_not_people(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        self.auth.create_user(owner, "netadmin", "network admin passphrase", "network_admin")
+        token = self.auth.login("network admin passphrase", "netadmin")
+        self.assertTrue(self.auth.has_permission(token, "agents.manage"))
+        self.assertTrue(self.auth.has_permission(token, "reports.manage"))
+        self.assertFalse(self.auth.has_permission(token, "users.manage"))
+
+    def test_only_owner_can_create_administrators(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        admin = self.auth.create_user(owner, "admin2", "second admin password", "admin")
+        admin_token = self.auth.login("second admin password", "admin2")
+        with self.assertRaisesRegex(PermissionError, "Only the owner"):
+            self.auth.create_user(admin_token, "admin3", "third admin password", "admin")
+        self.assertEqual(admin["role"], "admin")
+
+    def test_owner_cannot_be_disabled_or_demoted_by_an_administrator(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        admin = self.auth.create_user(owner, "admin2", "second admin password", "admin")
+        admin_token = self.auth.login("second admin password", "admin2")
+        owner_id = self.auth.identity(owner)["id"]
+        with self.assertRaisesRegex(PermissionError, "owner account"):
+            self.auth.update_user(admin_token, owner_id, enabled=False)
+        self.assertTrue(self.auth.validate(owner))
+
+    def test_disabling_or_resetting_a_user_revokes_their_existing_sessions(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        user = self.auth.create_user(owner, "analyst", "analyst password secure", "analyst")
+        old_token = self.auth.login("analyst password secure", "analyst")
+        self.auth.update_user(owner, user["id"], enabled=False)
+        self.assertFalse(self.auth.validate(old_token))
+        with self.assertRaises(PermissionError):
+            self.auth.login("analyst password secure", "analyst")
+
+    def test_role_assignment_and_user_directory_are_bounded_and_secret_free(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        self.auth.create_user(owner, "viewer1", "viewer passphrase secure", "viewer")
+        users = self.auth.list_users(owner)
+        rendered = json.dumps(users)
+        self.assertEqual([item["username"] for item in users], ["admin", "viewer1"])
+        self.assertNotIn("verifier", rendered)
+        self.assertNotIn("salt", rendered)
+        self.assertNotIn("password", rendered)
+        self.assertNotIn("token", rendered)
+        with self.assertRaises(ValueError):
+            self.auth.create_user(owner, "bad", "short", "viewer")
+        with self.assertRaises(ValueError):
+            self.auth.create_user(owner, "bad name", "valid password secure", "viewer")
+        with self.assertRaises(ValueError):
+            self.auth.create_user(owner, "viewer2", "valid password secure", "superuser")
 
 
 if __name__ == "__main__":

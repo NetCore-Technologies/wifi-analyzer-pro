@@ -41,7 +41,9 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ### Shipped in the current main branch
 - ✅ 188 distinct callable feature modules (F001–F168 and F172–F191), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
-- ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
+- ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
+- ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
+- ✅ Team Access UI for creating users, changing assigned roles and disabling/enabling accounts.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
 - ✅ Docker and standalone Linux packaging include the auth and feature modules.
 - ✅ Unit and HTTP integration tests cover the account gate, feature catalogue, tool execution, logout and rejected browser origins.
@@ -55,7 +57,9 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - 📋 Enable/disable and safe reload for third-party plugins.
 - 📋 Example plugin and developer guide.
 - 📋 Packet capture with explicit interface selection, bounded file size, capture filters and PCAP export.
-- 📋 Multi-user roles (admin/viewer) and per-site dashboards for multiple local agents.
+- 📋 Per-site and per-tenant authorization scopes across sites, agents, reports and feature inputs.
+- 📋 Enterprise identity: OIDC/SAML SSO, MFA/WebAuthn, SCIM provisioning and centralised audit retention.
+- 📋 Multi-site dashboards for distributed local agents.
 - 📋 Authenticated WebSocket streaming and API rate limits for expensive diagnostics.
 - 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
 

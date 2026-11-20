@@ -656,11 +656,15 @@ class Handler(BaseHTTPRequestHandler):
         # instead of localhost; allow only an exact Host match in that case.
         return parsed.scheme in {"http", "https"} and parsed.netloc == self.headers.get("Host")
 
-    def require_auth(self):
-        if AUTH.validate(self.bearer_token()):
-            return True
-        self.send_json({"error": "Authentication required"}, 401)
-        return False
+    def require_auth(self, permission=None):
+        token = self.bearer_token()
+        if not AUTH.validate(token):
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if permission and not AUTH.has_permission(token, permission):
+            self.send_json({"error": "Insufficient permissions", "required_permission": permission}, 403)
+            return False
+        return True
 
     def read_json_body(self):
         try:
@@ -700,10 +704,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/auth/status":
             self.send_json(AUTH.status(self.bearer_token()))
             return
-        if path.startswith("/api/") and not self.require_auth():
-            return
+        if path.startswith("/api/"):
+            permission = "diagnostics.read"
+            if path.startswith("/api/reports/jobs"):
+                permission = "reports.read"
+            elif path in {"/api/agents/credentials", "/api/agents/negotiations"}:
+                permission = "agents.manage"
+            elif path.startswith("/api/agents/"):
+                permission = "agents.read"
+            elif path.startswith("/api/sites/history"):
+                permission = "sites.read"
+            elif path == "/api/adapters":
+                permission = "agents.read"
+            elif path == "/api/users":
+                permission = "users.manage"
+            if not self.require_auth(permission):
+                return
 
         api_routes = {
+            "/api/users": lambda: {"users": AUTH.list_users(self.bearer_token())},
             "/api/scan": lambda: {
                 "networks": (networks := scan()),
                 "congestion": channel_congestion(networks),
@@ -909,7 +928,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/auth/setup":
             try:
-                token = AUTH.setup(payload.get("password"))
+                token = AUTH.setup(payload.get("password"), payload.get("username", "admin"))
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
@@ -921,15 +940,52 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/auth/login":
             try:
-                token = AUTH.login(payload.get("password"))
+                token = AUTH.login(payload.get("password"), payload.get("username", "admin"))
             except (PermissionError, RuntimeError) as error:
                 self.send_json({"error": str(error)}, 401)
                 return
             self.send_json({"token": token, "status": AUTH.status(token)})
             return
 
+        if path == "/api/users":
+            if not self.require_auth("users.manage"):
+                return
+            try:
+                user = AUTH.create_user(
+                    self.bearer_token(), payload.get("username"),
+                    payload.get("password"), payload.get("role"),
+                )
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json({"user": user}, 201)
+            return
+
+        user_update = re.fullmatch(r"/api/users/([a-f0-9]{32})/update", path)
+        if user_update:
+            if not self.require_auth("users.manage"):
+                return
+            try:
+                user = AUTH.update_user(
+                    self.bearer_token(), user_update.group(1),
+                    role=payload.get("role"),
+                    enabled=payload.get("enabled"),
+                    password=payload.get("password"),
+                )
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json({"user": user})
+            return
+
         if path == "/api/reports/jobs/enqueue":
-            if not self.require_auth():
+            if not self.require_auth("reports.manage"): 
                 return
             try:
                 prepared = run_feature("router_scheduled_report_job_intake", payload)["result"]
@@ -944,7 +1000,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/jobs/claim":
-            if not self.require_auth():
+            if not self.require_auth("reports.manage"): 
                 return
             try:
                 response = REPORT_JOBS.claim_due(
@@ -961,7 +1017,7 @@ class Handler(BaseHTTPRequestHandler):
 
         job_delivery = re.fullmatch(r"/api/reports/jobs/([1-9][0-9]*)/delivery-package", path)
         if job_delivery:
-            if not self.require_auth():
+            if not self.require_auth("reports.manage"): 
                 return
             try:
                 claimed_job = REPORT_JOBS.get_leased_job(
@@ -984,7 +1040,7 @@ class Handler(BaseHTTPRequestHandler):
 
         job_action = re.fullmatch(r"/api/reports/jobs/([1-9][0-9]*)/(complete|fail|cancel|renew)", path)
         if job_action:
-            if not self.require_auth():
+            if not self.require_auth("reports.manage"): 
                 return
             job_id = int(job_action.group(1))
             action = job_action.group(2)
@@ -1022,7 +1078,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/agents/enroll":
-            if not self.require_auth():
+            if not self.require_auth("agents.manage"): 
                 return
             try:
                 scope = run_feature("router_agent_credential_scope", payload)["result"]
@@ -1045,7 +1101,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/agents/") and path.endswith("/credentials/rotate"):
-            if not self.require_auth():
+            if not self.require_auth("agents.manage"): 
                 return
             agent_id = unquote(path[len("/api/agents/"):-len("/credentials/rotate")]).strip("/")
             if not agent_id or "/" in agent_id:
@@ -1065,7 +1121,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/agents/") and path.endswith("/credentials/revoke"):
-            if not self.require_auth():
+            if not self.require_auth("agents.manage"): 
                 return
             agent_id = unquote(path[len("/api/agents/"):-len("/credentials/revoke")]).strip("/")
             if not agent_id or "/" in agent_id:
@@ -1142,7 +1198,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/adapters/openwrt/normalise":
-            if not self.require_auth():
+            if not self.require_auth("diagnostics.run"): 
                 return
             try:
                 result = run_feature("openwrt_snapshot_normalizer", payload)
@@ -1157,7 +1213,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/adapters/negotiate":
-            if not self.require_auth():
+            if not self.require_auth("agents.manage"): 
                 return
             try:
                 result = run_feature("router_agent_capability_negotiation", payload)
@@ -1168,7 +1224,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/sites/audit":
-            if not self.require_auth():
+            if not self.require_auth("diagnostics.run"): 
                 return
             try:
                 report = run_feature("consolidated_site_audit_report", payload)
@@ -1183,7 +1239,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/sites/history":
-            if not self.require_auth():
+            if not self.require_auth("sites.manage"): 
                 return
             try:
                 prepared = run_feature("site_discovery_history_snapshot", payload)["result"]
@@ -1202,7 +1258,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/features/"):
-            if not self.require_auth():
+            if not self.require_auth("diagnostics.run"): 
                 return
             slug = unquote(path[len("/api/features/"):]).strip("/")
             if not slug or "/" in slug:
