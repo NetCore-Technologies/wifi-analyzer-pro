@@ -256,7 +256,7 @@ function Toast({ toasts, dismiss }) {
   );
 }
 
-function DashboardPanel({ speedData, networks: netsProp, devices: devsProp, diag, alertsProp = [], isLive = false }) {
+function DashboardPanel({ networks: netsProp, devices: devsProp, diag, alertsProp = [], isLive = false }) {
   const nets=Array.isArray(netsProp)?netsProp:NETWORKS;
   const devs=Array.isArray(devsProp)?devsProp:DEVICES;
   const measuredNetworks=nets.filter(network=>network.rssi!=null&&Number.isFinite(Number(network.rssi)));
@@ -831,7 +831,7 @@ function AiPanel({ networks: netsProp, devices: devsProp, diag, sysInfo, isLive 
   );
 }
 
-function FeatureGrid({ title, features, col=C.cyan, badge="" }) {
+function FeatureGrid({ title, features, col=C.cyan }) {
   return (
     <div style={{...s.col,gap:14}}>
       <div className="anim-fade" style={{...s.card,border:`1px solid ${col}33`,background:col+"08"}}>
@@ -978,7 +978,7 @@ export default function App() {
 
   const panels={
     featureTools: <FeatureWorkbench/>,
-    dashboard:   <DashboardPanel rssiData={rssiData} speedData={speedData} networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
+    dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
     speed:       <SpeedPanel speedData={speedData}/>,
