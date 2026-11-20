@@ -96,7 +96,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 187 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 188 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `GET /api/reports/jobs` | List authenticated scheduled-report jobs and state counts |
 | `POST /api/reports/jobs/enqueue` | Queue a hash-validated report occurrence idempotently |
@@ -187,4 +187,4 @@ Scheduled report execution is coordinated through the authenticated `/api/report
 Workers can prepare a report webhook package through `router_scheduled_report_delivery_package` only while holding the active report-job lease and supplying fresh DNS/TLS evidence that passes the egress policy. The feature creates a signed request envelope; outbound transmission remains an explicit worker responsibility.
 
 
-The `router_webhook_subscription_router` (F190) maps normalized events to bounded, deterministic subscription batches. Each batch can be signed by F185 and checked by F187 before the leased worker sends it; the router itself never transmits events or accepts signing secrets.
+The `router_webhook_subscription_router` (F190) maps normalized events to bounded, deterministic subscription batches. Each batch can be signed by F185 and checked by F187 before the leased worker sends it; the router itself never transmits events or accepts signing secrets. The `pcap_capture_analyzer` (F191) accepts standard-base64 classic PCAP through the authenticated feature API, with a 512 KiB file bound and 5,000-packet limit. It supports Ethernet, raw 802.11 and radiotap link types, summarizes IPv4/IPv6, TCP/UDP, DSCP and wireless frame types, and deliberately omits payloads and endpoint addresses. It is an offline file analyzer, not a live interface capture or PCAPNG reader.
