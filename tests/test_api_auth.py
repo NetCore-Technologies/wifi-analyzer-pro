@@ -1532,6 +1532,9 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(checkpoint_denied["required_permission"], "users.manage")
 
+        status, latest_audit = self.request("GET", "/api/security/audit?limit=100", token=owner_token)
+        self.assertEqual(status, 200)
+
         status, checkpoint_response = self.request("GET", "/api/security/audit/checkpoint", token=owner_token)
         self.assertEqual(status, 200)
         bundle = checkpoint_response["checkpoint"]
@@ -1540,7 +1543,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             expected_public_key_fingerprint=bundle["public_key_fingerprint"],
         )
         self.assertTrue(verified["valid"], verified)
-        self.assertEqual(bundle["checkpoint"]["event_count"], len(audit["events"]))
+        self.assertEqual(bundle["checkpoint"]["event_count"], len(latest_audit["events"]))
         tampered = dict(bundle)
         tampered["checkpoint"] = {**bundle["checkpoint"], "event_count": bundle["checkpoint"]["event_count"] + 1}
         self.assertFalse(verify_signed_checkpoint(tampered)["valid"])
