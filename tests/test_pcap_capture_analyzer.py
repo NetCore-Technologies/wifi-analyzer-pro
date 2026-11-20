@@ -227,6 +227,17 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "section header block has an invalid total length"):
             run({"capture_base64": base64.b64encode(corrupt).decode("ascii")})
 
+    def test_enforces_pcapng_section_and_interface_metadata_limits(self):
+        too_many_interfaces = pcapng_section() + b"".join(
+            pcapng_interface(1) for _ in range(129)
+        )
+        with self.assertRaisesRegex(ValueError, "128-interface-per-section limit"):
+            run({"capture_base64": base64.b64encode(too_many_interfaces).decode("ascii")})
+
+        too_many_sections = b"".join(pcapng_section() for _ in range(65))
+        with self.assertRaisesRegex(ValueError, "64-section limit"):
+            run({"capture_base64": base64.b64encode(too_many_sections).decode("ascii")})
+
     def test_rejects_pcapng_unsupported_interface_and_bad_timestamp_resolution(self):
         unsupported = pcapng_section() + pcapng_interface(999)
         with self.assertRaisesRegex(ValueError, "unsupported PCAPNG interface link type"):
