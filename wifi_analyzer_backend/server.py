@@ -17,6 +17,7 @@ import psutil
 
 if __package__:
     from .auth import AuthManager
+    from .audit_store import SecurityAuditStore
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
@@ -34,6 +35,7 @@ if __package__:
     )
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
+    from audit_store import SecurityAuditStore
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
@@ -63,6 +65,7 @@ AUTH = AuthManager()
 HISTORY = SiteHistoryStore()
 AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
+AUDIT = SecurityAuditStore()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_wifi_iface():
@@ -656,12 +659,32 @@ class Handler(BaseHTTPRequestHandler):
         # instead of localhost; allow only an exact Host match in that case.
         return parsed.scheme in {"http", "https"} and parsed.netloc == self.headers.get("Host")
 
+    def audit_event(self, action, *, actor=None, target_type=None, target_id=None, outcome="success", metadata=None):
+        if actor is None:
+            actor = AUTH.identity(self.bearer_token())
+        request_id = self.headers.get("X-Request-ID")
+        try:
+            return AUDIT.record(
+                action, actor=actor, target_type=target_type, target_id=target_id,
+                outcome=outcome, metadata=metadata, request_id=request_id,
+            )
+        except Exception:
+            # Audit failures are visible without printing request bodies or secrets.
+            print(f"[AUDIT ERROR] Could not persist event: {action}")
+            return None
+
     def require_auth(self, permission=None):
         token = self.bearer_token()
         if not AUTH.validate(token):
             self.send_json({"error": "Authentication required"}, 401)
             return False
         if permission and not AUTH.has_permission(token, permission):
+            route_id = re.sub(r"[^A-Za-z0-9._:@-]", "_", urlparse(self.path).path.strip("/"))[:128] or "unknown"
+            self.audit_event(
+                "authorization.denied", outcome="denied",
+                target_type="api_route", target_id=route_id,
+                metadata={"required_permission": permission, "permission": permission},
+            )
             self.send_json({"error": "Insufficient permissions", "required_permission": permission}, 403)
             return False
         return True
@@ -716,6 +739,8 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
+            elif path.startswith("/api/security/audit"):
+                permission = "users.manage"
             elif path == "/api/users":
                 permission = "users.manage"
             if not self.require_auth(permission):
@@ -723,6 +748,7 @@ class Handler(BaseHTTPRequestHandler):
 
         api_routes = {
             "/api/users": lambda: {"users": AUTH.list_users(self.bearer_token())},
+            "/api/security/audit/summary": AUDIT.summary,
             "/api/scan": lambda: {
                 "networks": (networks := scan()),
                 "congestion": channel_congestion(networks),
@@ -839,6 +865,32 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"error": "Agent snapshot not found"}, 404)
                 else:
                     self.send_json({"snapshot": snapshot})
+            elif path == "/api/security/audit":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
+                def audit_parameter(name):
+                    values = params.get(name, [])
+                    if len(values) > 1:
+                        raise ValueError(f"{name} may be supplied only once")
+                    return values[0] if values else None
+                try:
+                    raw_limit = audit_parameter("limit")
+                    raw_before_id = audit_parameter("before_id")
+                    limit = 50 if raw_limit is None else int(raw_limit)
+                    before_id = None if raw_before_id is None else int(raw_before_id)
+                except ValueError as error:
+                    raise ValueError("limit and before_id must be integers") from error
+                events = AUDIT.list_events(
+                    limit=limit, before_id=before_id,
+                    action=audit_parameter("action"),
+                    outcome=audit_parameter("outcome"),
+                    actor_username=audit_parameter("actor_username"),
+                )
+                self.send_json({"summary": AUDIT.summary(), "events": events,
+                                "next_before_id": events[-1]["id"] if len(events) == limit else None})
+            elif path == "/api/security/audit/verify":
+                self.send_json({"verification": AUDIT.verify_chain()})
+            elif path == "/api/security/audit/summary":
+                self.send_json({"summary": AUDIT.summary()})
             elif path == "/api/sites/history/report":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
                 values = params.get("site_ids", [])
@@ -914,9 +966,12 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/auth/logout":
+            actor = AUTH.identity(self.bearer_token())
             if not AUTH.logout(self.bearer_token()):
                 self.send_json({"error": "Invalid or expired session"}, 401)
                 return
+            self.audit_event("auth.logout.succeeded", actor=actor, target_type="user",
+                             target_id=actor["id"] if actor else None)
             self.send_json({"ok": True})
             return
 
@@ -935,6 +990,9 @@ class Handler(BaseHTTPRequestHandler):
             except RuntimeError as error:
                 self.send_json({"error": str(error)}, 409)
                 return
+            identity = AUTH.identity(token)
+            self.audit_event("auth.setup.completed", actor=identity, target_type="user",
+                             target_id=identity["id"] if identity else None)
             self.send_json({"token": token, "status": AUTH.status(token)}, 201)
             return
 
@@ -942,8 +1000,24 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 token = AUTH.login(payload.get("password"), payload.get("username", "admin"))
             except (PermissionError, RuntimeError) as error:
+                if isinstance(error, PermissionError) and "five minutes" in str(error):
+                    supplied_username = payload.get("username", "admin")
+                    username = (
+                        supplied_username.strip().lower()
+                        if isinstance(supplied_username, str)
+                        and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{2,63}", supplied_username.strip())
+                        else None
+                    )
+                    self.audit_event(
+                        "auth.login.lockout", outcome="denied",
+                        target_type="authentication", target_id=username,
+                        metadata={"username": username} if username else None,
+                    )
                 self.send_json({"error": str(error)}, 401)
                 return
+            identity = AUTH.identity(token)
+            self.audit_event("auth.login.succeeded", actor=identity, target_type="user",
+                             target_id=identity["id"] if identity else None)
             self.send_json({"token": token, "status": AUTH.status(token)})
             return
 
@@ -961,6 +1035,10 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
+            self.audit_event(
+                "user.created", target_type="user", target_id=user["id"],
+                metadata={"username": user["username"], "role": user["role"]},
+            )
             self.send_json({"user": user}, 201)
             return
 
@@ -981,6 +1059,11 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
+            self.audit_event(
+                "user.updated", target_type="user", target_id=user["id"],
+                metadata={"username": user["username"], "role": user["role"],
+                          "enabled": user["enabled"], "changed_fields": sorted(payload.keys())},
+            )
             self.send_json({"user": user})
             return
 
@@ -1097,6 +1180,10 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
+            self.audit_event(
+                "agent.credential.enrolled", target_type="agent", target_id=scope["agent_id"],
+                metadata={"adapter_id": scope["adapter_id"], "reason_code": "credential_created"},
+            )
             self.send_json({"credential": credential}, 201)
             return
 
@@ -1117,6 +1204,10 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_json({"error": str(error)}, 404 if "not found" in str(error).lower() else 400)
                 return
+            self.audit_event(
+                "agent.credential.rotated", target_type="agent", target_id=agent_id,
+                metadata={"reason_code": "credential_rotated"},
+            )
             self.send_json({"credential": credential})
             return
 
@@ -1132,6 +1223,10 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_json({"error": str(error)}, 404)
                 return
+            self.audit_event(
+                "agent.credential.revoked", target_type="agent", target_id=agent_id,
+                metadata={"reason_code": "credential_revoked"},
+            )
             self.send_json({"credential": result})
             return
 

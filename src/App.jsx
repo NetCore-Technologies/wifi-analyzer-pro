@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import {
   Wifi, Activity, Globe, Zap, Monitor, Radio, Layers,
-  Smartphone, BarChart2, Download, Bell, Bot, Map, Wrench, Code, Users,
+  Smartphone, BarChart2, Download, Bell, Bot, Map, Wrench, Code, Users, ClipboardList,
   RefreshCw, Shield, AlertTriangle, CheckCircle, XCircle, Info,
   Lock, Server, LayoutDashboard, ArrowDown, ArrowUp,
   Cpu, HardDrive, Thermometer, Database, Signal, Search,
@@ -17,6 +17,7 @@ import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
 import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
 import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
 import TeamAccessPanel from "./components/TeamAccessPanel.jsx";
+import SecurityAuditPanel from "./components/SecurityAuditPanel.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -877,6 +878,7 @@ const NAV=[
     {id:"router",label:"Router Support",   Icon:Server},
     {id:"agents",label:"Router Agents",    Icon:Shield},
     {id:"teamAccess",label:"Team Access",   Icon:Users},
+    {id:"securityAudit",label:"Security Audit",Icon:ClipboardList},
   ]},
   {g:"INSIGHTS", items:[
     {id:"viz",    label:"Visualisation",   Icon:BarChart2},
@@ -1120,6 +1122,7 @@ export default function App() {
     pcap:         <PcapAnalyzer/>,
     agents:       <RouterAgentConsole/>,
     teamAccess:   <TeamAccessPanel/>,
+    securityAudit:<SecurityAuditPanel/>,
     dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
@@ -1192,7 +1195,7 @@ export default function App() {
         <div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
           {NAV
             .map(group => ({ ...group, items: group.items.filter(item =>
-              item.id !== "teamAccess" || ["owner", "admin"].includes(identity?.role)
+              !["teamAccess", "securityAudit"].includes(item.id) || ["owner", "admin"].includes(identity?.role)
             ) }))
             .filter(group => group.items.length > 0)
             .map(group=>(

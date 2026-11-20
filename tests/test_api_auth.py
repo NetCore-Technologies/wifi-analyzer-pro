@@ -24,10 +24,14 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_history = server.HISTORY
         self.previous_agent_health = server.AGENT_HEALTH
         self.previous_report_jobs = server.REPORT_JOBS
+        self.previous_audit = server.AUDIT
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
         server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
+        server.AUDIT = __import__("wifi_analyzer_backend.audit_store", fromlist=["SecurityAuditStore"]).SecurityAuditStore(
+            path=str(Path(self.temp.name) / "security-audit.sqlite3")
+        )
         self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         self.httpd.daemon_threads = True
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -42,6 +46,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.HISTORY = self.previous_history
         server.AGENT_HEALTH = self.previous_agent_health
         server.REPORT_JOBS = self.previous_report_jobs
+        server.AUDIT = self.previous_audit
         self.temp.cleanup()
 
     def request(self, method, path, payload=None, token=None, origin=None):
@@ -1483,6 +1488,44 @@ class AuthenticatedApiTests(unittest.TestCase):
         }, token=owner_token)
         self.assertEqual(status, 200)
         self.assertFalse(updated["user"]["enabled"])
+
+    def test_security_audit_is_permission_gated_persisted_and_verifiable(self):
+        status, setup = self.request("POST", "/api/auth/setup", {
+            "username": "workspace.owner", "password": "owner passphrase is secure",
+        })
+        self.assertEqual(status, 201)
+        owner_token = setup["token"]
+
+        status, created = self.request("POST", "/api/users", {
+            "username": "audit.viewer", "password": "viewer password secure", "role": "viewer",
+        }, token=owner_token)
+        self.assertEqual(status, 201)
+        status, viewer_login = self.request("POST", "/api/auth/login", {
+            "username": "audit.viewer", "password": "viewer password secure",
+        })
+        self.assertEqual(status, 200)
+        viewer_token = viewer_login["token"]
+
+        status, denied = self.request("POST", "/api/agents/enroll", {}, token=viewer_token)
+        self.assertEqual(status, 403)
+        self.assertEqual(denied["required_permission"], "agents.manage")
+
+        status, hidden = self.request("GET", "/api/security/audit", token=viewer_token)
+        self.assertEqual(status, 403)
+        status, audit = self.request("GET", "/api/security/audit?limit=100", token=owner_token)
+        self.assertEqual(status, 200)
+        actions = {event["action"] for event in audit["events"]}
+        self.assertIn("auth.setup.completed", actions)
+        self.assertIn("auth.login.succeeded", actions)
+        self.assertIn("user.created", actions)
+        self.assertIn("authorization.denied", actions)
+        self.assertNotIn("viewer password secure", json.dumps(audit))
+        self.assertNotIn(owner_token, json.dumps(audit))
+
+        status, verification = self.request("GET", "/api/security/audit/verify", token=owner_token)
+        self.assertEqual(status, 200)
+        self.assertTrue(verification["verification"]["valid"])
+        self.assertEqual(verification["verification"]["event_count"], len(audit["events"]))
 
     def test_agent_negotiations_are_persisted_versioned_and_append_only(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
