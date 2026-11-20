@@ -274,16 +274,16 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         self.assertEqual(result["summary"]["packet_count"], 1)
         self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
 
-        malformed_padding = b"\\x00" * ((-len(frame)) % 4)
+        malformed_padding = b"\x00" * ((-len(frame)) % 4)
         malformed_block = pcapng_block(
             3,
-            struct.pack("<I", len(frame)) + frame + malformed_padding + b"\\x00" * 4,
+            struct.pack("<I", len(frame)) + frame + malformed_padding + b"\x00" * 4,
         )
         malformed = pcapng_section() + pcapng_interface(1, snaplen=0) + malformed_block
         with self.assertRaisesRegex(ValueError, "data length does not match"):
             run({"capture_base64": base64.b64encode(malformed).decode("ascii")})
 
-        oversized = b"\\x00" * (262144 + 1)
+        oversized = b"\x00" * (262144 + 1)
         too_large = (
             pcapng_section()
             + pcapng_interface(1, snaplen=0)
