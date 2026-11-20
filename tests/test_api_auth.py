@@ -453,6 +453,23 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["summary"]["batch_count"], 1)
         self.assertEqual(result["result"]["batches"][0]["subscription_id"], "home-alerts")
 
+    def test_pcap_capture_analyzer_is_available_through_authenticated_api(self):
+        denied, response = self.request("POST", "/api/features/pcap_capture_analyzer", {
+            "capture_base64": "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA",
+        })
+        self.assertEqual(denied, 401)
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/pcap_capture_analyzer", {
+            "capture_base64": "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F191")
+        self.assertEqual(result["result"]["status"], "analysed")
+        self.assertEqual(result["result"]["capture"]["link_type_name"], "ethernet")
+        self.assertEqual(result["result"]["summary"]["packet_count"], 0)
+        self.assertFalse(result["result"]["privacy"]["packet_payloads_returned"])
+
     def test_scheduled_report_delivery_package_uses_active_job_lease_and_approved_egress(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
         token = setup["token"]
