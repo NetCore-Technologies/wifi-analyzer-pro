@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 164 independently callable feature modules (F001–F164), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 165 independently callable feature modules (F001–F165), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -18,6 +18,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add a bounded OpenWrt snapshot normalizer for board, interface, radio, association and route records; unknown and credential-like fields are excluded from its output.
 - Add a bounded SQLite router-agent heartbeat registry and authenticated health endpoint with server-received freshness, status/error-code allowlists and no credential persistence.
 - Add authenticated OpenWrt agent snapshot ingestion, credential-free normalisation before storage, duplicate capture protection, bounded per-agent retention and latest-snapshot read APIs.
+- Add deterministic agent snapshot diffs for board metadata, network interfaces, wireless radio configuration, client associations and routes, with capped detail lists and explicit first-snapshot baselines.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
 - Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.

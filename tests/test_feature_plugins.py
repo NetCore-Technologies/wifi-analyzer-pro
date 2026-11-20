@@ -303,18 +303,43 @@ PAYLOADS = {
             "routes":[{"target":"0.0.0.0/0","nexthop":"192.168.1.1","device":"eth0"}]
         }
     }
+,
+    "openwrt_agent_snapshot_diff": {
+        "previous": {
+            "id": 10, "captured_at": "2026-11-20T09:00:00Z",
+            "snapshot": {
+                "adapter_id":"openwrt",
+                "board":{"model":"Example router","kernel":"6.6.1"},
+                "interfaces":[{"interface":"lan","device":"br-lan","protocol":"static","up":true,"ipv4_addresses":["192.168.1.1/24"],"ipv6_addresses":[]}],
+                "wireless_radios":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","band":"5GHz","channel":36,"frequency_mhz":5180,"channel_width_mhz":80,"tx_power_dbm":20,"signal_dbm":-50,"noise_dbm":-95,"security":"WPA3","up":true}],
+                "associations":[],
+                "routes":[{"target":"0.0.0.0/0","gateway":"192.168.1.1","device":"eth0","metric":10}]
+            }
+        },
+        "current": {
+            "id": 11, "captured_at": "2026-11-20T10:00:00Z",
+            "snapshot": {
+                "adapter_id":"openwrt",
+                "board":{"model":"Example router","kernel":"6.6.2"},
+                "interfaces":[{"interface":"lan","device":"br-lan","protocol":"static","up":false,"ipv4_addresses":["192.168.1.1/24"],"ipv6_addresses":[]}],
+                "wireless_radios":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","band":"5GHz","channel":40,"frequency_mhz":5200,"channel_width_mhz":80,"tx_power_dbm":20,"signal_dbm":-51,"noise_dbm":-95,"security":"WPA3","up":true}],
+                "associations":[{"interface":"phy0-ap0","client_mac":"AA:BB:CC:DD:EE:01","signal_dbm":-60,"tx_rate_mbps":433,"rx_rate_mbps":600}],
+                "routes":[{"target":"0.0.0.0/0","gateway":"192.168.1.254","device":"eth0","metric":10}]
+            }
+        }
+    }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_four_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_five_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 164)
-        self.assertEqual(len(set(FEATURE_MODULES)), 164)
-        self.assertEqual(count(), 164)
-        self.assertEqual(len(entries), 164)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 164)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 165)])
+        self.assertEqual(len(FEATURE_MODULES), 165)
+        self.assertEqual(len(set(FEATURE_MODULES)), 165)
+        self.assertEqual(count(), 165)
+        self.assertEqual(len(entries), 165)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 165)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 166)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -965,6 +990,32 @@ class FeatureCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "agent_id"):
             run("openwrt_agent_snapshot_ingest", {
                 "agent_id":"../admin", "snapshot":{"captured_at":"2026-11-20T10:00:00Z"}
+            })
+
+    def test_openwrt_agent_snapshot_diff_reports_board_interface_radio_client_and_route_changes(self):
+        result = run("openwrt_agent_snapshot_diff", PAYLOADS["openwrt_agent_snapshot_diff"])["result"]
+        self.assertEqual(result["status"], "compared")
+        self.assertEqual(result["previous_snapshot_id"], 10)
+        self.assertEqual(result["current_snapshot_id"], 11)
+        self.assertEqual(result["summary"]["board_changed_field_count"], 1)
+        self.assertEqual(result["summary"]["interface_changed"], 1)
+        self.assertEqual(result["summary"]["radio_changed"], 1)
+        self.assertEqual(result["summary"]["association_added"], 1)
+        self.assertEqual(result["summary"]["route_changed"], 1)
+        self.assertEqual(result["changes"]["wireless_radios"]["changed"][0]["identity"]["interface"], "phy0-ap0")
+
+    def test_openwrt_agent_snapshot_diff_marks_initial_baseline_and_rejects_duplicate_interfaces(self):
+        current = PAYLOADS["openwrt_agent_snapshot_diff"]["current"]
+        initial = run("openwrt_agent_snapshot_diff", {"current": current})["result"]
+        self.assertEqual(initial["status"], "initial_snapshot")
+        self.assertEqual(initial["summary"]["total_changes"], 0)
+        duplicate = {
+            "adapter_id":"openwrt", "captured_at":"2026-11-20T10:00:00Z",
+            "interfaces":[{"interface":"lan"},{"interface":"lan"}],
+        }
+        with self.assertRaisesRegex(ValueError, "duplicate identities"):
+            run("openwrt_agent_snapshot_diff", {
+                "current":{"snapshot":duplicate,"captured_at":"2026-11-20T10:00:00Z"}
             })
 
 if __name__ == "__main__":

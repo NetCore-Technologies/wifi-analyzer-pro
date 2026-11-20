@@ -280,6 +280,32 @@ class RouterAgentHealthStore:
             })
         return results
 
+    def get_recent_snapshots(self, agent_id: str, *, limit: int = 2) -> list[dict]:
+        if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
+            raise ValueError("agent_id must be a 1 to 64 character identifier")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 5:
+            raise ValueError("snapshot limit must be an integer between 1 and 5")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, agent_id, adapter_id, captured_at, received_at, payload
+                FROM agent_router_snapshots WHERE agent_id = ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (agent_id, limit),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "agent_id": row["agent_id"],
+                "adapter_id": row["adapter_id"],
+                "captured_at": row["captured_at"],
+                "received_at": row["received_at"],
+                "snapshot": json.loads(row["payload"]),
+            }
+            for row in reversed(rows)
+        ]
+
     def get_latest_snapshot(self, agent_id: str) -> dict | None:
         if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
             raise ValueError("agent_id must be a 1 to 64 character identifier")

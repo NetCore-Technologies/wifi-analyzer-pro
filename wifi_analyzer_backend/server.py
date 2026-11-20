@@ -728,6 +728,22 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/agents/snapshots":
                 self.send_json({"snapshots": AGENT_HEALTH.list_latest_snapshots()})
+            elif path.startswith("/api/agents/snapshots/") and path.endswith("/diff"):
+                agent_id = unquote(path[len("/api/agents/snapshots/"):-len("/diff")])
+                if not agent_id or "/" in agent_id:
+                    self.send_json({"error": "Agent snapshot diff not found"}, 404)
+                    return
+                snapshots = AGENT_HEALTH.get_recent_snapshots(agent_id, limit=2)
+                if not snapshots:
+                    self.send_json({"error": "Agent snapshot not found"}, 404)
+                    return
+                previous = snapshots[0] if len(snapshots) > 1 else None
+                current = snapshots[-1]
+                report = run_feature("openwrt_agent_snapshot_diff", {
+                    "previous": previous,
+                    "current": current,
+                })
+                self.send_json(report)
             elif path.startswith("/api/agents/snapshots/"):
                 agent_id = unquote(path[len("/api/agents/snapshots/"):])
                 if not agent_id or "/" in agent_id:

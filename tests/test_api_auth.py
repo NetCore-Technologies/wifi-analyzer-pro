@@ -76,8 +76,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 164)
-        self.assertEqual(len(catalog["features"]), 164)
+        self.assertEqual(catalog["count"], 165)
+        self.assertEqual(len(catalog["features"]), 165)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -89,6 +89,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("openwrt_snapshot_normalizer", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_health_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_agent_snapshot_ingest", {item["slug"] for item in catalog["features"]})
+        self.assertIn("openwrt_agent_snapshot_diff", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -421,6 +422,34 @@ class AuthenticatedApiTests(unittest.TestCase):
         }, token=token)
         self.assertEqual(status, 400)
         self.assertIn("inventory.snapshot", rejected["error"])
+
+
+    def test_openwrt_agent_snapshot_diff_endpoint_compares_two_retained_captures(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        token = setup["token"]
+        self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"diff-agent","adapter_id":"openwrt","agent_version":"1.2.0",
+            "status":"healthy","capabilities":["inventory.snapshot"],
+        }, token=token)
+        def capture(when, channel, kernel):
+            snapshot = {
+                "captured_at":when,
+                "board":{"model":"Router","kernel":kernel},
+                "interfaces":[{"interface":"lan","up":True}],
+                "wireless":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":5180,"channel":channel,"channel_width_mhz":80}],
+                "associations":[],
+                "routes":[],
+            }
+            return self.request("POST", "/api/agents/snapshot", {
+                "agent_id":"diff-agent","snapshot":snapshot,
+            }, token=token)
+        self.assertEqual(capture("2026-11-20T09:00:00Z",36,"6.6.1")[0],201)
+        self.assertEqual(capture("2026-11-20T10:00:00Z",40,"6.6.2")[0],201)
+        status, report = self.request("GET", "/api/agents/snapshots/diff-agent/diff", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(report["result"]["status"], "compared")
+        self.assertEqual(report["result"]["summary"]["board_changed_field_count"], 1)
+        self.assertEqual(report["result"]["summary"]["radio_changed"], 1)
 
 if __name__ == "__main__":
     unittest.main()

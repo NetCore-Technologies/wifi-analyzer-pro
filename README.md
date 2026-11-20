@@ -111,6 +111,7 @@ The local HTTP service exposes:
 | `POST /api/agents/snapshot` | Store a normalised OpenWrt snapshot from a previously registered agent |
 | `GET /api/agents/snapshots` | List latest snapshot metadata for registered agents |
 | `GET /api/agents/snapshots/{agent_id}` | Read one agent’s latest credential-free normalised snapshot |
+| `GET /api/agents/snapshots/{agent_id}/diff` | Compare the two most recent retained snapshots and list board/network/wireless/client/route changes |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.
