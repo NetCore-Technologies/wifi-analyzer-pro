@@ -936,8 +936,8 @@ class FeatureCatalogTests(unittest.TestCase):
             run("router_agent_health_report", {"now":"2026-11-20T10:00:00","agents":[]})
         with self.assertRaisesRegex(ValueError, "unique"):
             run("router_agent_health_report", {"now":"2026-11-20T10:00:00Z","agents":[
-                {"agent_id":"a","last_seen_at":"2026-11-20T09:59:59Z"},
-                {"agent_id":"a","last_seen_at":"2026-11-20T09:59:58Z"},
+                {"agent_id":"a","status":"healthy","last_seen_at":"2026-11-20T09:59:59Z"},
+                {"agent_id":"a","status":"healthy","last_seen_at":"2026-11-20T09:59:58Z"},
             ]})
         with self.assertRaisesRegex(ValueError, "between 10 and 86400"):
             run("router_agent_health_report", {"now":"2026-11-20T10:00:00Z","stale_after_seconds":5})
