@@ -23,7 +23,7 @@ MAGIC = {
     b"\x4d\x3c\xb2\xa1": ("little", 1_000_000_000, "nanosecond"),
     b"\xa1\xb2\x3c\x4d": ("big", 1_000_000_000, "nanosecond"),
 }
-SUPPORTED_LINK_TYPES = {1: "ethernet", 105: "ieee80211", 127: "radiotap"}
+SUPPORTED_LINK_TYPES = {1: "ethernet", 105: "ieee80211", 113: "linux_cooked", 127: "radiotap", 276: "linux_cooked_v2"}
 VLAN_TYPES = {0x8100, 0x88A8, 0x9100}
 IP_PROTOCOLS = {
     1: "icmp",
@@ -159,12 +159,7 @@ def _ipv6(packet: bytes, offset: int, state: dict) -> None:
     )
 
 
-def _ethernet(packet: bytes, state: dict) -> None:
-    if len(packet) < 14:
-        state["malformed"] += 1
-        return
-    cursor = 14
-    ether_type = _integer(packet, 12, 2, "big")
+def _ether_payload(packet: bytes, cursor: int, ether_type: int, state: dict) -> None:
     vlan_depth = 0
     while ether_type in VLAN_TYPES and vlan_depth < 4:
         if len(packet) < cursor + 4:
@@ -181,6 +176,29 @@ def _ethernet(packet: bytes, state: dict) -> None:
         _ipv6(packet, cursor, state)
     elif ether_type == 0x0806:
         state["arp"] += 1
+
+
+def _ethernet(packet: bytes, state: dict) -> None:
+    if len(packet) < 14:
+        state["malformed"] += 1
+        return
+    _ether_payload(packet, 14, _integer(packet, 12, 2, "big"), state)
+
+
+def _linux_cooked(packet: bytes, state: dict, *, version: int) -> None:
+    if version == 1:
+        if len(packet) < 16:
+            state["malformed"] += 1
+            return
+        ether_type = _integer(packet, 14, 2, "big")
+        cursor = 16
+    else:
+        if len(packet) < 20:
+            state["malformed"] += 1
+            return
+        ether_type = _integer(packet, 0, 2, "big")
+        cursor = 20
+    _ether_payload(packet, cursor, ether_type, state)
 
 
 def _wireless(packet: bytes, state: dict) -> None:
@@ -221,6 +239,10 @@ def _parse_packet(packet: bytes, link_type: int, state: dict) -> None:
         _ethernet(packet, state)
     elif link_type == 105:
         _wireless(packet, state)
+    elif link_type == 113:
+        _linux_cooked(packet, state, version=1)
+    elif link_type == 276:
+        _linux_cooked(packet, state, version=2)
     elif link_type == 127:
         if len(packet) < 8 or packet[0] != 0:
             state["malformed"] += 1
@@ -382,7 +404,7 @@ FEATURE = {
     "name": "Bounded PCAP capture analyzer",
     "category": "Packet analysis",
     "description": (
-        "Analyse bounded classic PCAP files for Ethernet, IPv4/IPv6, TCP/UDP, DSCP and "
+        "Analyse bounded classic PCAP files for Ethernet, Linux cooked, IPv4/IPv6, TCP/UDP, DSCP and "
         "802.11/radiotap frame statistics without returning packet payloads or endpoint addresses."
     ),
     "parameters": {
