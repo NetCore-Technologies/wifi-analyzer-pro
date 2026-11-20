@@ -12,6 +12,9 @@ import {
   Settings, Gauge, Network, Eye, Rss, ScanLine, ChevronRight,
   Moon, Sun, Menu, X, Terminal, Package, Antenna
 } from "lucide-react";
+import { apiFetch } from "./lib/api.js";
+import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
+import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
 
@@ -489,7 +492,7 @@ function SpeedPanel({ speedData }) {
     let p=0;
     const t=setInterval(()=>{p+=1;setPct(p);if(p>=50)setPhase("upload");if(p>=99){clearInterval(t);}},120);
     try{
-      const r=await fetch(`${API_BASE}/api/speedtest`,{signal:AbortSignal.timeout(60000)});
+      const r=await apiFetch(`${API_BASE}/api/speedtest`,{signal:AbortSignal.timeout(60000)});
       const d=await r.json();
       clearInterval(t);setPct(100);setPhase("done");
       setRealDl(d.download);setRealUl(d.upload);setRealPing(d.ping);
@@ -843,10 +846,12 @@ const NAV=[
   {g:"ADVANCED", items:[
     {id:"advanced",label:"Advanced",       Icon:Wrench},
     {id:"api",     label:"API",            Icon:Code},
+    {id:"featureTools", label:"Feature Workbench", Icon:Package},
   ]},
 ];
 
 export default function App() {
+  const { logout } = useAuth();
   const [tab,setTab]=useState("dashboard");
   const [scanning,setScanning]=useState(false);
   const [collapsed,setCollapsed]=useState(false);
@@ -864,7 +869,7 @@ export default function App() {
     let disposed=false;
     const refreshLiveData=async()=>{
       try{
-        const hasResponse=await fetch(`${API_BASE}/api/has_wifi`,{signal:AbortSignal.timeout(4000)});
+        const hasResponse=await apiFetch(`${API_BASE}/api/has_wifi`,{signal:AbortSignal.timeout(4000)});
         if(!hasResponse.ok)throw new Error(`Wi-Fi probe returned HTTP ${hasResponse.status}`);
         const availability=await hasResponse.json();
         if(!availability.has_wifi){
@@ -872,10 +877,10 @@ export default function App() {
           return;
         }
         const responses=await Promise.all([
-          fetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(15000)}),
-          fetch(`${API_BASE}/api/devices`,{signal:AbortSignal.timeout(10000)}),
-          fetch(`${API_BASE}/api/system`,{signal:AbortSignal.timeout(5000)}),
-          fetch(`${API_BASE}/api/diagnostics`,{signal:AbortSignal.timeout(18000)}),
+          apiFetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(15000)}),
+          apiFetch(`${API_BASE}/api/devices`,{signal:AbortSignal.timeout(10000)}),
+          apiFetch(`${API_BASE}/api/system`,{signal:AbortSignal.timeout(5000)}),
+          apiFetch(`${API_BASE}/api/diagnostics`,{signal:AbortSignal.timeout(18000)}),
         ]);
         if(responses.some(response=>!response.ok))throw new Error("One or more local API requests failed");
         const [scanData,deviceData,systemData,diagnosticData]=await Promise.all(responses.map(response=>response.json()));
@@ -913,7 +918,7 @@ export default function App() {
     if(scanning)return;
     setScanning(true);
     try{
-      const response=await fetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(18000)});
+      const response=await apiFetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(18000)});
       if(!response.ok)throw new Error(`HTTP ${response.status}`);
       const data=await response.json();
       if(!Array.isArray(data.networks))throw new Error("The scan endpoint returned an invalid response");
@@ -933,6 +938,7 @@ export default function App() {
   };
 
   const panels={
+    featureTools: <FeatureWorkbench/>,
     dashboard:   <DashboardPanel rssiData={rssiData} speedData={speedData} networks={networks} devices={devices} diag={liveDiag}/>,
     wireless:    <WirelessPanel networks={networks}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
@@ -1071,6 +1077,12 @@ export default function App() {
                 fontSize:12,fontWeight:600,transition:"all 0.2s"}}>
               <RefreshCw size={12} style={{animation:scanning?"spin 0.7s linear infinite":"none"}}/>
               {scanning?"Scanning...":"Scan Now"}
+            </button>
+            <button onClick={logout} title="Sign out" aria-label="Sign out"
+              style={{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",
+                background:C.card2,border:`1px solid ${C.border}`,borderRadius:7,
+                cursor:"pointer",color:C.muted,transition:"all 0.15s"}}>
+              <Lock size={14}/>
             </button>
             <button onClick={()=>addToast("Settings coming in v1.1.0","info")}
               style={{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",
