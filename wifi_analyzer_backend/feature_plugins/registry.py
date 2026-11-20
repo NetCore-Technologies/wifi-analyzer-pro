@@ -191,6 +191,7 @@ FEATURE_MODULES = (
     "feature_188_router_scheduled_report_job_intake",
     "feature_189_router_scheduled_report_delivery_package",
     "feature_190_router_webhook_subscription_router",
+    "feature_191_pcap_capture_analyzer",
 )
 
 @lru_cache(maxsize=1)
