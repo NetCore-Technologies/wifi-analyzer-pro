@@ -159,18 +159,26 @@ PAYLOADS = {
 
     "floor_plan_anchor_validation": {"floorplans":[{"floorplan_id":"level-1","site_id":"home","width_px":1600,"height_px":900}],"access_points":[{"ap_id":"ap-1","site_id":"home"}],"anchors":[{"ap_id":"ap-1","floorplan_id":"level-1","x":0.25,"y":0.5}]},
 
+    "site_inventory_snapshot_diff": {"previous":[{"bssid":"00:11:22:33:44:55","site_id":"home","band":"5GHz","channel":36}],"current":[{"bssid":"00:11:22:33:44:55","site_id":"remote","band":"5GHz","channel":40},{"bssid":"00:11:22:33:44:66","site_id":"home","band":"2.4GHz","channel":6}]},
+
+    "site_network_segment_capacity": {"segments":[{"segment_id":"home","site_id":"home","cidr":"192.168.1.0/24","in_use_count":200,"reserved_count":5},{"segment_id":"ipv6","site_id":"home","cidr":"2001:db8::/64"}]},
+
+    "site_gateway_redundancy_audit": {"gateways":[{"gateway_id":"gw-a","site_id":"home","group_id":"edge","protocol":"vrrp","ip":"192.168.1.1","state":"active","priority":120},{"gateway_id":"gw-b","site_id":"home","group_id":"edge","protocol":"vrrp","ip":"192.168.1.2","state":"standby","priority":100}]},
+
+    "floorplan_zone_assignment": {"zones":[{"floorplan_id":"level-1","zone_id":"left","name":"Left wing","polygon":[{"x":0,"y":0},{"x":0.6,"y":0},{"x":0.6,"y":1},{"x":0,"y":1}]},{"floorplan_id":"level-1","zone_id":"right","name":"Right wing","polygon":[{"x":0.4,"y":0},{"x":1,"y":0},{"x":1,"y":1},{"x":0.4,"y":1}]}],"anchors":[{"ap_id":"ap-left","floorplan_id":"level-1","x":0.2,"y":0.5},{"ap_id":"ap-center","floorplan_id":"level-1","x":0.5,"y":0.5}]},
+
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 144)
-        self.assertEqual(len(set(FEATURE_MODULES)), 144)
-        self.assertEqual(count(), 144)
-        self.assertEqual(len(entries), 144)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 144)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 145)])
+        self.assertEqual(len(FEATURE_MODULES), 148)
+        self.assertEqual(len(set(FEATURE_MODULES)), 148)
+        self.assertEqual(count(), 148)
+        self.assertEqual(len(entries), 148)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 148)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 149)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -344,6 +352,57 @@ class FeatureCatalogTests(unittest.TestCase):
                     {"ap_id": "a", "floorplan_id": "level-1", "x": 0.2, "y": 0.2}
                 ]
             })
+
+
+    def test_site_inventory_diff_reports_added_removed_changes_and_moves(self):
+        result = run("site_inventory_snapshot_diff", {
+            "previous": [
+                {"bssid": "00:11:22:33:44:55", "site_id": "home", "channel": 36},
+                {"bssid": "00:11:22:33:44:66", "site_id": "home"}
+            ],
+            "current": [
+                {"bssid": "00:11:22:33:44:55", "site_id": "remote", "channel": 40},
+                {"bssid": "00:11:22:33:44:77", "site_id": "home"}
+            ]
+        })["result"]
+        self.assertEqual(len(result["added"]), 1)
+        self.assertEqual(len(result["removed"]), 1)
+        self.assertEqual(len(result["changed"]), 1)
+        self.assertEqual(len(result["site_moves"]), 1)
+
+    def test_site_segment_capacity_uses_only_supplied_counts(self):
+        result = run("site_network_segment_capacity", {
+            "segments": [
+                {"segment_id": "main", "cidr": "192.168.1.0/24", "in_use_count": 200, "reserved_count": 5},
+                {"segment_id": "unknown", "cidr": "192.168.2.0/24"}
+            ]
+        })["result"]
+        self.assertEqual(result["segments"][0]["usable_capacity"], 254)
+        self.assertEqual(result["segments"][0]["status"], "warning")
+        self.assertEqual(result["unknown_segment_count"], 1)
+        self.assertIsNone(result["segments"][1]["utilisation_pct"])
+
+    def test_gateway_redundancy_audit_reports_missing_standby(self):
+        result = run("site_gateway_redundancy_audit", {
+            "gateways": [
+                {"gateway_id": "a", "site_id": "home", "group_id": "g1", "protocol": "vrrp", "ip": "192.168.1.1", "state": "active"}
+            ]
+        })["result"]
+        self.assertIn("no_confirmed_standby_gateway", result["groups"][0]["issues"])
+
+    def test_floorplan_zones_identify_ambiguous_overlaps(self):
+        result = run("floorplan_zone_assignment", {
+            "zones": [
+                {"floorplan_id": "f1", "zone_id": "a", "polygon": [{"x":0,"y":0},{"x":0.6,"y":0},{"x":0.6,"y":1},{"x":0,"y":1}]},
+                {"floorplan_id": "f1", "zone_id": "b", "polygon": [{"x":0.4,"y":0},{"x":1,"y":0},{"x":1,"y":1},{"x":0.4,"y":1}]}
+            ],
+            "anchors": [
+                {"ap_id": "left", "floorplan_id": "f1", "x":0.2,"y":0.5},
+                {"ap_id": "overlap", "floorplan_id": "f1", "x":0.5,"y":0.5}
+            ]
+        })["result"]
+        self.assertEqual(result["assigned_count"], 1)
+        self.assertEqual(result["ambiguous_count"], 1)
 
 
 if __name__ == "__main__":
