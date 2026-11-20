@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 167)
-        self.assertEqual(len(catalog["features"]), 167)
+        self.assertEqual(catalog["count"], 168)
+        self.assertEqual(len(catalog["features"]), 168)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -106,6 +106,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("openwrt_agent_snapshot_diff", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_credential_scope", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_snapshot_delivery_envelope", {item["slug"] for item in catalog["features"]})
+        self.assertIn("router_agent_negotiation_audit", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -617,6 +618,44 @@ class AuthenticatedApiTests(unittest.TestCase):
         snapshot_ids = {body["delivery"]["id"] for _, body in results}
         self.assertEqual(len(snapshot_ids), 1)
         self.assertEqual(sum(body["delivery"]["replayed"] for _, body in results), 1)
+
+
+    def test_agent_negotiations_are_persisted_versioned_and_append_only(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        self.enroll_agent(admin_token, "audit-agent", ["system.board"])
+        status, history = self.request("GET", "/api/agents/audit-agent/negotiations", token=admin_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(history["negotiations"]), 1)
+        first = history["negotiations"][0]
+        self.assertEqual(first["negotiation"]["adapter_id"], "openwrt")
+        self.assertEqual(first["negotiation"]["adapter_version"], "0.1.0")
+        self.assertEqual(first["negotiation"]["capability_schema_version"], "1.0")
+        self.assertEqual(first["negotiation"]["advertised_capabilities"], ["system.board"])
+        self.assertEqual(first["negotiation"]["requested_capabilities"], ["system.board"])
+        self.assertEqual(first["negotiation"]["negotiated_capabilities"], ["system.board"])
+        self.assertEqual(first["negotiation"]["permission"], "read")
+        self.assertNotIn("token", first)
+        self.assertNotIn("token_hash", first["negotiation"])
+
+        status, latest = self.request("GET", "/api/agents/negotiations", token=admin_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(latest["negotiations"]), 1)
+        self.assertEqual(latest["negotiations"][0]["id"], first["id"])
+
+        self.request("POST", "/api/agents/audit-agent/credentials/revoke", {}, token=admin_token)
+        self.enroll_agent(admin_token, "audit-agent", ["system.board", "inventory.snapshot"])
+        status, history = self.request("GET", "/api/agents/audit-agent/negotiations", token=admin_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(history["negotiations"]), 2)
+        second = history["negotiations"][-1]
+        self.assertGreater(second["id"], first["id"])
+        self.assertEqual(
+            second["negotiation"]["negotiated_capabilities"],
+            ["inventory.snapshot", "system.board"],
+        )
+        self.assertEqual(history["negotiations"][0]["id"], first["id"])
+
 
 if __name__ == "__main__":
     unittest.main()

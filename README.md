@@ -112,6 +112,8 @@ The local HTTP service exposes:
 | `GET /api/agents/health` | Report latest agent health using server-received heartbeat timestamps |
 | `POST /api/agents/enroll` | Admin-only enrolment that issues a one-time, read-only scoped agent token |
 | `GET /api/agents/credentials` | Admin-only credential metadata listing; token hashes and bearer tokens are never returned |
+| `GET /api/agents/negotiations` | Admin-only latest versioned capability-negotiation record for each enrolled agent |
+| `GET /api/agents/{agent_id}/negotiations` | Admin-only negotiation history for one agent, in enrolment chronology within the retained window |
 | `POST /api/agents/{agent_id}/credentials/rotate` | Admin-only token rotation; the previous token is invalidated immediately |
 | `POST /api/agents/{agent_id}/credentials/revoke` | Admin-only credential revocation |
 | `POST /api/agents/snapshot` | Store a normalised OpenWrt snapshot from a previously registered agent |

@@ -171,6 +171,7 @@ FEATURE_MODULES = (
     "feature_165_openwrt_agent_snapshot_diff",
     "feature_166_router_agent_credential_scope",
     "feature_167_openwrt_snapshot_delivery_envelope",
+    "feature_168_router_agent_negotiation_audit",
 )
 
 @lru_cache(maxsize=1)

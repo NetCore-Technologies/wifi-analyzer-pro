@@ -718,6 +718,9 @@ class Handler(BaseHTTPRequestHandler):
             "/api/agents/credentials": lambda: {
                 "credentials": AGENT_HEALTH.list_agent_credentials(),
             },
+            "/api/agents/negotiations": lambda: {
+                "negotiations": AGENT_HEALTH.list_latest_agent_negotiations(),
+            },
             "/api/agents/health": lambda: run_feature("router_agent_health_report", {
                 "agents": AGENT_HEALTH.list_agents(),
                 "now": datetime.now(timezone.utc).isoformat(),
@@ -740,7 +743,15 @@ class Handler(BaseHTTPRequestHandler):
             "/health": lambda: {"status": "ok", "version": APP_VERSION, "os": OS, "mode": "demo" if DEMO_MODE else "live"},
         }
         try:
-            if path == "/api/agents/snapshots":
+            if path.startswith("/api/agents/") and path.endswith("/negotiations"):
+                agent_id = unquote(path[len("/api/agents/"):-len("/negotiations")]).strip("/")
+                if not agent_id or "/" in agent_id:
+                    self.send_json({"error": "Agent negotiation history not found"}, 404)
+                    return
+                self.send_json({
+                    "negotiations": AGENT_HEALTH.get_agent_negotiations(agent_id, limit=20)
+                })
+            elif path == "/api/agents/snapshots":
                 self.send_json({"snapshots": AGENT_HEALTH.list_latest_snapshots()})
             elif path.startswith("/api/agents/snapshots/") and path.endswith("/diff"):
                 agent_id = unquote(path[len("/api/agents/snapshots/"):-len("/diff")])
@@ -881,12 +892,14 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 scope = run_feature("router_agent_credential_scope", payload)["result"]
+                negotiation = run_feature("router_agent_negotiation_audit", scope)["result"]
                 credential = AGENT_HEALTH.enroll_agent(
                     agent_id=scope["agent_id"],
                     adapter_id=scope["adapter_id"],
                     agent_version=scope["agent_version"],
                     allowed_capabilities=scope["allowed_capabilities"],
                     ttl_days=payload.get("ttl_days", 90),
+                    negotiation=negotiation,
                 )
             except AgentCredentialConflictError as error:
                 self.send_json({"error": str(error)}, 409)

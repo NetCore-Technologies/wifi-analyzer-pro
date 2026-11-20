@@ -350,18 +350,34 @@ PAYLOADS = {
             "routes":[{"target":"0.0.0.0/0","nexthop":"192.168.1.1","device":"eth0"}]
         }
     }
+,
+    "router_agent_negotiation_audit": {
+        "agent_id": "openwrt-home",
+        "adapter_id": "openwrt",
+        "agent_version": "1.2.0",
+        "adapter_version": "0.1.0",
+        "capability_schema_version": "1.0",
+        "advertised_capabilities": ["system.board", "network.interfaces", "wireless.radios"],
+        "requested_capabilities": ["system.board", "wireless.radios"],
+        "negotiated_capabilities": ["system.board", "wireless.radios"],
+        "rejected_capabilities": [],
+        "requested_permissions": ["read"],
+        "negotiated_permissions": ["read"],
+        "rejected_permissions": [],
+        "permission": "read"
+    }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_seven_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_eight_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 167)
-        self.assertEqual(len(set(FEATURE_MODULES)), 167)
-        self.assertEqual(count(), 167)
-        self.assertEqual(len(entries), 167)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 167)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 168)])
+        self.assertEqual(len(FEATURE_MODULES), 168)
+        self.assertEqual(len(set(FEATURE_MODULES)), 168)
+        self.assertEqual(count(), 168)
+        self.assertEqual(len(entries), 168)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 168)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 169)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -1076,6 +1092,28 @@ class FeatureCatalogTests(unittest.TestCase):
                 "agent_id":"../admin","delivery_id":"6c6329b5-8611-4c45-8926-5d6a85bc9f7d",
                 "snapshot":{"captured_at":"2026-11-20T10:00:00Z"},
             })
+
+    def test_router_agent_negotiation_audit_preserves_versioned_read_only_scope(self):
+        result = run("router_agent_negotiation_audit", PAYLOADS["router_agent_negotiation_audit"])["result"]
+        self.assertEqual(result["adapter_id"], "openwrt")
+        self.assertEqual(result["adapter_version"], "0.1.0")
+        self.assertEqual(result["capability_schema_version"], "1.0")
+        self.assertEqual(result["negotiated_capabilities"], ["system.board", "wireless.radios"])
+        self.assertEqual(result["negotiated_permissions"], ["read"])
+        self.assertEqual(result["rejected_capabilities"], [])
+        self.assertEqual(result["permission"], "read")
+
+    def test_router_agent_negotiation_audit_rejects_write_permissions_and_unadvertised_scopes(self):
+        payload = PAYLOADS["router_agent_negotiation_audit"]
+        with self.assertRaisesRegex(ValueError, "read permission"):
+            run("router_agent_negotiation_audit", {**payload, "requested_permissions":["read","config.write"]})
+        with self.assertRaisesRegex(ValueError, "both requested and advertised"):
+            run("router_agent_negotiation_audit", {
+                **payload,
+                "negotiated_capabilities":["system.board","network.routes"],
+            })
+        with self.assertRaisesRegex(ValueError, "version syntax"):
+            run("router_agent_negotiation_audit", {**payload, "adapter_version":"v0.1"})
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,6 +23,8 @@ MAX_STORED_SNAPSHOT_BYTES = 512 * 1024
 MAX_STORED_SNAPSHOTS_TOTAL = 1000
 MAX_DELIVERIES_PER_AGENT = 500
 MAX_DELIVERIES_TOTAL = 5000
+MAX_NEGOTIATIONS_PER_AGENT = 100
+MAX_NEGOTIATIONS_TOTAL = 5000
 DEFAULT_AGENT_TOKEN_TTL_DAYS = 90
 MAX_AGENT_TOKEN_TTL_DAYS = 365
 _AGENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
@@ -123,6 +125,21 @@ class RouterAgentHealthStore:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS router_agent_negotiations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id TEXT NOT NULL,
+                adapter_id TEXT NOT NULL,
+                negotiated_at TEXT NOT NULL,
+                negotiation_json TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_router_agent_negotiations_agent_id_id "
+            "ON router_agent_negotiations(agent_id, id DESC)"
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS router_agent_heartbeats (
                 agent_id TEXT PRIMARY KEY,
                 adapter_id TEXT NOT NULL,
@@ -168,6 +185,7 @@ class RouterAgentHealthStore:
     def enroll_agent(
         self, *, agent_id: str, adapter_id: str, agent_version: str,
         allowed_capabilities: list[str], ttl_days: int = DEFAULT_AGENT_TOKEN_TTL_DAYS,
+        negotiation: dict | None = None,
     ) -> dict:
         if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
             raise ValueError("agent_id must be a 1 to 64 character identifier")
@@ -194,6 +212,100 @@ class RouterAgentHealthStore:
             seen.add(capability)
         if "system.board" not in seen:
             raise ValueError("Agent enrollment must include the system.board read capability")
+
+        if negotiation is None:
+            negotiation = {
+                "agent_id": agent_id,
+                "adapter_id": adapter_id,
+                "agent_version": agent_version,
+                "adapter_version": manifest["adapter_version"],
+                "capability_schema_version": manifest["capability_schema_version"],
+                "advertised_capabilities": sorted(seen),
+                "requested_capabilities": sorted(seen),
+                "negotiated_capabilities": sorted(seen),
+                "rejected_capabilities": [],
+                "requested_permissions": ["read"],
+                "negotiated_permissions": ["read"],
+                "rejected_permissions": [],
+                "permission": "read",
+            }
+        if not isinstance(negotiation, dict):
+            raise ValueError("negotiation must be a validated negotiation record")
+        expected_record = {
+            "agent_id": agent_id,
+            "adapter_id": adapter_id,
+            "agent_version": agent_version,
+            "negotiated_capabilities": sorted(seen),
+            "permission": "read",
+        }
+        for field, expected in expected_record.items():
+            if negotiation.get(field) != expected:
+                raise ValueError(f"negotiation.{field} does not match the issued credential")
+        for field in ("adapter_version", "capability_schema_version"):
+            value = negotiation.get(field)
+            if not isinstance(value, str) or not value or len(value) > 32:
+                raise ValueError(f"negotiation.{field} is invalid")
+
+        safe_record = {}
+        for field in ("advertised_capabilities", "requested_capabilities", "negotiated_capabilities"):
+            value = negotiation.get(field)
+            if not isinstance(value, list) or len(value) > MAX_CAPABILITIES:
+                raise ValueError(f"negotiation.{field} must be a bounded list")
+            if any(not isinstance(item, str) or not _CAPABILITY.fullmatch(item) for item in value):
+                raise ValueError(f"negotiation.{field} contains an invalid capability")
+            if len(set(value)) != len(value):
+                raise ValueError(f"negotiation.{field} must contain unique values")
+            safe_record[field] = sorted(value)
+
+        for field, identity_key in (
+            ("rejected_capabilities", "capability"),
+            ("rejected_permissions", "permission"),
+        ):
+            value = negotiation.get(field)
+            if not isinstance(value, list) or len(value) > MAX_CAPABILITIES:
+                raise ValueError(f"negotiation.{field} must be a bounded list")
+            safe_items = []
+            for item in value:
+                if not isinstance(item, dict) or set(item) != {identity_key, "reason"}:
+                    raise ValueError(f"negotiation.{field} contains an invalid rejection")
+                identity = item[identity_key]
+                reason = item["reason"]
+                if not isinstance(identity, str) or not _CAPABILITY.fullmatch(identity):
+                    raise ValueError(f"negotiation.{field} contains an invalid identifier")
+                if not isinstance(reason, str) or not _CAPABILITY.fullmatch(reason):
+                    raise ValueError(f"negotiation.{field} contains an invalid reason")
+                safe_items.append({identity_key: identity, "reason": reason})
+            safe_record[field] = safe_items
+
+        for field in ("requested_permissions", "negotiated_permissions"):
+            value = negotiation.get(field)
+            if value != ["read"]:
+                raise ValueError(f"negotiation.{field} must contain only read")
+            safe_record[field] = ["read"]
+        if negotiation.get("rejected_permissions") != []:
+            raise ValueError("router agent negotiation cannot reject the required read permission")
+        safe_record.update({
+            "agent_id": agent_id,
+            "adapter_id": adapter_id,
+            "agent_version": agent_version,
+            "adapter_version": negotiation["adapter_version"],
+            "capability_schema_version": negotiation["capability_schema_version"],
+            "permission": "read",
+        })
+        if not set(safe_record["negotiated_capabilities"]).issubset(
+            set(safe_record["requested_capabilities"]) & set(safe_record["advertised_capabilities"])
+        ):
+            raise ValueError("negotiated capabilities must be both requested and advertised")
+        if safe_record["negotiated_capabilities"] != sorted(seen):
+            raise ValueError("negotiated capabilities do not match the credential scope")
+        try:
+            negotiation_json = json.dumps(
+                safe_record, ensure_ascii=False, separators=(",", ":"), sort_keys=True, allow_nan=False
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("negotiation must contain safe JSON values") from error
+        if len(negotiation_json.encode("utf-8")) > 16 * 1024:
+            raise ValueError("negotiation record exceeds the 16 KiB limit")
 
         now = datetime.now(timezone.utc)
         created_at = now.isoformat()
@@ -231,11 +343,89 @@ class RouterAgentHealthStore:
                  json.dumps(sorted(seen), separators=(",", ":")), created_at, expires_at),
             )
             connection.execute("DELETE FROM router_agent_heartbeats WHERE agent_id = ?", (agent_id,))
+            connection.execute(
+                """
+                INSERT INTO router_agent_negotiations
+                    (agent_id, adapter_id, negotiated_at, negotiation_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                (agent_id, adapter_id, created_at, negotiation_json),
+            )
+            connection.execute(
+                """
+                DELETE FROM router_agent_negotiations
+                WHERE id NOT IN (
+                    SELECT id FROM router_agent_negotiations ORDER BY id DESC LIMIT ?
+                )
+                """,
+                (MAX_NEGOTIATIONS_TOTAL,),
+            )
+            connection.execute(
+                """
+                DELETE FROM router_agent_negotiations
+                WHERE agent_id = ? AND id NOT IN (
+                    SELECT id FROM router_agent_negotiations
+                    WHERE agent_id = ? ORDER BY id DESC LIMIT ?
+                )
+                """,
+                (agent_id, agent_id, MAX_NEGOTIATIONS_PER_AGENT),
+            )
         return {
             "agent_id": agent_id, "adapter_id": adapter_id, "agent_version": agent_version,
             "allowed_capabilities": sorted(seen), "created_at": created_at,
             "expires_at": expires_at, "token": token,
         }
+
+
+    def list_latest_agent_negotiations(self) -> list[dict]:
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT n.id, n.agent_id, n.adapter_id, n.negotiated_at, n.negotiation_json
+                FROM router_agent_negotiations AS n
+                WHERE n.id = (
+                    SELECT MAX(latest.id) FROM router_agent_negotiations AS latest
+                    WHERE latest.agent_id = n.agent_id
+                )
+                ORDER BY n.agent_id LIMIT ?
+                """,
+                (MAX_AGENTS,),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "agent_id": row["agent_id"],
+                "adapter_id": row["adapter_id"],
+                "negotiated_at": row["negotiated_at"],
+                "negotiation": json.loads(row["negotiation_json"]),
+            }
+            for row in rows
+        ]
+
+    def get_agent_negotiations(self, agent_id: str, *, limit: int = 20) -> list[dict]:
+        if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
+            raise ValueError("agent_id must be a 1 to 64 character identifier")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("negotiation limit must be an integer between 1 and 100")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, agent_id, adapter_id, negotiated_at, negotiation_json
+                FROM router_agent_negotiations WHERE agent_id = ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (agent_id, limit),
+            ).fetchall()
+        return [
+            {
+                "id": row["id"],
+                "agent_id": row["agent_id"],
+                "adapter_id": row["adapter_id"],
+                "negotiated_at": row["negotiated_at"],
+                "negotiation": json.loads(row["negotiation_json"]),
+            }
+            for row in reversed(rows)
+        ]
 
     def rotate_agent_credential(self, agent_id: str, *, ttl_days: int = DEFAULT_AGENT_TOKEN_TTL_DAYS) -> dict:
         if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
