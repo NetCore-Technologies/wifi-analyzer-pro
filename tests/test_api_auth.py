@@ -190,6 +190,57 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 429)
         self.assertEqual(limited["retry_after_seconds"], 60)
 
+    def test_totp_mfa_requires_second_factor_and_supports_audited_self_service(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        token = setup["token"]
+        status, denied = self.request("POST", "/api/auth/mfa/setup", {
+            "password": "owner passphrase is secure",
+        })
+        self.assertEqual(status, 401)
+
+        status, pending = self.request("POST", "/api/auth/mfa/setup", {
+            "password": "owner passphrase is secure",
+        }, token=token)
+        self.assertEqual(status, 200, pending)
+        secret = pending["setup"]["secret"]
+        code = AuthManager._totp_code(secret)
+
+        status, confirmed = self.request("POST", "/api/auth/mfa/confirm", {
+            "password": "owner passphrase is secure", "code": code,
+        }, token=token)
+        self.assertEqual(status, 200, confirmed)
+        self.assertTrue(confirmed["mfa"]["mfa_enabled"])
+        self.assertEqual(len(confirmed["mfa"]["recovery_codes"]), 10)
+
+        status, status_data = self.request("GET", "/api/auth/status", token=token)
+        self.assertEqual(status, 200)
+        self.assertTrue(status_data["identity"]["mfa_enabled"])
+        self.assertEqual(status_data["identity"]["recovery_codes_remaining"], 10)
+
+        self.request("POST", "/api/auth/logout", token=token)
+        status, challenge = self.request("POST", "/api/auth/login", {
+            "username": "admin", "password": "owner passphrase is secure",
+        })
+        self.assertEqual(status, 401)
+        self.assertTrue(challenge["mfa_required"])
+
+        status, login = self.request("POST", "/api/auth/login", {
+            "username": "admin",
+            "password": "owner passphrase is secure",
+            "code": AuthManager._totp_code(secret),
+        })
+        self.assertEqual(status, 200, login)
+        self.assertTrue(login["status"]["identity"]["mfa_enabled"])
+
+        status, disabled = self.request("POST", "/api/auth/mfa/disable", {
+            "password": "owner passphrase is secure",
+            "code": AuthManager._totp_code(secret),
+        }, token=login["token"])
+        self.assertEqual(status, 200, disabled)
+        self.assertFalse(disabled["mfa"]["mfa_enabled"])
+
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")
         self.assertEqual(status, 200)

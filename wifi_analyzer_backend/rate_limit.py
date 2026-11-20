@@ -17,6 +17,7 @@ DEFAULT_BUCKET_LIMIT = 8192
 DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "auth.setup": (3, 300),
     "auth.login": (8, 60),
+    "auth.mfa": (6, 300),
     "api.scan": (15, 60),
     "api.speedtest": (2, 300),
     "api.feature.execution": (30, 60),

@@ -221,3 +221,11 @@ X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset headers. The
 limiter has a bounded in-memory bucket table and does not persist client
 identifiers. These controls protect a single API process; they are not a
 distributed gateway quota or a substitute for reverse-proxy/WAF controls.
+
+
+Local accounts can optionally enable TOTP authenticator-app MFA from **Account
+Security**. Enrolment is verified before activation, the secret is encrypted
+at rest with password-derived AES-256-GCM key material, and ten single-use
+recovery codes are provided. Password resets clear MFA so it must be enrolled
+again. Use this alongside VPN/reverse-proxy access controls and protected
+backups of the local account file.

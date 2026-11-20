@@ -36,3 +36,17 @@ a reverse proxy, configure an additional per-client-IP login/setup limit at
 the proxy because the API sees the proxy address for unauthenticated requests.
 For multi-worker or horizontally scaled deployments, enforce aggregate limits
 at the gateway as well; these local buckets do not coordinate between processes.
+
+
+## Account multi-factor authentication
+
+Local accounts can enable TOTP authenticator-app MFA. Enrolment requires the
+current account password and a successful authenticator-code confirmation.
+The TOTP secret is encrypted in the local auth file with AES-256-GCM using
+password-derived key material and the account ID as authenticated additional
+data; it is never returned by the user-directory or status APIs. Ten recovery
+codes are issued once and only salted hashes are retained. Recovery codes are
+single-use. Password resets clear active/pending MFA and recovery codes, so the
+account must enrol a new authenticator. Keep a protected backup of the auth
+file and store recovery codes separately. MFA does not replace HTTPS for
+remote access or protect against a compromised host.

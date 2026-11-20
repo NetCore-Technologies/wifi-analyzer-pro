@@ -18,6 +18,7 @@ import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
 import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
 import TeamAccessPanel from "./components/TeamAccessPanel.jsx";
 import SecurityAuditPanel from "./components/SecurityAuditPanel.jsx";
+import AccountSecurityPanel from "./components/AccountSecurityPanel.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -878,6 +879,7 @@ const NAV=[
     {id:"router",label:"Router Support",   Icon:Server},
     {id:"agents",label:"Router Agents",    Icon:Shield},
     {id:"teamAccess",label:"Team Access",   Icon:Users},
+    {id:"accountSecurity",label:"Account Security",Icon:Lock},
     {id:"securityAudit",label:"Security Audit",Icon:ClipboardList},
   ]},
   {g:"INSIGHTS", items:[
@@ -1123,6 +1125,7 @@ export default function App() {
     agents:       <RouterAgentConsole/>,
     teamAccess:   <TeamAccessPanel/>,
     securityAudit:<SecurityAuditPanel/>,
+    accountSecurity:<AccountSecurityPanel/>,
     dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,

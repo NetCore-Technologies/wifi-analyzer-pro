@@ -16,6 +16,8 @@ export default function AuthGate({ children }) {
   const [mode, setMode] = useState('checking');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('admin');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(false);
   const [identity, setIdentity] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -67,13 +69,21 @@ export default function AuthGate({ children }) {
       const endpoint = mode === 'setup' ? '/api/auth/setup' : '/api/auth/login';
       const response = await fetch(`${apiBase()}${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }), signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({
+          username,
+          password,
+          ...(mode === 'login' && mfaCode.trim() ? { code: mfaCode.trim() } : {}),
+        }),
+        signal: AbortSignal.timeout(10000),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || `Authentication failed (${response.status})`);
+      if (!response.ok) {
+        if (payload.mfa_required) setMfaRequired(true);
+        throw new Error(payload.error || `Authentication failed (${response.status})`);
+      }
       setSessionToken(payload.token);
       setIdentity(payload.status?.identity || null);
-      setPassword(''); setMode('ready');
+      setPassword(''); setMfaCode(''); setMfaRequired(false); setMode('ready');
       if (endpoint.endsWith('/setup')) setNotice('Local account password configured.');
     } catch (err) {
       setError(err.message || 'Authentication failed.');
@@ -129,6 +139,12 @@ export default function AuthGate({ children }) {
               style={fieldStyle}/>
             <label style={{ fontSize: 12, color: '#94a3b8' }} htmlFor="wifi-auth-password">{mode === 'setup' ? 'Password (12 characters minimum)' : 'Password'}</label>
             <input id="wifi-auth-password" autoComplete={mode === 'setup' ? 'new-password' : 'current-password'} type="password" minLength={mode === 'setup' ? 12 : undefined} required value={password} onChange={e => setPassword(e.target.value)} style={fieldStyle}/>
+            {mode === 'login' && mfaRequired ? <>
+              <label style={{ fontSize: 12, color: '#94a3b8' }} htmlFor="wifi-auth-mfa-code">Authenticator code or unused recovery code</label>
+              <input id="wifi-auth-mfa-code" autoComplete="one-time-code" required maxLength={24}
+                value={mfaCode} onChange={event => setMfaCode(event.target.value)}
+                placeholder="123456 or recovery code" style={fieldStyle}/>
+            </> : null}
             <button type="submit" disabled={busy} style={{ ...buttonStyle, opacity: busy ? .65 : 1 }}>{busy ? 'Please wait…' : mode === 'setup' ? 'Create password and continue' : 'Sign in'}</button>
           </form>
         </> : null}

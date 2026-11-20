@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 import psutil
 
 if __package__:
-    from .auth import AuthManager
+    from .auth import AuthManager, MFARequiredError
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
     from .live_capture import LiveCaptureManager
@@ -37,7 +37,7 @@ if __package__:
         RouterReportJobStore,
     )
 else:  # Direct execution: python wifi_analyzer_backend/server.py
-    from auth import AuthManager
+    from auth import AuthManager, MFARequiredError
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
     from live_capture import LiveCaptureManager
@@ -1191,9 +1191,14 @@ class Handler(BaseHTTPRequestHandler):
         # limit login/setup before parsing or deriving expensive credentials.
         if path.startswith("/api/capture/") and not self.require_auth("diagnostics.run"):
             return
+        if path.startswith("/api/auth/mfa/") and not self.require_auth():
+            return
         rate_policy = {
             "/api/auth/setup": ("auth.setup", True),
             "/api/auth/login": ("auth.login", True),
+            "/api/auth/mfa/setup": ("auth.mfa", False),
+            "/api/auth/mfa/confirm": ("auth.mfa", False),
+            "/api/auth/mfa/disable": ("auth.mfa", False),
             "/api/sites/audit": ("api.site.audit", False),
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
@@ -1236,7 +1241,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/auth/login":
             try:
-                token = AUTH.login(payload.get("password"), payload.get("username", "admin"))
+                token = AUTH.login(
+                    payload.get("password"),
+                    payload.get("username", "admin"),
+                    code=payload.get("code"),
+                )
+            except MFARequiredError as error:
+                self.send_json({"error": str(error), "mfa_required": True}, 401)
+                return
             except (PermissionError, RuntimeError) as error:
                 if isinstance(error, PermissionError) and "five minutes" in str(error):
                     supplied_username = payload.get("username", "admin")
@@ -1257,6 +1269,61 @@ class Handler(BaseHTTPRequestHandler):
             self.audit_event("auth.login.succeeded", actor=identity, target_type="user",
                              target_id=identity["id"] if identity else None)
             self.send_json({"token": token, "status": AUTH.status(token)})
+            return
+
+        if path == "/api/auth/mfa/setup":
+            try:
+                result = AUTH.begin_mfa_setup(self.bearer_token(), payload.get("password"))
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except RuntimeError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            self.audit_event("auth.mfa.enrollment.started", target_type="user")
+            self.send_json({"setup": result})
+            return
+
+        if path == "/api/auth/mfa/confirm":
+            try:
+                result = AUTH.confirm_mfa_setup(
+                    self.bearer_token(), payload.get("password"), payload.get("code")
+                )
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except RuntimeError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            self.audit_event(
+                "auth.mfa.enabled", target_type="user",
+                metadata={"recovery_codes_issued": result["recovery_codes_remaining"]},
+            )
+            self.send_json({"mfa": result})
+            return
+
+        if path == "/api/auth/mfa/disable":
+            try:
+                result = AUTH.disable_mfa(
+                    self.bearer_token(), payload.get("password"), payload.get("code")
+                )
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except RuntimeError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            self.audit_event("auth.mfa.disabled", target_type="user")
+            self.send_json({"mfa": result})
             return
 
         if path == "/api/users":
