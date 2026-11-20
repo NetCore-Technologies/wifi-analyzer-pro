@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 176)
-        self.assertEqual(len(catalog["features"]), 176)
+        self.assertEqual(catalog["count"], 177)
+        self.assertEqual(len(catalog["features"]), 177)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -346,6 +346,43 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["adapter_id"], "unifi")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
+
+    def test_router_gateway_redundancy_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_gateway_redundancy_audit", {
+            "snapshots": [
+                {
+                    "router_id": "openwrt-office",
+                    "site_id": "office",
+                    "snapshot": {
+                        "adapter_id": "openwrt",
+                        "captured_at": "2026-11-20T10:00:00Z",
+                        "routes": [{
+                            "target": "0.0.0.0/0", "gateway": "192.0.2.1",
+                            "device": "wan", "metric": 10,
+                        }],
+                    },
+                },
+                {
+                    "router_id": "mikrotik-office",
+                    "site_id": "office",
+                    "snapshot": {
+                        "adapter_id": "mikrotik",
+                        "captured_at": "2026-11-20T10:00:00Z",
+                        "routes": [{
+                            "target": "0.0.0.0/0", "gateway": "198.51.100.1",
+                            "gateway_interface": "ether1", "routing_table": "main",
+                            "distance": 1, "active": True,
+                        }],
+                    },
+                },
+            ],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F180")
+        self.assertEqual(result["result"]["summary"]["router_count"], 2)
+        self.assertEqual(result["result"]["groups"][0]["distinct_gateway_count"], 2)
 
     def test_router_vlan_segmentation_audit_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

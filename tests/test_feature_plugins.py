@@ -378,6 +378,35 @@ PAYLOADS = {
             "ip_subnet": "192.0.2.0/24"
         }]
     },
+    "router_gateway_redundancy_audit": {
+        "snapshots": [
+            {
+                "router_id": "openwrt-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "openwrt",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "routes": [{
+                        "target": "0.0.0.0/0", "gateway": "192.0.2.1",
+                        "device": "wan", "metric": 10
+                    }]
+                }
+            },
+            {
+                "router_id": "mikrotik-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "mikrotik",
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "routes": [{
+                        "target": "0.0.0.0/0", "gateway": "198.51.100.1",
+                        "gateway_interface": "ether1", "routing_table": "main",
+                        "distance": 1, "active": True
+                    }]
+                }
+            }
+        ]
+    },
     "router_vlan_segmentation_audit": {
         "snapshots": [
             {
@@ -548,15 +577,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 176)
-        self.assertEqual(len(set(FEATURE_MODULES)), 176)
-        self.assertEqual(count(), 176)
-        self.assertEqual(len(entries), 176)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 176)
+        self.assertEqual(len(FEATURE_MODULES), 177)
+        self.assertEqual(len(set(FEATURE_MODULES)), 177)
+        self.assertEqual(count(), 177)
+        self.assertEqual(len(entries), 177)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 177)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):
