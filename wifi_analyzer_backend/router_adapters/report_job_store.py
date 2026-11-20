@@ -85,9 +85,13 @@ class RouterReportJobStore:
                 result_json TEXT,
                 error_code TEXT,
                 completed_at TEXT,
+                site_ids_json TEXT NOT NULL DEFAULT '[]',
                 UNIQUE(schedule_id, occurrence_id)
             )
         """)
+        job_columns = {row["name"] for row in connection.execute("PRAGMA table_info(router_report_jobs)")}
+        if "site_ids_json" not in job_columns:
+            connection.execute("ALTER TABLE router_report_jobs ADD COLUMN site_ids_json TEXT NOT NULL DEFAULT '[]'")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_router_report_jobs_due "
             "ON router_report_jobs(status, available_at, scheduled_at, id)"
@@ -149,6 +153,7 @@ class RouterReportJobStore:
             "schedule_id": row["schedule_id"],
             "occurrence_id": row["occurrence_id"],
             "report_id": row["report_id"],
+            "site_ids": json.loads(row["site_ids_json"] or "[]"),
             "job_key": row["job_key"],
             "payload_hash": row["payload_hash"],
             "scheduled_at": row["scheduled_at"],
@@ -186,6 +191,31 @@ class RouterReportJobStore:
         if bundle.get("report_id") != report_id or bundle.get("schema_version") != "1.0":
             raise ValueError("report_bundle identity or schema_version does not match the job")
         bundle_json = self._json(bundle, "report_bundle", MAX_REPORT_BUNDLE_BYTES)
+        site_ids = set()
+        filters = bundle.get("filters", {})
+        if isinstance(filters, dict):
+            site_allowlist = filters.get("site_allowlist", [])
+            if not isinstance(site_allowlist, list) or len(site_allowlist) > 128:
+                raise ValueError("report_bundle.filters.site_allowlist must be a bounded list")
+            for site_id in site_allowlist:
+                if not isinstance(site_id, str) or not IDENTIFIER.fullmatch(site_id):
+                    raise ValueError("report_bundle.filters.site_allowlist contains an invalid site identifier")
+                site_ids.add(site_id)
+        for field in ("sites", "findings"):
+            records = bundle.get(field, [])
+            if not isinstance(records, list) or len(records) > 20000:
+                raise ValueError(f"report_bundle.{field} must be a bounded list")
+            for item in records:
+                if not isinstance(item, dict):
+                    continue
+                site_id = item.get("site_id")
+                if site_id is not None:
+                    if not isinstance(site_id, str) or not IDENTIFIER.fullmatch(site_id):
+                        raise ValueError(f"report_bundle.{field} contains an invalid site identifier")
+                    site_ids.add(site_id)
+        if len(site_ids) > 128:
+            raise ValueError("report bundle exceeds the 128-site scope limit")
+        site_ids_json = self._json(sorted(site_ids), "site_ids", 16 * 1024)
         if bundle.get("schema_version") != "1.0" or not isinstance(bundle.get("content_hash"), str):
             raise ValueError("report_bundle must be a version 1.0 hash-validated report")
         bundle_body = {key: value for key, value in bundle.items() if key != "content_hash"}
@@ -232,23 +262,33 @@ class RouterReportJobStore:
                 INSERT INTO router_report_jobs (
                     schedule_id, occurrence_id, report_id, job_key, payload_hash,
                     report_bundle_json, scheduled_at, status, attempts, max_attempts,
-                    available_at, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?)
+                    available_at, created_at, updated_at, site_ids_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?, ?, ?)
             """, (
                 schedule_id, occurrence_id, report_id, job_key, payload_hash, bundle_json,
                 scheduled_at.isoformat(), max_attempts, scheduled_at.isoformat(), now_value, now_value,
+                site_ids_json,
             ))
             row = connection.execute(
                 "SELECT * FROM router_report_jobs WHERE id=?", (cursor.lastrowid,)
             ).fetchone()
             return {"job": self._job(row), "created": True, "replayed": False}
 
-    def claim_due(self, worker_id, *, now=None, lease_seconds=120, limit=10):
+    def claim_due(self, worker_id, *, now=None, lease_seconds=120, limit=10, site_ids=None):
         worker_id = self._identifier(worker_id, "worker_id")
         if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int) or not MIN_LEASE_SECONDS <= lease_seconds <= MAX_LEASE_SECONDS:
             raise ValueError(f"lease_seconds must be an integer from {MIN_LEASE_SECONDS} to {MAX_LEASE_SECONDS}")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_CLAIM_BATCH:
             raise ValueError(f"limit must be an integer from 1 to {MAX_CLAIM_BATCH}")
+        allowed_sites = None
+        if site_ids is not None:
+            if not isinstance(site_ids, list) or len(site_ids) > 100:
+                raise ValueError("site_ids must be a list containing no more than 100 values")
+            if any(not isinstance(item, str) or not IDENTIFIER.fullmatch(item) for item in site_ids):
+                raise ValueError("site_ids contains an invalid site identifier")
+            if len(site_ids) != len(set(site_ids)):
+                raise ValueError("site_ids must be unique")
+            allowed_sites = set(site_ids)
         moment = self._timestamp(now, "now") if now is not None else datetime.now(timezone.utc)
         now_text = moment.isoformat()
         lease_expires = (moment + timedelta(seconds=lease_seconds)).isoformat()
@@ -276,11 +316,20 @@ class RouterReportJobStore:
                     "lease_expired", row["id"],
                 ))
             due = connection.execute("""
-                SELECT id FROM router_report_jobs
+                SELECT id, site_ids_json FROM router_report_jobs
                 WHERE status IN ('pending','retry_wait') AND available_at <= ?
                 ORDER BY scheduled_at, id LIMIT ?
-            """, (now_text, limit)).fetchall()
+            """, (now_text, MAX_JOBS_TOTAL)).fetchall()
+            eligible = []
             for selected in due:
+                if allowed_sites is not None:
+                    job_sites = set(json.loads(selected["site_ids_json"] or "[]"))
+                    if not job_sites or not job_sites.issubset(allowed_sites):
+                        continue
+                eligible.append(selected)
+                if len(eligible) >= limit:
+                    break
+            for selected in eligible:
                 lease_id = str(uuid.uuid4())
                 connection.execute("""
                     UPDATE router_report_jobs
@@ -429,13 +478,26 @@ class RouterReportJobStore:
             row = connection.execute("SELECT * FROM router_report_jobs WHERE id=?", (job_id,)).fetchone()
             return self._job(row, include_bundle=include_bundle) if row else None
 
-    def list_jobs(self, *, status=None, schedule_id=None, limit=50):
+    @staticmethod
+    def _validate_site_filter(site_ids):
+        if site_ids is None:
+            return None
+        if not isinstance(site_ids, list) or len(site_ids) > 100:
+            raise ValueError("site_ids must be a list containing no more than 100 values")
+        if any(not isinstance(item, str) or not IDENTIFIER.fullmatch(item) for item in site_ids):
+            raise ValueError("site_ids contains an invalid site identifier")
+        if len(site_ids) != len(set(site_ids)):
+            raise ValueError("site_ids must be unique")
+        return set(site_ids)
+
+    def list_jobs(self, *, status=None, schedule_id=None, limit=50, site_ids=None):
         if status is not None and status not in JOB_STATUSES:
             raise ValueError("status is not a supported report-job state")
         if schedule_id is not None:
             schedule_id = self._identifier(schedule_id, "schedule_id")
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIST_LIMIT:
             raise ValueError(f"limit must be an integer from 1 to {MAX_LIST_LIMIT}")
+        allowed_sites = self._validate_site_filter(site_ids)
         where, params = [], []
         if status is not None:
             where.append("status=?")
@@ -446,19 +508,28 @@ class RouterReportJobStore:
         query = "SELECT * FROM router_report_jobs"
         if where:
             query += " WHERE " + " AND ".join(where)
-        query += " ORDER BY id DESC LIMIT ?"
-        params.append(limit)
+        query += " ORDER BY id DESC"
         with self._connection() as connection:
             rows = connection.execute(query, params).fetchall()
-            return [self._job(row) for row in rows]
+        jobs = [self._job(row) for row in rows]
+        if allowed_sites is not None:
+            jobs = [
+                job for job in jobs
+                if job["site_ids"] and set(job["site_ids"]).issubset(allowed_sites)
+            ]
+        return jobs[:limit]
 
-    def summary(self):
+    def summary(self, *, site_ids=None):
+        allowed_sites = self._validate_site_filter(site_ids)
         with self._connection() as connection:
-            rows = connection.execute(
-                "SELECT status, COUNT(*) AS count FROM router_report_jobs GROUP BY status"
-            ).fetchall()
+            rows = connection.execute("SELECT status, site_ids_json FROM router_report_jobs").fetchall()
         counts = {status: 0 for status in sorted(JOB_STATUSES)}
-        counts.update({row["status"]: row["count"] for row in rows})
+        for row in rows:
+            recorded_sites = set(json.loads(row["site_ids_json"] or "[]"))
+            if allowed_sites is not None and (not recorded_sites or not recorded_sites.issubset(allowed_sites)):
+                continue
+            if row["status"] in counts:
+                counts[row["status"]] += 1
         return {"job_count": sum(counts.values()), "counts_by_status": counts}
 
 

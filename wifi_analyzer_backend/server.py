@@ -632,7 +632,7 @@ def _collect_site_ids(value):
             for key, child in item.items():
                 if key == "site_id":
                     found.append(child.strip() if isinstance(child, str) else None)
-                elif key == "site_ids":
+                elif key in {"site_ids", "site_allowlist"}:
                     if isinstance(child, list):
                         found.extend(value.strip() if isinstance(value, str) else None for value in child)
                     else:
@@ -741,6 +741,25 @@ class Handler(BaseHTTPRequestHandler):
             return False
         if any(not isinstance(site_id, str) or site_id not in scope["site_ids"] for site_id in site_ids):
             self.send_json({"error": "One or more sites are outside your assigned access scope"}, 403)
+            return False
+        return True
+
+    def require_report_job_site_access(self, job):
+        if not isinstance(job, dict):
+            self.send_json({"error": "Report job not found"}, 404)
+            return False
+        scope = AUTH.site_access(self.bearer_token())
+        if scope is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if scope["all_sites"]:
+            return True
+        job_sites = job.get("site_ids")
+        if not isinstance(job_sites, list) or not job_sites:
+            self.send_json({"error": "Report job not found"}, 404)
+            return False
+        if not set(job_sites).issubset(scope["site_ids"]):
+            self.send_json({"error": "Report job not found"}, 404)
             return False
         return True
 
@@ -918,12 +937,15 @@ class Handler(BaseHTTPRequestHandler):
                     limit = 50 if raw_limit is None else int(raw_limit)
                 except ValueError as error:
                     raise ValueError("limit must be an integer") from error
+                job_scope = AUTH.site_access(self.bearer_token())
+                site_filter = None if job_scope["all_sites"] else job_scope["site_ids"]
                 self.send_json({
-                    "summary": REPORT_JOBS.summary(),
+                    "summary": REPORT_JOBS.summary(site_ids=site_filter),
                     "jobs": REPORT_JOBS.list_jobs(
                         status=single_job_parameter("status") or None,
                         schedule_id=single_job_parameter("schedule_id") or None,
                         limit=limit,
+                        site_ids=site_filter,
                     ),
                 })
             elif path.startswith("/api/reports/jobs/"):
@@ -934,8 +956,10 @@ class Handler(BaseHTTPRequestHandler):
                 job = REPORT_JOBS.get(int(identifier), include_bundle=False)
                 if job is None:
                     self.send_json({"error": "Report job not found"}, 404)
-                else:
-                    self.send_json({"job": job})
+                    return
+                if not self.require_report_job_site_access(job):
+                    return
+                self.send_json({"job": job})
             elif path != "/api/agents/negotiations" and path.startswith("/api/agents/") and path.endswith("/negotiations"):
                 agent_id = unquote(path[len("/api/agents/"):-len("/negotiations")]).strip("/")
                 if not agent_id or "/" in agent_id:
@@ -1266,10 +1290,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/jobs/enqueue":
-            if not self.require_auth("reports.manage"): 
+            if not self.require_auth("reports.manage"):
+                return
+            if not self.require_site_access(_collect_site_ids(payload), require_explicit=True):
                 return
             try:
                 prepared = run_feature("router_scheduled_report_job_intake", payload)["result"]
+                if not self.require_site_access(_collect_site_ids(prepared), require_explicit=True):
+                    return
                 response = REPORT_JOBS.enqueue(prepared)
             except ReportJobConflictError as error:
                 self.send_json({"error": str(error)}, 409)
@@ -1281,14 +1309,17 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reports/jobs/claim":
-            if not self.require_auth("reports.manage"): 
+            if not self.require_auth("reports.manage"):
                 return
+            job_scope = AUTH.site_access(self.bearer_token())
+            claim_sites = None if job_scope["all_sites"] else job_scope["site_ids"]
             try:
                 response = REPORT_JOBS.claim_due(
                     payload.get("worker_id"),
                     now=payload.get("now"),
                     lease_seconds=payload.get("lease_seconds", 120),
                     limit=payload.get("limit", 10),
+                    site_ids=claim_sites,
                 )
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
@@ -1306,6 +1337,8 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("lease_id"),
                     now=payload.get("now"),
                 )
+                if not self.require_report_job_site_access(claimed_job):
+                    return
                 result = run_feature(
                     "router_scheduled_report_delivery_package",
                     {**payload, "claimed_job": claimed_job},
@@ -1325,6 +1358,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             job_id = int(job_action.group(1))
             action = job_action.group(2)
+            existing_job = REPORT_JOBS.get(job_id)
+            if not self.require_report_job_site_access(existing_job):
+                return
             try:
                 if action == "renew":
                     response = REPORT_JOBS.renew_lease(

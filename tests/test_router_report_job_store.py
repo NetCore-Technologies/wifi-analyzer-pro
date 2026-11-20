@@ -20,11 +20,12 @@ from wifi_analyzer_backend.feature_plugins.feature_188_router_scheduled_report_j
 NOW = datetime(2026, 11, 20, 10, 0, tzinfo=timezone.utc)
 
 
-def job(occurrence="a" * 64, observed=90, max_attempts=3):
+def job(occurrence="a" * 64, observed=90, max_attempts=3, site_allowlist=None):
     bundle = build_report({
         "report_id": "weekly-home",
         "title": "Weekly router report",
         "generated_at": NOW.isoformat(),
+        "site_allowlist": site_allowlist or [],
         "sources": [{
             "source_id": "home-health",
             "source_type": "router_fleet_health_audit",
@@ -219,6 +220,37 @@ class RouterReportJobStoreTests(unittest.TestCase):
         self.assertNotIn("report_bundle", item)
         self.assertEqual(self.store.get(item["id"])["status"], "pending")
         self.assertEqual(self.store.list_jobs(status="completed"), [])
+
+    def test_site_scope_filters_job_lists_summaries_and_worker_claims(self):
+        home = self.store.enqueue(job(occurrence="a" * 64, site_allowlist=["home"]), now=NOW)["job"]
+        branch = self.store.enqueue(job(occurrence="b" * 64, site_allowlist=["branch"]), now=NOW)["job"]
+        mixed = self.store.enqueue(job(occurrence="c" * 64, site_allowlist=["home", "branch"]), now=NOW)["job"]
+        unassigned = self.store.enqueue(job(occurrence="d" * 64), now=NOW)["job"]
+        self.assertEqual(home["site_ids"], ["home"])
+        self.assertEqual(branch["site_ids"], ["branch"])
+        self.assertEqual(mixed["site_ids"], ["branch", "home"])
+        self.assertEqual(unassigned["site_ids"], [])
+
+        visible = self.store.list_jobs(site_ids=["home"])
+        self.assertEqual([item["id"] for item in visible], [home["id"]])
+        self.assertEqual(self.store.summary(site_ids=["home"])["job_count"], 1)
+        self.assertEqual(self.store.list_jobs(site_ids=[]), [])
+        self.assertEqual(self.store.summary(site_ids=[])["job_count"], 0)
+
+        claimed = self.store.claim_due(
+            "home-worker", now=NOW + timedelta(minutes=1), limit=10, site_ids=["home"],
+        )
+        self.assertEqual([item["id"] for item in claimed["jobs"]], [home["id"]])
+        self.assertEqual(claimed["jobs"][0]["site_ids"], ["home"])
+        self.assertEqual(
+            self.store.claim_due("restricted-worker", now=NOW + timedelta(minutes=1), site_ids=[])["jobs"],
+            [],
+        )
+        all_remaining = self.store.claim_due("owner-worker", now=NOW + timedelta(minutes=1), limit=10)
+        self.assertEqual(
+            {item["id"] for item in all_remaining["jobs"]},
+            {branch["id"], mixed["id"], unassigned["id"]},
+        )
 
     def test_rejects_invalid_leases_results_and_limits(self):
         prepared = job()
