@@ -1,8 +1,8 @@
 """Regression tests for the independently registered feature tools."""
 import hashlib
-import hashlib
 import json
 import unittest
+from pathlib import Path
 
 from wifi_analyzer_backend.feature_plugins import catalog, run, count
 from wifi_analyzer_backend.feature_plugins.registry import FEATURE_MODULES
@@ -868,6 +868,21 @@ class FeatureCatalogTests(unittest.TestCase):
             [f"F{i:03d}" for i in range(1, 169)]
             + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191"],
         )
+
+    def test_static_feature_manifest_matches_the_registered_catalogue(self):
+        manifest_path = (
+            Path(__file__).resolve().parents[1]
+            / "wifi_analyzer_backend"
+            / "feature_plugins"
+            / "FEATURES.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        registered = {entry["slug"] for entry in catalog()}
+        manifest_slugs = {entry["slug"] for entry in manifest}
+        self.assertEqual(len(manifest), count())
+        self.assertEqual(len(manifest_slugs), len(manifest))
+        self.assertEqual(manifest_slugs, registered)
+        self.assertTrue(all(isinstance(entry.get("parameters", {}), dict) for entry in manifest))
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
