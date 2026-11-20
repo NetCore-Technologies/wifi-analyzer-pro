@@ -16,8 +16,12 @@ import { apiFetch } from "./lib/api.js";
 import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
 import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
 import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
+<<<<<<< HEAD
+import UserManagement from "./components/UserManagement.jsx";
+=======
 import TeamAccessPanel from "./components/TeamAccessPanel.jsx";
 import SecurityAuditPanel from "./components/SecurityAuditPanel.jsx";
+>>>>>>> origin/main
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -1010,6 +1014,9 @@ function SettingsOverlay({ preferences, onChange, onClose }) {
           <Shield size={12} color={C.green} style={{ verticalAlign: "middle", marginRight: 6 }}/>
           Preferences are stored in this browser only. Network observations remain on the local analyzer unless you configure an external integration.
         </div>
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+        <UserManagement/>
+      </div>
       </section>
     </div>
   );

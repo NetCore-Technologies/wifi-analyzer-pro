@@ -659,6 +659,16 @@ class Handler(BaseHTTPRequestHandler):
         # instead of localhost; allow only an exact Host match in that case.
         return parsed.scheme in {"http", "https"} and parsed.netloc == self.headers.get("Host")
 
+<<<<<<< HEAD
+    def session_info(self):
+        return AUTH.session_info(self.bearer_token())
+
+    def require_auth(self):
+        if self.session_info() is not None:
+            return True
+        self.send_json({"error": "Authentication required"}, 401)
+        return False
+=======
     def audit_event(self, action, *, actor=None, target_type=None, target_id=None, outcome="success", metadata=None):
         if actor is None:
             actor = AUTH.identity(self.bearer_token())
@@ -688,6 +698,27 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "Insufficient permissions", "required_permission": permission}, 403)
             return False
         return True
+>>>>>>> origin/main
+
+    def require_admin(self):
+        info = self.session_info()
+        if info is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if info["role"] != "admin":
+            self.send_json({"error": "Administrator role required"}, 403)
+            return False
+        return True
+
+    def require_site_access(self, site_id):
+        info = self.session_info()
+        if info is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if info["role"] == "admin" or site_id in info["site_ids"]:
+            return True
+        self.send_json({"error": "This account does not have access to the requested site"}, 403)
+        return False
 
     def read_json_body(self):
         try:
@@ -727,6 +758,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/auth/status":
             self.send_json(AUTH.status(self.bearer_token()))
             return
+<<<<<<< HEAD
+        if path == "/api/auth/users":
+            if not self.require_admin():
+                return
+            self.send_json({"users": AUTH.list_users()})
+            return
+        if path.startswith("/api/") and not self.require_auth():
+            return
+        if path.startswith("/api/agents/") or path.startswith("/api/reports/jobs"):
+            if not self.require_admin():
+=======
         if path.startswith("/api/"):
             permission = "diagnostics.read"
             if path.startswith("/api/reports/jobs"):
@@ -744,6 +786,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/users":
                 permission = "users.manage"
             if not self.require_auth(permission):
+>>>>>>> origin/main
                 return
 
         api_routes = {
@@ -899,9 +942,13 @@ class Handler(BaseHTTPRequestHandler):
                 if values and values[0].strip():
                     site_ids = [item.strip() for item in values[0].split(",") if item.strip()]
                 else:
-                    site_ids = HISTORY.site_ids(limit=20)
+                    info = self.session_info()
+                    site_ids = HISTORY.site_ids(limit=20) if info["role"] == "admin" else list(info["site_ids"])
                 if len(site_ids) > 20:
                     raise ValueError("site_ids may contain no more than 20 sites")
+                for site_id in site_ids:
+                    if not self.require_site_access(site_id):
+                        return
                 pairs = HISTORY.latest_pairs(site_ids)
                 report = run_feature("site_to_site_change_report", {"sites": pairs})
                 self.send_json({
@@ -924,7 +971,18 @@ class Handler(BaseHTTPRequestHandler):
                     before_id = None if raw_before_id is None else int(raw_before_id)
                 except ValueError as error:
                     raise ValueError("limit and before_id must be integers") from error
-                snapshots = HISTORY.list(site_id=raw_site_id, limit=limit, before_id=before_id)
+                info = self.session_info()
+                if raw_site_id:
+                    if not self.require_site_access(raw_site_id):
+                        return
+                    snapshots = HISTORY.list(site_id=raw_site_id, limit=limit, before_id=before_id)
+                elif info["role"] == "admin":
+                    snapshots = HISTORY.list(limit=limit, before_id=before_id)
+                else:
+                    merged = []
+                    for allowed_site in info["site_ids"]:
+                        merged.extend(HISTORY.list(site_id=allowed_site, limit=limit, before_id=before_id))
+                    snapshots = sorted(merged, key=lambda item: item["id"], reverse=True)[:limit]
                 self.send_json({
                     "snapshots": snapshots,
                     "next_before_id": snapshots[-1]["id"] if len(snapshots) == limit else None,
@@ -942,6 +1000,8 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot = HISTORY.get(snapshot_id)
                 if snapshot is None:
                     self.send_json({"error": "Snapshot not found"}, 404)
+                elif not self.require_site_access(snapshot["site_id"]):
+                    return
                 else:
                     self.send_json({"snapshot": snapshot})
             elif path in api_routes:
@@ -981,9 +1041,101 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": str(error)}, 400)
             return
 
+        if path == "/api/auth/users":
+            if not self.require_admin():
+                return
+            try:
+                user = AUTH.create_user(
+                    payload.get("username"),
+                    payload.get("password"),
+                    role=payload.get("role", "viewer"),
+                    site_ids=payload.get("site_ids"),
+                )
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except RuntimeError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            self.send_json({"user": user}, 201)
+            return
+
+        user_action = re.fullmatch(
+            r"/api/auth/users/([^/]+)/(role|sites|enable|disable|password|delete)",
+            path,
+        )
+        if user_action:
+            if not self.require_admin():
+                return
+            username = unquote(user_action.group(1))
+            action = user_action.group(2)
+            actor = self.session_info()
+            if action in {"delete", "disable"} and username == actor["username"]:
+                self.send_json({"error": "You cannot disable or delete your own administrator account"}, 409)
+                return
+            if action == "role" and username == actor["username"] and payload.get("role") != "admin":
+                self.send_json({"error": "You cannot demote your own active administrator account"}, 409)
+                return
+            try:
+                if action == "role":
+                    role = payload.get("role")
+                    response = AUTH.update_user(
+                        username,
+                        role=role,
+                        site_ids=payload.get("site_ids", ["*"] if role == "admin" else []),
+                        update_sites=True,
+                    )
+                elif action == "sites":
+                    response = AUTH.update_user(
+                        username,
+                        site_ids=payload.get("site_ids"),
+                        update_sites=True,
+                    )
+                elif action == "enable":
+                    response = AUTH.update_user(username, enabled=True)
+                elif action == "disable":
+                    response = AUTH.update_user(username, enabled=False)
+                elif action == "password":
+                    AUTH.reset_password(username, payload.get("password"))
+                    response = next(
+                        item for item in AUTH.list_users()
+                        if item["username"] == username.strip().lower()
+                    )
+                else:
+                    AUTH.delete_user(username)
+                    response = {"username": username, "deleted": True}
+            except KeyError:
+                self.send_json({"error": "User not found"}, 404)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json({"user": response})
+            return
+
+        if path.startswith("/api/reports/jobs/"):
+            if not self.require_admin():
+                return
+        if path in {"/api/reports/jobs/enqueue", "/api/reports/jobs/claim"}:
+            if not self.require_admin():
+                return
+        if path in {"/api/agents/enroll"} or (
+            path.startswith("/api/agents/") and
+            (path.endswith("/credentials/rotate") or path.endswith("/credentials/revoke"))
+        ):
+            if not self.require_admin():
+                return
+        if path == "/api/sites/history":
+            if not self.require_admin():
+                return
+
         if path == "/api/auth/setup":
             try:
+<<<<<<< HEAD
+                token = AUTH.setup(payload.get("password"), username=payload.get("username", "admin"))
+=======
                 token = AUTH.setup(payload.get("password"), payload.get("username", "admin"))
+>>>>>>> origin/main
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
@@ -998,7 +1150,11 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/auth/login":
             try:
+<<<<<<< HEAD
+                token = AUTH.login(payload.get("password"), username=payload.get("username", "admin"))
+=======
                 token = AUTH.login(payload.get("password"), payload.get("username", "admin"))
+>>>>>>> origin/main
             except (PermissionError, RuntimeError) as error:
                 if isinstance(error, PermissionError) and "five minutes" in str(error):
                     supplied_username = payload.get("username", "admin")
@@ -1322,6 +1478,12 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth("diagnostics.run"): 
                 return
             try:
+                sites = payload.get("sites", [])
+                if not isinstance(sites, list):
+                    raise ValueError("sites must be a list")
+                for site in sites:
+                    if not isinstance(site, dict) or not self.require_site_access(site.get("site_id")):
+                        return
                 report = run_feature("consolidated_site_audit_report", payload)
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
