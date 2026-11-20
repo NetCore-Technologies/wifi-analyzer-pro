@@ -1,0 +1,138 @@
+"""Stable, frozen-bundle-friendly registry of independently callable features."""
+from __future__ import annotations
+import importlib
+from functools import lru_cache
+
+FEATURE_MODULES = (
+    "feature_001_interface_inventory",
+    "feature_002_wireless_interface_inventory",
+    "feature_003_wifi_scan",
+    "feature_004_normalise_bssid",
+    "feature_005_normalise_ssid",
+    "feature_006_classify_frequency_band",
+    "feature_007_frequency_to_channel",
+    "feature_008_channel_to_frequency",
+    "feature_009_signal_quality",
+    "feature_010_classify_signal",
+    "feature_011_measured_snr",
+    "feature_012_sort_networks_by_signal",
+    "feature_013_filter_networks_by_band",
+    "feature_014_filter_networks_by_security",
+    "feature_015_open_access_points",
+    "feature_016_wpa3_access_points",
+    "feature_017_hidden_networks",
+    "feature_018_deduplicate_scan",
+    "feature_019_scan_delta",
+    "feature_020_scan_summary",
+    "feature_021_strongest_networks",
+    "feature_022_weakest_networks",
+    "feature_023_group_by_ssid",
+    "feature_024_strongest_per_ssid",
+    "feature_025_oui_vendor_lookup",
+    "feature_026_locally_administered_mac",
+    "feature_027_randomized_mac_detect",
+    "feature_028_channel_congestion",
+    "feature_029_overlap_24ghz",
+    "feature_030_recommend_24ghz_channel",
+    "feature_031_recommend_5ghz_channel",
+    "feature_032_recommend_6ghz_channel",
+    "feature_033_channel_quality",
+    "feature_034_dfs_channel_detect",
+    "feature_035_six_ghz_psc_detect",
+    "feature_036_recommend_channel_width",
+    "feature_037_band_distribution",
+    "feature_038_security_distribution",
+    "feature_039_vendor_distribution",
+    "feature_040_parse_iw_scan",
+    "feature_041_parse_iwlist_scan",
+    "feature_042_parse_netsh_scan",
+    "feature_043_parse_airport_scan",
+    "feature_044_parse_system_profiler",
+    "feature_045_parse_station_dump",
+    "feature_046_parse_iw_link",
+    "feature_047_parse_ethtool",
+    "feature_048_parse_route_table",
+    "feature_049_parse_arp_linux",
+    "feature_050_parse_arp_windows",
+    "feature_051_parse_resolv_conf",
+    "feature_052_parse_ping_output",
+    "feature_053_parse_traceroute",
+    "feature_054_validate_network_record",
+    "feature_055_validate_scan",
+    "feature_056_subnet_summary",
+    "feature_057_ip_in_subnet",
+    "feature_058_default_gateway_from_route",
+    "feature_059_dns_servers_from_config",
+    "feature_060_reverse_dns_lookup",
+    "feature_061_dns_lookup_timing",
+    "feature_062_latency_summary",
+    "feature_063_packet_loss_calculator",
+    "feature_064_jitter_calculator",
+    "feature_065_interface_counter_delta",
+    "feature_066_interface_throughput",
+    "feature_067_packet_error_rate",
+    "feature_068_inspect_url",
+    "feature_069_tls_certificate_expiry",
+    "feature_070_security_rank",
+    "feature_071_security_warnings",
+    "feature_072_rogue_ap_candidates",
+    "feature_073_evil_twin_candidates",
+    "feature_074_duplicate_bssid_check",
+    "feature_075_weak_signal_alerts",
+    "feature_076_open_wifi_alerts",
+    "feature_077_transition_mode_detect",
+    "feature_078_redact_mac",
+    "feature_079_redact_ssid",
+    "feature_080_anonymise_scan",
+    "feature_081_ssid_hash",
+    "feature_082_scan_fingerprint",
+    "feature_083_alert_severity",
+    "feature_084_deduplicate_alerts",
+    "feature_085_alert_threshold",
+    "feature_086_export_json",
+    "feature_087_export_csv",
+    "feature_088_export_html",
+    "feature_089_prometheus_metrics",
+    "feature_090_network_report",
+    "feature_091_history_window",
+    "feature_092_signal_trend",
+    "feature_093_signal_percentiles",
+    "feature_094_channel_rank",
+    "feature_095_format_bytes",
+    "feature_096_format_duration",
+    "feature_097_safe_filename",
+    "feature_098_validate_settings",
+    "feature_099_health_report",
+    "feature_100_wifi_generation_classify",
+)
+
+@lru_cache(maxsize=1)
+def _modules():
+    loaded = {}
+    for module_name in FEATURE_MODULES:
+        qualified_name = f"{__package__}.{module_name}"
+        try:
+            module = importlib.import_module(qualified_name)
+        except ModuleNotFoundError as error:
+            # During the sequenced feature commits, not-yet-added modules are absent.
+            # Do not hide missing dependencies raised from inside an existing plugin.
+            if error.name == qualified_name:
+                continue
+            raise
+        feature = getattr(module, "FEATURE", None)
+        if isinstance(feature, dict) and feature.get("slug") and callable(feature.get("run")):
+            loaded[feature["slug"]] = feature
+    return loaded
+
+def catalog():
+    return [{k: v for k, v in feature.items() if k != "run"} for feature in sorted(_modules().values(), key=lambda f: f["id"])]
+
+def run(slug: str, payload: dict | None = None):
+    feature = _modules().get(slug)
+    if feature is None:
+        raise KeyError(f"Unknown feature: {slug}")
+    result = feature["run"](payload or {})
+    return {"feature": feature["id"], "slug": slug, "result": result}
+
+def count():
+    return len(_modules())
