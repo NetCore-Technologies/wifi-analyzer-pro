@@ -28,9 +28,9 @@ class AuthManagerTests(unittest.TestCase):
         token = self.auth.setup("correct horse battery staple")
         self.assertTrue(self.auth.validate(token))
         self.assertTrue(self.auth.configured())
-        self.assertTrue(Path(self.auth_path).exists())
+        self.assertTrue(Path(self.auth.path).exists())
         if os.name != "nt":
-            self.assertEqual(stat.S_IMODE(Path(self.auth_path).stat().st_mode), 0o600)
+            self.assertEqual(stat.S_IMODE(Path(self.auth.path).stat().st_mode), 0o600)
 
     def test_login_survives_auth_manager_restart(self):
         self.auth.setup("correct horse battery staple")
@@ -45,7 +45,7 @@ class AuthManagerTests(unittest.TestCase):
         self.assertFalse(self.auth.validate(token))
 
     def test_corrupt_auth_file_fails_closed_and_cannot_be_replaced_by_setup(self):
-        Path(self.auth_path).write_text("not-json", encoding="utf-8")
+        Path(self.auth.path).write_text("not-json", encoding="utf-8")
         broken = AuthManager(path=self.auth_path)
         self.assertTrue(broken.configured())
         self.assertFalse(broken.validate("anything"))
@@ -57,7 +57,7 @@ class AuthManagerTests(unittest.TestCase):
 
     def test_session_token_is_not_written_to_auth_file(self):
         token = self.auth.setup("correct horse battery staple")
-        contents = Path(self.auth_path).read_text(encoding="utf-8")
+        contents = Path(self.auth.path).read_text(encoding="utf-8")
         self.assertNotIn(token, contents)
         self.assertIn("verifier", contents)
 
@@ -101,7 +101,7 @@ class AuthManagerTests(unittest.TestCase):
         legacy_password = "correct horse battery staple"
         salt = b"legacy-auth-salt1"
         verifier = AuthManager._derive(legacy_password, salt)
-        Path(self.auth_path).write_text(json.dumps({
+        Path(self.auth.path).write_text(json.dumps({
             "version": 1,
             "salt": salt.hex(),
             "verifier": verifier.hex(),
@@ -112,7 +112,7 @@ class AuthManagerTests(unittest.TestCase):
         self.assertTrue(migrated.validate(token))
         self.assertEqual(migrated.session_info(token)["username"], "admin")
         self.assertEqual(migrated.session_info(token)["role"], "admin")
-        saved = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
+        saved = json.loads(Path(self.auth.path).read_text(encoding="utf-8"))
         self.assertEqual(saved["version"], 2)
         self.assertIn("admin", saved["users"])
 
