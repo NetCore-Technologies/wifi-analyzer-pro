@@ -375,19 +375,21 @@ def normalize_snapshot(payload: dict) -> dict:
             token = _text(raw_gateway, f"{field}.gateway", 128, required=True)
             address_token, separator, suffix = token.partition("%")
             try:
-                gateway = str(ipaddress.ip_address(address_token.strip()))
+                parsed_gateway = ipaddress.ip_address(address_token.strip())
+            except ValueError as error:
+                if separator:
+                    raise ValueError(
+                        f"{field}.gateway must contain a valid IP address before the interface suffix"
+                    ) from error
+                gateway_interface = _interface_name(
+                    token, f"{field}.gateway_interface", required=True
+                )
+            else:
+                gateway = str(parsed_gateway)
                 if separator:
                     gateway_interface = _interface_name(
                         suffix.strip(), f"{field}.gateway_interface", required=True
                     )
-            except ValueError:
-                if separator:
-                    raise ValueError(
-                        f"{field}.gateway must contain a valid IP address before the interface suffix"
-                    )
-                gateway_interface = _interface_name(
-                    token, f"{field}.gateway_interface", required=True
-                )
 
         distance = _integer(record.get("distance"), f"{field}.distance", 1, 255)
         table = _text(

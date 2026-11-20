@@ -122,6 +122,7 @@ class RouterVlanSegmentationAuditTests(unittest.TestCase):
                 "networks": [
                     {"id": "office-a", "name": "Office A", "vlan_enabled": False, "vlan_id": 20},
                     {"id": "office-b", "name": "Office B", "vlan_enabled": True, "vlan_id": 20},
+                    {"id": "office-c", "name": "Office C", "vlan_enabled": True, "vlan_id": 20},
                     {"id": "guest", "name": "Guest", "vlan_enabled": True, "vlan_id": None},
                 ],
             },
