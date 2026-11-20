@@ -8,7 +8,7 @@ from pathlib import Path
 
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report
 from wifi_analyzer_backend.feature_plugins.feature_188_router_scheduled_report_job_intake import run as prepare_job
-from wifi_analyzer_backend.report_worker import MAX_RESPONSE_BYTES, RouterReportWebhookWorker
+from wifi_analyzer_backend.report_worker import MAX_RESPONSE_BYTES, MAX_WORKER_BATCH, RouterReportWebhookWorker
 from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
 
 NOW = datetime(2026, 11, 20, 10, 0, tzinfo=timezone.utc)
