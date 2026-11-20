@@ -157,18 +157,20 @@ PAYLOADS = {
 
     "site_network_segment_correlation": {"segments":[{"segment_id":"main","site_id":"home","cidr":"192.168.1.0/24","gateway_ip":"192.168.1.1","vlan_id":10}],"access_points":[{"ap_id":"ap-1","site_id":"home","management_ip":"192.168.1.20"}]},
 
+    "floor_plan_anchor_validation": {"floorplans":[{"floorplan_id":"level-1","site_id":"home","width_px":1600,"height_px":900}],"access_points":[{"ap_id":"ap-1","site_id":"home"}],"anchors":[{"ap_id":"ap-1","floorplan_id":"level-1","x":0.25,"y":0.5}]},
+
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 143)
-        self.assertEqual(len(set(FEATURE_MODULES)), 143)
-        self.assertEqual(count(), 143)
-        self.assertEqual(len(entries), 143)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 143)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 144)])
+        self.assertEqual(len(FEATURE_MODULES), 144)
+        self.assertEqual(len(set(FEATURE_MODULES)), 144)
+        self.assertEqual(count(), 144)
+        self.assertEqual(len(entries), 144)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 144)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 145)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -306,6 +308,41 @@ class FeatureCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "belong to the segment"):
             run("site_network_segment_correlation", {
                 "segments": [{"segment_id": "main", "site_id": "home", "cidr": "192.168.1.0/24", "gateway_ip": "192.168.2.1"}]
+            })
+
+
+    def test_floorplan_anchor_validation_reports_collocation_and_unanchored_aps(self):
+        result = run("floor_plan_anchor_validation", {
+            "floorplans": [{"floorplan_id": "level-1", "site_id": "home"}],
+            "access_points": [{"ap_id": "a", "site_id": "home"}, {"ap_id": "b", "site_id": "home"}, {"ap_id": "c", "site_id": "home"}],
+            "anchors": [
+                {"ap_id": "a", "floorplan_id": "level-1", "x": 0.25, "y": 0.5},
+                {"ap_id": "b", "floorplan_id": "level-1", "x": 0.25, "y": 0.5},
+                {"ap_id": "missing-ap", "floorplan_id": "level-1", "x": 0.8, "y": 0.8}
+            ]
+        })["result"]
+        self.assertEqual(result["anchor_count"], 2)
+        self.assertEqual(result["unanchored_access_points"], ["c"])
+        self.assertEqual(len(result["collocated_anchor_groups"]), 1)
+        self.assertEqual(len(result["unresolved_anchors"]), 1)
+
+    def test_floorplan_pixel_anchor_must_be_within_image_dimensions(self):
+        with self.assertRaisesRegex(ValueError, "within floor-plan bounds"):
+            run("floor_plan_anchor_validation", {
+                "floorplans": [{"floorplan_id": "level-1", "site_id": "home", "width_px": 100, "height_px": 100}],
+                "access_points": [{"ap_id": "a", "site_id": "home"}],
+                "anchors": [{"ap_id": "a", "floorplan_id": "level-1", "coordinate_space": "pixels", "x": 101, "y": 50}]
+            })
+
+    def test_floorplan_ap_can_have_only_one_anchor_per_floorplan(self):
+        with self.assertRaisesRegex(ValueError, "only one anchor"):
+            run("floor_plan_anchor_validation", {
+                "floorplans": [{"floorplan_id": "level-1", "site_id": "home"}],
+                "access_points": [{"ap_id": "a", "site_id": "home"}],
+                "anchors": [
+                    {"ap_id": "a", "floorplan_id": "level-1", "x": 0.1, "y": 0.1},
+                    {"ap_id": "a", "floorplan_id": "level-1", "x": 0.2, "y": 0.2}
+                ]
             })
 
 
