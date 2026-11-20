@@ -20,7 +20,7 @@ const styles = {
 
 async function readResponse(response) {
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || \`Request failed (HTTP \${response.status})\`);
+  if (!response.ok) throw new Error(data.error || `Request failed (HTTP ${response.status})`);
   return data;
 }
 
@@ -40,7 +40,7 @@ export default function TeamAccessPanel() {
     setLoading(true);
     setError("");
     try {
-      const response = await apiFetch(\`\${API_BASE}/api/users\`, { signal: AbortSignal.timeout(8000) });
+      const response = await apiFetch(`${API_BASE}/api/users`, { signal: AbortSignal.timeout(8000) });
       const data = await readResponse(response);
       setUsers(Array.isArray(data.users) ? data.users : []);
     } catch (loadError) {
@@ -59,7 +59,7 @@ export default function TeamAccessPanel() {
     setError("");
     setNotice("");
     try {
-      const response = await apiFetch(\`\${API_BASE}/api/users\`, {
+      const response = await apiFetch(`${API_BASE}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password, role }),
@@ -69,7 +69,7 @@ export default function TeamAccessPanel() {
       setUsers(current => [...current, data.user].sort((a, b) => a.username.localeCompare(b.username)));
       setUsername("");
       setPassword("");
-      setNotice(\`Created account for \${data.user.username}.\`);
+      setNotice(`Created account for ${data.user.username}.`);
     } catch (createError) {
       setError(createError.message || "Could not create this account.");
     } finally {
@@ -83,7 +83,7 @@ export default function TeamAccessPanel() {
     setError("");
     setNotice("");
     try {
-      const response = await apiFetch(\`\${API_BASE}/api/users/\${user.id}/update\`, {
+      const response = await apiFetch(`${API_BASE}/api/users/${user.id}/update`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -91,7 +91,7 @@ export default function TeamAccessPanel() {
       });
       const data = await readResponse(response);
       setUsers(current => current.map(item => item.id === user.id ? data.user : item));
-      setNotice(\`Updated \${user.username}.\`);
+      setNotice(`Updated ${user.username}.`);
     } catch (updateError) {
       setError(updateError.message || "Could not update this account.");
     } finally {
@@ -170,7 +170,7 @@ export default function TeamAccessPanel() {
                     {user.role === "owner" ? "Owner" : "Administrator · owner-managed"}
                   </span>
                 ) : (
-                  <select aria-label={\`Role for \${user.username}\`} style={styles.input} value={user.role} disabled={saving || !user.enabled || (identity?.role !== "owner" && user.role === "admin")} onChange={event => updateUser(user, { role: event.target.value })}>
+                  <select aria-label={`Role for ${user.username}`} style={styles.input} value={user.role} disabled={saving || !user.enabled || (identity?.role !== "owner" && user.role === "admin")} onChange={event => updateUser(user, { role: event.target.value })}>
                     {availableRoles.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                 )}

@@ -123,6 +123,20 @@ class AuthManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(PermissionError, "try again later"):
             self.auth.login("correct horse battery staple")
 
+    def test_failed_login_lockout_is_scoped_to_the_target_account(self):
+        owner = self.auth.setup("correct horse battery staple")
+        self.auth.create_user(owner, "network1", "network user passphrase", "viewer")
+        for _ in range(4):
+            with self.assertRaises(PermissionError):
+                self.auth.login("wrong password", "admin")
+        with self.assertRaisesRegex(PermissionError, "five minutes"):
+            self.auth.login("wrong password", "admin")
+        # An attack against one username must not deny every other employee.
+        colleague_token = self.auth.login("network user passphrase", "network1")
+        self.assertTrue(self.auth.validate(colleague_token))
+        with self.assertRaisesRegex(PermissionError, "try again later"):
+            self.auth.login("correct horse battery staple", "admin")
+
     def test_named_users_have_distinct_credentials_and_role_permissions(self):
         owner = self.auth.setup("owner passphrase is secure")
         analyst = self.auth.create_user(owner, "Wireless.Analyst", "analyst password secure", "analyst")

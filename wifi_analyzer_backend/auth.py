@@ -62,8 +62,9 @@ class AuthManager:
         self.session_ttl_seconds = max(300, int(session_ttl_seconds))
         self._lock = threading.RLock()
         self._sessions: dict[str, Any] = {}
-        self._failed_login_count = 0
-        self._locked_until = 0.0
+        # Failed-login lockout is scoped to a username. Unknown usernames share
+        # one bounded bucket so random names cannot grow the map without limit.
+        self._login_failures: dict[str, tuple[int, float]] = {}
         self._state: dict[str, Any] | None = None
         self._broken = False
         self._load()
@@ -273,9 +274,11 @@ class AuthManager:
             except ValueError:
                 normalised = ""
             now = time.time()
-            if now < self._locked_until:
-                raise PermissionError("Too many failed attempts; try again later")
             user = self._find_user(normalised) if normalised else None
+            attempt_key = normalised if user is not None else "__unknown__"
+            failed_count, locked_until = self._login_failures.get(attempt_key, (0, 0.0))
+            if now < locked_until:
+                raise PermissionError("Too many failed attempts; try again later")
             if user is None:
                 supplied = self._derive(password, b"\x00" * 16)
                 hmac.compare_digest(supplied, b"\x00" * 64)
@@ -286,14 +289,13 @@ class AuthManager:
                 if not hmac.compare_digest(supplied, expected) or not user["enabled"]:
                     user = None
             if user is None:
-                self._failed_login_count += 1
-                if self._failed_login_count >= 5:
-                    self._failed_login_count = 0
-                    self._locked_until = now + 300
+                failed_count += 1
+                if failed_count >= 5:
+                    self._login_failures[attempt_key] = (0, now + 300)
                     raise PermissionError("Too many failed attempts; sign-in is locked for five minutes")
+                self._login_failures[attempt_key] = (failed_count, 0.0)
                 raise PermissionError("Invalid username or password")
-            self._failed_login_count = 0
-            self._locked_until = 0.0
+            self._login_failures.pop(attempt_key, None)
             return self._new_session(user["id"])
 
     def _session(self, token: str | None) -> tuple[dict[str, Any] | None, str | None]:
