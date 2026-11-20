@@ -282,19 +282,27 @@ PAYLOADS = {
         "wireless": [{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":2437,"channel":6,"channel_width_mhz":20,"signal":-52,"noise":-95,"txpower":20,"security":"WPA3","up":True,"password":"must-never-be-copied"}],
         "associations": [{"interface":"phy0-ap0","stations":[{"mac":"AA:BB:CC:DD:EE:01","signal":-61,"tx":{"rate":600},"rx":{"rate":433}}]}],
         "routes": [{"target":"0.0.0.0/0","nexthop":"192.168.1.254","device":"eth1","metric":10}]
+    },
+    "router_agent_health_report": {
+        "now": "2026-11-20T10:00:00Z",
+        "stale_after_seconds": 180,
+        "agents": [
+            {"agent_id":"openwrt-home","adapter_id":"openwrt","agent_version":"1.2.0","status":"healthy","last_seen_at":"2026-11-20T09:59:30Z","capabilities":["system.board","network.interfaces"]},
+            {"agent_id":"openwrt-branch","adapter_id":"openwrt","agent_version":"1.0.0","status":"degraded","last_seen_at":"2026-11-20T09:50:00Z","capabilities":["system.board"]}
+        ]
     }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_two_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_three_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 162)
-        self.assertEqual(len(set(FEATURE_MODULES)), 162)
-        self.assertEqual(count(), 162)
-        self.assertEqual(len(entries), 162)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 162)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 163)])
+        self.assertEqual(len(FEATURE_MODULES), 163)
+        self.assertEqual(len(set(FEATURE_MODULES)), 163)
+        self.assertEqual(count(), 163)
+        self.assertEqual(len(entries), 163)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 163)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 164)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -914,6 +922,25 @@ class FeatureCatalogTests(unittest.TestCase):
             run("openwrt_snapshot_normalizer", {"captured_at":"2026-11-20T10:00:00Z","wireless":[{"interface":"wlan0","bssid":"invalid"}]})
         with self.assertRaisesRegex(ValueError, "IPv4 interface address"):
             run("openwrt_snapshot_normalizer", {"captured_at":"2026-11-20T10:00:00Z","interfaces":[{"interface":"lan","ipv4-address":[{"address":"999.1.1.1","mask":24}]}]})
+
+    def test_router_agent_health_report_classifies_healthy_degraded_and_stale_agents(self):
+        result = run("router_agent_health_report", PAYLOADS["router_agent_health_report"])["result"]
+        self.assertEqual(result["summary"]["agent_count"], 2)
+        by_id = {agent["agent_id"]: agent for agent in result["agents"]}
+        self.assertEqual(by_id["openwrt-home"]["health_status"], "healthy")
+        self.assertEqual(by_id["openwrt-branch"]["health_status"], "stale")
+        self.assertEqual(result["summary"]["status_counts"]["stale"], 1)
+
+    def test_router_agent_health_report_rejects_naive_times_duplicate_ids_and_bad_thresholds(self):
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
+            run("router_agent_health_report", {"now":"2026-11-20T10:00:00","agents":[]})
+        with self.assertRaisesRegex(ValueError, "unique"):
+            run("router_agent_health_report", {"now":"2026-11-20T10:00:00Z","agents":[
+                {"agent_id":"a","last_seen_at":"2026-11-20T09:59:59Z"},
+                {"agent_id":"a","last_seen_at":"2026-11-20T09:59:58Z"},
+            ]})
+        with self.assertRaisesRegex(ValueError, "between 10 and 86400"):
+            run("router_agent_health_report", {"now":"2026-11-20T10:00:00Z","stale_after_seconds":5})
 
 if __name__ == "__main__":
     unittest.main()

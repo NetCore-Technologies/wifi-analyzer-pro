@@ -106,6 +106,8 @@ The local HTTP service exposes:
 | `GET /api/adapters` | List installed versioned router-adapter manifests and read-only capabilities |
 | `POST /api/adapters/negotiate` | Negotiate an authenticated agent’s advertised capabilities against an installed adapter contract |
 | `POST /api/adapters/openwrt/normalise` | Validate and normalise a supplied OpenWrt board/network/wireless/route snapshot |
+| `POST /api/agents/heartbeat` | Record an authenticated agent heartbeat and supported capabilities (no credentials or raw payloads) |
+| `GET /api/agents/health` | Report latest agent health using server-received heartbeat timestamps |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.

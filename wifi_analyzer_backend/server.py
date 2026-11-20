@@ -9,6 +9,7 @@ Then open:  http://<pi-ip>:199
 import sys, os, json, platform, subprocess, re, time, mimetypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
+from datetime import datetime, timezone
 
 # Runtime dependencies must be installed by the installer or bundled by PyInstaller.
 # Never mutate the user's Python environment when the application starts.
@@ -19,11 +20,13 @@ if __package__:
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
+    from .router_adapters.health_store import RouterAgentHealthStore
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
+    from router_adapters.health_store import RouterAgentHealthStore
 
 OS = platform.system()
 APP_VERSION = "1.0.7"
@@ -37,6 +40,7 @@ CORS_ORIGINS = {
 
 AUTH = AuthManager()
 HISTORY = SiteHistoryStore()
+AGENT_HEALTH = RouterAgentHealthStore()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_wifi_iface():
@@ -700,6 +704,11 @@ class Handler(BaseHTTPRequestHandler):
                 "count": len(router_adapter_manifests()),
                 "adapters": router_adapter_manifests(),
             },
+            "/api/agents/health": lambda: run_feature("router_agent_health_report", {
+                "agents": AGENT_HEALTH.list_agents(),
+                "now": datetime.now(timezone.utc).isoformat(),
+                "stale_after_seconds": 180,
+            }),
             "/api/capabilities": lambda: {
                 "name": "WiFi Analyzer Pro",
                 "version": APP_VERSION,
@@ -823,6 +832,17 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 401)
                 return
             self.send_json({"token": token, "status": AUTH.status(token)})
+            return
+
+        if path == "/api/agents/heartbeat":
+            if not self.require_auth():
+                return
+            try:
+                heartbeat = AGENT_HEALTH.record_heartbeat(payload)
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json({"agent": heartbeat}, 201 if heartbeat["created"] else 200)
             return
 
         if path == "/api/adapters/openwrt/normalise":

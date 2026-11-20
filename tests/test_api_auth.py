@@ -10,6 +10,7 @@ from http.client import HTTPConnection
 
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
+from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
 
 
 class AuthenticatedApiTests(unittest.TestCase):
@@ -17,8 +18,10 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.previous_auth = server.AUTH
         self.previous_history = server.HISTORY
+        self.previous_agent_health = server.AGENT_HEALTH
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
+        server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
         self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         self.httpd.daemon_threads = True
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -31,6 +34,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.thread.join(timeout=2)
         server.AUTH = self.previous_auth
         server.HISTORY = self.previous_history
+        server.AGENT_HEALTH = self.previous_agent_health
         self.temp.cleanup()
 
     def request(self, method, path, payload=None, token=None, origin=None):
@@ -72,8 +76,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 162)
-        self.assertEqual(len(catalog["features"]), 162)
+        self.assertEqual(catalog["count"], 163)
+        self.assertEqual(len(catalog["features"]), 163)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -83,6 +87,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("consolidated_site_audit_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_capability_negotiation", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_snapshot_normalizer", {item["slug"] for item in catalog["features"]})
+        self.assertIn("router_agent_health_report", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -309,6 +314,48 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["feature"], "F162")
         self.assertEqual(result["result"]["adapter_id"], "openwrt")
+
+    def test_router_agent_heartbeat_persists_and_health_endpoint_reports_agent_status(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        heartbeat = {
+            "agent_id": "openwrt-home",
+            "adapter_id": "openwrt",
+            "agent_version": "1.2.0",
+            "status": "healthy",
+            "capabilities": ["system.board", "wireless.radios", "untrusted.write"],
+            "api_token": "must-not-be-persisted",
+        }
+        status, saved = self.request("POST", "/api/agents/heartbeat", heartbeat, token=token)
+        self.assertEqual(status, 201)
+        self.assertEqual(saved["agent"]["rejected_capabilities"], ["untrusted.write"])
+        status, report = self.request("GET", "/api/agents/health", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(report["result"]["summary"]["agent_count"], 1)
+        self.assertEqual(report["result"]["agents"][0]["health_status"], "healthy")
+        self.assertNotIn("api_token", report["result"]["agents"][0])
+        self.assertNotIn("untrusted.write", report["result"]["agents"][0]["capabilities"])
+
+        status, updated = self.request("POST", "/api/agents/heartbeat", {**heartbeat, "status": "degraded"}, token=token)
+        self.assertEqual(status, 200)
+        self.assertFalse(updated["agent"]["created"])
+        self.assertEqual(updated["agent"]["status"], "degraded")
+
+    def test_router_agent_heartbeat_requires_authentication_and_rejects_unknown_adapter(self):
+        status, denied = self.request("POST", "/api/agents/heartbeat", {"agent_id":"edge","adapter_id":"openwrt","agent_version":"1.0.0"})
+        self.assertEqual(status, 401)
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        status, invalid = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"edge","adapter_id":"unifi","agent_version":"1.0.0",
+        }, token=setup["token"])
+        self.assertEqual(status, 400)
+        self.assertIn("not installed", invalid["error"])
+
+        for field, value in (("status", []), ("error_code", {})):
+            bad = {"agent_id":"edge","adapter_id":"openwrt","agent_version":"1.0.0",field:value}
+            status, response = self.request("POST", "/api/agents/heartbeat", bad, token=setup["token"])
+            self.assertEqual(status, 400)
+            self.assertIn(field, response["error"])
 
 if __name__ == "__main__":
     unittest.main()
