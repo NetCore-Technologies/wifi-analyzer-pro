@@ -32,7 +32,13 @@ python3 -m venv .venv
   --add-data "dist:dist" \
   server.py
 
-SMOKE_PORT=19991
+SMOKE_PORT="$(.venv/bin/python - <<'PY'
+import socket
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)"
 SMOKE_LOG="$SCRIPT_DIR/build/frozen-smoke.log"
 WIFI_ANALYZER_PORT="$SMOKE_PORT" "$SCRIPT_DIR/build/binary/wifi-analyzer-pro" >"$SMOKE_LOG" 2>&1 &
 SERVER_PID=$!
