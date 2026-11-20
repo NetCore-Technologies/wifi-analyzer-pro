@@ -171,18 +171,24 @@ PAYLOADS = {
 
     "site_topology_snapshot_diff": {"previous":{"access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"b","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"b","relationship":"wired_uplink"}]},"current":{"access_points":[{"ap_id":"a","site_id":"remote"},{"ap_id":"c","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"c","relationship":"mesh_backhaul"}]}},
 
+    "site_inventory_comparison": {"access_points":[{"bssid":"00:11:22:33:44:55","site_id":"home","band":"5GHz","vendor":"VendorA","model":"AX1"},{"bssid":"00:11:22:33:44:66","site_id":"branch","band":"2.4GHz","vendor":"VendorB","model":"AX2"}]},
+
+    "ap_observation_freshness_audit": {"now":"2026-11-20T10:00:00Z","stale_after_seconds":900,"access_points":[{"ap_id":"ap-a","site_id":"home","last_seen":"2026-11-20T09:30:00Z"},{"ap_id":"ap-b","site_id":"home","last_seen":"2026-11-20T09:59:00Z"},{"ap_id":"ap-c","site_id":"branch"}]},
+
+    "site_ap_channel_reuse_audit": {"radios":[{"radio_id":"r1","ap_id":"a","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20},{"radio_id":"r2","ap_id":"b","site_id":"home","band":"2.4GHz","channel":3,"channel_width_mhz":20},{"radio_id":"r3","ap_id":"c","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20}]} ,
+
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_fifty_three_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 150)
-        self.assertEqual(len(set(FEATURE_MODULES)), 150)
-        self.assertEqual(count(), 150)
-        self.assertEqual(len(entries), 150)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 150)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 151)])
+        self.assertEqual(len(FEATURE_MODULES), 153)
+        self.assertEqual(len(set(FEATURE_MODULES)), 153)
+        self.assertEqual(count(), 153)
+        self.assertEqual(len(entries), 153)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 153)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 154)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -444,6 +450,48 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(result["added_link_count"], 1)
         self.assertEqual(result["removed_link_count"], 1)
 
+
+
+    def test_cross_site_inventory_reports_bssid_collisions_and_missing_bands(self):
+        result = run("site_inventory_comparison", {
+            "access_points": [
+                {"bssid": "00:11:22:33:44:55", "site_id": "home", "band": "5GHz"},
+                {"bssid": "00:11:22:33:44:55", "site_id": "branch", "band": "2.4GHz"}
+            ]
+        })["result"]
+        self.assertEqual(result["site_count"], 2)
+        self.assertEqual(result["collision_count"], 1)
+        self.assertEqual(result["cross_site_comparison"]["sites_missing_each_band"]["6GHz"], ["branch", "home"])
+
+    def test_ap_freshness_separates_stale_unknown_and_future_records(self):
+        result = run("ap_observation_freshness_audit", {
+            "now": "2026-11-20T10:00:00Z",
+            "stale_after_seconds": 900,
+            "access_points": [
+                {"ap_id": "stale", "last_seen": "2026-11-20T09:30:00Z"},
+                {"ap_id": "fresh", "last_seen": "2026-11-20T09:59:00Z"},
+                {"ap_id": "unknown"},
+                {"ap_id": "future", "last_seen": "2026-11-20T10:01:00Z"}
+            ]
+        })["result"]
+        self.assertEqual(result["status_counts"], {"fresh": 1, "stale": 1, "unknown": 1, "future_timestamp": 1})
+
+    def test_site_channel_reuse_audit_reports_cochannel_and_adjacent_overlap(self):
+        result = run("site_ap_channel_reuse_audit", {
+            "radios": [
+                {"radio_id": "r1", "ap_id": "a", "site_id": "home", "band": "2.4GHz", "channel": 1, "channel_width_mhz": 20},
+                {"radio_id": "r2", "ap_id": "b", "site_id": "home", "band": "2.4GHz", "channel": 3, "channel_width_mhz": 20},
+                {"radio_id": "r3", "ap_id": "c", "site_id": "home", "band": "2.4GHz", "channel": 1, "channel_width_mhz": 20}
+            ]
+        })["result"]
+        self.assertEqual(result["co_channel_conflict_count"], 1)
+        self.assertEqual(result["adjacent_overlap_count"], 2)
+
+    def test_wide_channel_reuse_requires_center_frequency_evidence(self):
+        with self.assertRaisesRegex(ValueError, "center_channel or center_frequency_mhz"):
+            run("site_ap_channel_reuse_audit", {
+                "radios": [{"radio_id": "r1", "ap_id": "a", "site_id": "home", "band": "5GHz", "channel": 36, "channel_width_mhz": 80}]
+            })
 
 
 if __name__ == "__main__":
