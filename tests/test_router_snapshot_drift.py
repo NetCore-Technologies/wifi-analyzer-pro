@@ -232,7 +232,7 @@ class RouterSnapshotDriftTests(unittest.TestCase):
             }})
 
     def test_rejects_naive_timestamps_duplicate_and_missing_identities(self):
-        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
             run({"current": {**UNIFI_CURRENT, "captured_at": "2026-11-20T10:00:00"}})
         with self.assertRaisesRegex(ValueError, "duplicate identities"):
             run({"current": {
