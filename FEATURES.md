@@ -1,4 +1,4 @@
-# 181 WiFi Analyzer Pro feature tools (F001–F168, F172–F184)
+# 182 WiFi Analyzer Pro feature tools (F001–F168, F172–F185)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -213,3 +213,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F183 | Router audit report comparator (`router_audit_report_comparator`) | Router operations | Validate F182 bundle SHA-256 hashes and compare reports by source/site/router/resource identity; classify unchanged, changed, added and removed findings with section/site deltas and bounded detail output. |
 
 | F184 | Timezone-aware router scheduled report planner (`router_scheduled_report_planner`) | Router operations | Validate daily, weekly and monthly report schedules and preview future occurrences with IANA timezones, DST gap/fold policies and short-month skip/clamp rules; does not run background jobs. |
+
+| F185 | Allow-listed signed router webhook envelope builder (`router_webhook_envelope_builder`) | Router operations | Create canonical event batches with HMAC-SHA256 signatures for exact allow-listed HTTPS DNS hostnames, timestamp/key headers and idempotency keys; prepares but never transmits requests. |

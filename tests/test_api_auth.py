@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 181)
-        self.assertEqual(len(catalog["features"]), 181)
+        self.assertEqual(catalog["count"], 182)
+        self.assertEqual(len(catalog["features"]), 182)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -346,6 +346,30 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["adapter_id"], "unifi")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
+
+    def test_router_webhook_envelope_builder_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_webhook_envelope_builder", {
+            "now": "2026-11-20T10:00:00Z",
+            "batch_id": "api-batch-001",
+            "key_id": "router-key-v1",
+            "signing_secret": "api-test-secret-that-is-over-thirty-two-bytes-long",
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "events": [{
+                "event_id": "api-event-001", "event_type": "router.health.warning",
+                "severity": "warning", "occurred_at": "2026-11-20T10:00:00Z",
+                "site_id": "office", "router_id": "openwrt-office",
+                "summary": "Router CPU warning", "attributes": {"observed": 90, "threshold": 85},
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F185")
+        self.assertEqual(result["result"]["status"], "prepared")
+        self.assertEqual(result["result"]["summary"]["event_count"], 1)
+        self.assertNotIn("signing_secret", str(result))
+        self.assertNotIn("api-test-secret", str(result))
 
     def test_router_scheduled_report_planner_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
