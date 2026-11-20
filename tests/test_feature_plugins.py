@@ -39,6 +39,7 @@ _SAMPLE_DELIVERY_PAYLOAD_HASH = hashlib.sha256(json.dumps(
 
 PAYLOADS = {
     "interface_inventory": {},
+    "pcap_capture_analyzer": {"capture_base64": "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"},
     "wireless_interface_inventory": {},
     "wifi_scan": {"networks": SAMPLE, "source": "test"},
     "normalise_bssid": {"bssid": "aa-bb-cc-dd-ee-ff"},
@@ -857,15 +858,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 187)
-        self.assertEqual(len(set(FEATURE_MODULES)), 187)
-        self.assertEqual(count(), 187)
-        self.assertEqual(len(entries), 187)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 187)
+        self.assertEqual(len(FEATURE_MODULES), 188)
+        self.assertEqual(len(set(FEATURE_MODULES)), 188)
+        self.assertEqual(count(), 188)
+        self.assertEqual(len(entries), 188)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 188)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):
