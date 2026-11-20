@@ -244,7 +244,7 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
             + pcapng_enhanced_packet(0, ethernet_ipv4_udp())
             + pcapng_enhanced_packet(0, ethernet_ipv4_udp())
         )
-        with self.assertRaisesRegex(ValueError, "packet limit"):
+        with self.assertRaisesRegex(ValueError, "analysis limit"):
             run({"capture_base64": base64.b64encode(capture).decode("ascii"), "maximum_packets": 1})
 
         corrupt = bytearray(pcapng_section() + pcapng_interface(1))
@@ -274,9 +274,10 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         self.assertEqual(result["summary"]["packet_count"], 1)
         self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
 
+        malformed_padding = b"\\x00" * ((-len(frame)) % 4)
         malformed_block = pcapng_block(
             3,
-            struct.pack("<I", len(frame)) + frame + b"\\x00" * 4,
+            struct.pack("<I", len(frame)) + frame + malformed_padding + b"\\x00" * 4,
         )
         malformed = pcapng_section() + pcapng_interface(1, snaplen=0) + malformed_block
         with self.assertRaisesRegex(ValueError, "data length does not match"):
@@ -346,7 +347,7 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
             run({"capture_base64": base64.b64encode(bad_fraction).decode()})
 
         two_packets = make_capture(1, [ethernet_ipv4_udp(), ethernet_ipv4_udp()])
-        with self.assertRaisesRegex(ValueError, "packet limit"):
+        with self.assertRaisesRegex(ValueError, "analysis limit"):
             run({"capture_base64": two_packets, "maximum_packets": 1})
 
     def test_rejects_non_object_input_and_invalid_packet_limit(self):
