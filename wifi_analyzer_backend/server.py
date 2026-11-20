@@ -14,6 +14,13 @@ from urllib.parse import urlparse, unquote
 # Never mutate the user's Python environment when the application starts.
 import psutil
 
+if __package__:
+    from .auth import AuthManager
+    from .feature_plugins import catalog as feature_catalog, run as run_feature
+else:  # Direct execution: python wifi_analyzer_backend/server.py
+    from auth import AuthManager
+    from feature_plugins import catalog as feature_catalog, run as run_feature
+
 OS = platform.system()
 APP_VERSION = "1.0.7"
 DEMO_MODE = os.getenv("WIFI_ANALYZER_DEMO", "").strip().lower() in {"1", "true", "yes", "on"}
@@ -23,6 +30,8 @@ CORS_ORIGINS = {
     for origin in os.getenv("WIFI_ANALYZER_CORS_ORIGINS", "").split(",")
     if origin.strip()
 } or DEFAULT_CORS_ORIGINS
+
+AUTH = AuthManager()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_wifi_iface():
@@ -576,6 +585,8 @@ def serve_static(handler, path):
 
 # ── HTTP Handler ──────────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
+    MAX_JSON_BODY = 1024 * 1024
+
     def log_message(self, fmt, *args):
         print(f"  {self.address_string()} {args[0]} {args[1]}")
 
@@ -587,6 +598,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Cache-Control", "no-store")
 
     def send_json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -597,19 +609,68 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def bearer_token(self):
+        value = self.headers.get("Authorization", "")
+        scheme, separator, token = value.partition(" ")
+        if separator and scheme.lower() == "bearer":
+            return token.strip() or None
+        return None
+
+    def origin_allowed(self):
+        origin = self.headers.get("Origin")
+        if not origin or origin in CORS_ORIGINS:
+            return True
+        parsed = urlparse(origin)
+        # Same-origin desktop/self-hosted deployments may use a LAN hostname
+        # instead of localhost; allow only an exact Host match in that case.
+        return parsed.scheme in {"http", "https"} and parsed.netloc == self.headers.get("Host")
+
+    def require_auth(self):
+        if AUTH.validate(self.bearer_token()):
+            return True
+        self.send_json({"error": "Authentication required"}, 401)
+        return False
+
+    def read_json_body(self):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            raise ValueError("Invalid Content-Length")
+        if length < 0 or length > self.MAX_JSON_BODY:
+            raise ValueError("Request body exceeds the 1 MiB limit")
+        if length == 0:
+            return {}
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise ValueError("Content-Type must be application/json")
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            raise ValueError("Request body must contain valid JSON")
+        if not isinstance(payload, dict):
+            raise ValueError("Request JSON must be an object")
+        return payload
+
     def do_OPTIONS(self):
         origin = self.headers.get("Origin")
         self.send_response(204)
         if origin in CORS_ORIGINS:
             self.send_header("Access-Control-Allow-Origin", origin)
-            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+            self.send_header("Access-Control-Max-Age", "600")
             self.send_header("Vary", "Origin")
         self.send_header("Content-Length", "0")
         self.end_headers()
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if path == "/api/auth/status":
+            self.send_json(AUTH.status(self.bearer_token()))
+            return
+        if path.startswith("/api/") and not self.require_auth():
+            return
+
         api_routes = {
             "/api/scan": lambda: {
                 "networks": (networks := scan()),
@@ -625,14 +686,23 @@ class Handler(BaseHTTPRequestHandler):
             "/api/has_wifi": has_wifi,
             "/api/devices": lambda: {"devices": get_devices()},
             "/api/speedtest": run_speedtest,
+            "/api/features": lambda: {
+                "count": len(feature_catalog()),
+                "features": feature_catalog(),
+            },
             "/api/capabilities": lambda: {
                 "name": "WiFi Analyzer Pro",
                 "version": APP_VERSION,
                 "platform": OS,
                 "mode": "demo" if DEMO_MODE else "live",
                 "wifi_interface": get_wifi_iface(),
+                "feature_tool_count": len(feature_catalog()),
                 "features": {"wireless_scan": True, "channel_analysis": True, "device_discovery": True, "speed_test": True},
-                "security": {"authentication": False, "remote_access": "Use a VPN or authenticated reverse proxy"},
+                "security": {
+                    "authentication": True,
+                    "auth_configured": AUTH.configured(),
+                    "remote_access": "Use a VPN or authenticated reverse proxy",
+                },
             },
             "/health": lambda: {"status": "ok", "version": APP_VERSION, "os": OS, "mode": "demo" if DEMO_MODE else "live"},
         }
@@ -650,6 +720,74 @@ class Handler(BaseHTTPRequestHandler):
             if not self.wfile.closed:
                 self.send_json({"error": "Internal server error"}, 500)
 
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if not self.origin_allowed():
+            self.send_json({"error": "Origin is not allowed"}, 403)
+            return
+
+        if path == "/api/auth/logout":
+            if not AUTH.logout(self.bearer_token()):
+                self.send_json({"error": "Invalid or expired session"}, 401)
+                return
+            self.send_json({"ok": True})
+            return
+
+        try:
+            payload = self.read_json_body()
+        except ValueError as error:
+            self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/auth/setup":
+            try:
+                token = AUTH.setup(payload.get("password"))
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except RuntimeError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            self.send_json({"token": token, "status": AUTH.status(token)}, 201)
+            return
+
+        if path == "/api/auth/login":
+            try:
+                token = AUTH.login(payload.get("password"))
+            except (PermissionError, RuntimeError) as error:
+                self.send_json({"error": str(error)}, 401)
+                return
+            self.send_json({"token": token, "status": AUTH.status(token)})
+            return
+
+        if path.startswith("/api/features/"):
+            if not self.require_auth():
+                return
+            slug = unquote(path[len("/api/features/"):]).strip("/")
+            if not slug or "/" in slug:
+                self.send_json({"error": "Unknown feature"}, 404)
+                return
+            try:
+                result = run_feature(slug, payload)
+            except KeyError:
+                self.send_json({"error": "Unknown feature"}, 404)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception as error:
+                print(f"[FEATURE ERROR] {slug}: {error}")
+                self.send_json({"error": "Feature execution failed"}, 500)
+                return
+            self.send_json(result)
+            return
+
+        if path.startswith("/api/"):
+            if not self.require_auth():
+                return
+        self.send_json({"error": "Not found"}, 404)
+
+
 if __name__ == "__main__":
     HOST = os.getenv("WIFI_ANALYZER_HOST", "127.0.0.1")
     PORT = int(os.getenv("WIFI_ANALYZER_PORT", "199"))
@@ -663,7 +801,7 @@ if __name__ == "__main__":
     print(f"[+] WiFi Analyzer Pro {APP_VERSION} on http://{HOST}:{PORT}")
     print(f"[+] OS: {OS} | Mode: {'demo' if DEMO_MODE else 'live'}")
     if HOST not in {"127.0.0.1", "localhost", "::1"}:
-        print("[SECURITY] API authentication is not built in. Use only on a trusted LAN or behind a VPN/authenticated reverse proxy.")
+        print("[SECURITY] The local password gate protects API endpoints. Use a firewall and a VPN/authenticated reverse proxy for remote access.")
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     server.daemon_threads = True
     try:
