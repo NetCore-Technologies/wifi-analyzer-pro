@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 182)
-        self.assertEqual(len(catalog["features"]), 182)
+        self.assertEqual(catalog["count"], 183)
+        self.assertEqual(len(catalog["features"]), 183)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -346,6 +346,32 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["adapter_id"], "unifi")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
+
+    def test_router_encrypted_report_archive_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        passphrase = "api-test-passphrase-for-encrypted-router-reports"
+        status, encrypted = self.request("POST", "/api/features/router_encrypted_report_archive", {
+            "mode": "encrypt",
+            "archive_id": "api-backup-001",
+            "created_at": "2026-11-20T10:00:00Z",
+            "passphrase": passphrase,
+            "data": {"reports": [{"report_id": "office-weekly", "finding_count": 1}]},
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(encrypted["feature"], "F186")
+        self.assertEqual(encrypted["result"]["status"], "encrypted")
+        self.assertNotIn(passphrase, str(encrypted))
+        self.assertNotIn("passphrase", str(encrypted))
+
+        status, restored = self.request("POST", "/api/features/router_encrypted_report_archive", {
+            "mode": "restore",
+            "passphrase": passphrase,
+            "archive": encrypted["result"]["archive"],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(restored["result"]["status"], "restored")
+        self.assertEqual(restored["result"]["data"], {"reports": [{"report_id": "office-weekly", "finding_count": 1}]})
 
     def test_router_webhook_envelope_builder_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

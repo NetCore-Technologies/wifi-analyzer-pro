@@ -386,6 +386,16 @@ PAYLOADS = {
         }],
         "occurrences_per_schedule": 3
     },
+    "router_encrypted_report_archive": {
+        "mode": "encrypt",
+        "archive_id": "sample-backup-001",
+        "created_at": "2026-11-20T10:00:00Z",
+        "passphrase": "test-only-passphrase-for-encrypted-report-backup",
+        "data": {
+            "reports": [{"report_id": "weekly-home", "content_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+            "alerts": [{"alert_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "status": "acknowledged"}]
+        }
+    },
     "router_webhook_envelope_builder": {
         "now": "2026-11-20T10:00:00Z",
         "batch_id": "batch-sample",
@@ -737,15 +747,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 181)
-        self.assertEqual(len(set(FEATURE_MODULES)), 181)
-        self.assertEqual(count(), 181)
-        self.assertEqual(len(entries), 181)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 181)
+        self.assertEqual(len(FEATURE_MODULES), 183)
+        self.assertEqual(len(set(FEATURE_MODULES)), 183)
+        self.assertEqual(count(), 183)
+        self.assertEqual(len(entries), 183)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 183)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):
