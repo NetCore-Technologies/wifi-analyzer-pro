@@ -578,6 +578,12 @@ class AuthenticatedApiTests(unittest.TestCase):
             "now": "2026-11-20T10:01:20Z",
         })
         self.assertEqual(status, 401)
+        status, invalid_renewal = self.request("POST", renewal_path, {
+            "lease_id": lease["lease_id"],
+            "now": "2026-11-20T10:01:20Z",
+            "lease_seconds": 1,
+        }, token=token)
+        self.assertEqual(status, 400)
         status, renewed = self.request("POST", renewal_path, {
             "lease_id": lease["lease_id"],
             "now": "2026-11-20T10:01:20Z",
