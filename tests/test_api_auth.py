@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 183)
-        self.assertEqual(len(catalog["features"]), 183)
+        self.assertEqual(catalog["count"], 184)
+        self.assertEqual(len(catalog["features"]), 184)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -346,6 +346,27 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["adapter_id"], "unifi")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
+
+    def test_router_webhook_egress_policy_verifier_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_webhook_egress_policy_verifier", {
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "resolution_at": "2026-11-20T09:59:55Z",
+            "connected_at": "2026-11-20T10:00:00Z",
+            "resolved_addresses": ["1.1.1.1"],
+            "peer_ip": "1.1.1.1",
+            "connected_port": 443,
+            "tls_version": "TLSv1.3",
+            "tls_verified": True,
+            "hostname_verified": True,
+            "redirect_location": None,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F187")
+        self.assertTrue(result["result"]["approved"])
+        self.assertEqual(result["result"]["connection_policy"]["connect_to_exact_peer_ip"], "1.1.1.1")
 
     def test_router_encrypted_report_archive_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

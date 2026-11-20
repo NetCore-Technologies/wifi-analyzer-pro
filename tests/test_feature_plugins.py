@@ -386,6 +386,19 @@ PAYLOADS = {
         }],
         "occurrences_per_schedule": 3
     },
+    "router_webhook_egress_policy_verifier": {
+        "endpoint": "https://hooks.example.net/router/events",
+        "allowed_hosts": ["hooks.example.net"],
+        "resolution_at": "2026-11-20T09:59:55Z",
+        "connected_at": "2026-11-20T10:00:00Z",
+        "resolved_addresses": ["1.1.1.1", "2606:4700:4700::1111"],
+        "peer_ip": "1.1.1.1",
+        "connected_port": 443,
+        "tls_version": "TLSv1.3",
+        "tls_verified": True,
+        "hostname_verified": True,
+        "redirect_location": None
+    },
     "router_encrypted_report_archive": {
         "mode": "encrypt",
         "archive_id": "sample-backup-001",
@@ -747,15 +760,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 183)
-        self.assertEqual(len(set(FEATURE_MODULES)), 183)
-        self.assertEqual(count(), 183)
-        self.assertEqual(len(entries), 183)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 183)
+        self.assertEqual(len(FEATURE_MODULES), 184)
+        self.assertEqual(len(set(FEATURE_MODULES)), 184)
+        self.assertEqual(count(), 184)
+        self.assertEqual(len(entries), 184)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 184)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):

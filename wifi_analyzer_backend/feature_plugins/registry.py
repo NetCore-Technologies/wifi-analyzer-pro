@@ -187,6 +187,7 @@ FEATURE_MODULES = (
     "feature_184_router_scheduled_report_planner",
     "feature_185_router_webhook_envelope_builder",
     "feature_186_router_encrypted_report_archive",
+    "feature_187_router_webhook_egress_policy_verifier",
 )
 
 @lru_cache(maxsize=1)

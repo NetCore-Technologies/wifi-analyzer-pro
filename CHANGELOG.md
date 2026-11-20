@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 183 independently callable feature modules (F001–F168 and F172–F186; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 184 independently callable feature modules (F001–F168 and F172–F187; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -38,6 +38,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add F184: a timezone-aware scheduled-report planner for daily, weekly and monthly recurrences, including IANA timezone, DST ambiguity/gap and short-month policies. It previews deterministic idempotency keys but does not run or persist jobs.
 - Add F185: a canonical HMAC-SHA256 webhook envelope builder for exact allow-listed HTTPS DNS hosts, with key ID, timestamp and batch idempotency headers. It never transmits requests or returns signing secrets; a downstream dispatcher must revalidate DNS/IP targets, refuse redirects and enforce egress rules.
 - Add F186: an authenticated-encrypted report/alert archive using Scrypt-derived AES-256-GCM keys, fixed KDF parameters, authenticated metadata and strict size/schema validation; restore rejects tampering and wrong passphrases, and the passphrase is never returned or stored.
+- Add F187: a webhook egress evidence verifier that requires exact HTTPS hostname allowlists, public-only DNS answers, recent DNS resolution, actual peer-IP pinning, verified TLS/hostname identity and redirect refusal; it does not open network connections.
 - Add F174: a bounded multi-vendor router snapshot drift report for OpenWrt, UniFi and MikroTik. It compares stable interface/radio/client/network identities, reports added/removed/changed records, and emits only allow-listed fields.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.

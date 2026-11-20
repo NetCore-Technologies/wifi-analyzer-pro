@@ -1,4 +1,4 @@
-# 183 WiFi Analyzer Pro feature tools (F001–F168, F172–F186)
+# 184 WiFi Analyzer Pro feature tools (F001–F168, F172–F187)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -217,3 +217,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F185 | Allow-listed signed router webhook envelope builder (`router_webhook_envelope_builder`) | Router operations | Create canonical event batches with HMAC-SHA256 signatures for exact allow-listed HTTPS DNS hostnames, timestamp/key headers and idempotency keys; prepares but never transmits requests. |
 
 | F186 | Authenticated-encrypted router report archive (`router_encrypted_report_archive`) | Router operations | Encrypt and restore report/alert backup data using Scrypt-derived AES-256-GCM keys, authenticated metadata and strict bounded archive validation; the passphrase is never stored or returned. |
+
+| F187 | Webhook egress and DNS-pinning policy verifier (`router_webhook_egress_policy_verifier`) | Router operations | Verify exact HTTPS host allowlists, public-only DNS answers, recent resolution, actual peer-IP pinning, TLS/hostname verification and redirect refusal without making network requests. |
