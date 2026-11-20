@@ -477,9 +477,9 @@ class AuthenticatedApiTests(unittest.TestCase):
         claimed = server.REPORT_JOBS.claim_due(
             "api-worker", now="2026-11-20T10:00:00Z", lease_seconds=120,
         )["jobs"][0]
-        status, result = self.request("POST", "/api/features/router_scheduled_report_delivery_package", {
+        delivery_payload = {
             "now": "2026-11-20T10:00:00Z",
-            "claimed_job": claimed,
+            "lease_id": claimed["lease_id"],
             "webhook": {
                 "endpoint": "https://hooks.example.net/reports",
                 "allowed_hosts": ["hooks.example.net"],
@@ -497,7 +497,15 @@ class AuthenticatedApiTests(unittest.TestCase):
                 "hostname_verified": True,
                 "redirect_location": None,
             },
-        }, token=token)
+        }
+        delivery_path = f"/api/reports/jobs/{claimed['id']}/delivery-package"
+        status, rejected = self.request(
+            "POST", delivery_path,
+            {**delivery_payload, "lease_id": "00000000-0000-4000-8000-000000000000"},
+            token=token,
+        )
+        self.assertEqual(status, 409)
+        status, result = self.request("POST", delivery_path, delivery_payload, token=token)
         self.assertEqual(status, 200)
         self.assertEqual(result["feature"], "F189")
         self.assertEqual(result["result"]["status"], "ready")
@@ -563,6 +571,20 @@ class AuthenticatedApiTests(unittest.TestCase):
         lease = claimed["jobs"][0]
         self.assertEqual(lease["status"], "leased")
         self.assertEqual(lease["report_bundle"]["report_id"], "weekly-home")
+
+        renewal_path = f"/api/reports/jobs/{lease['id']}/renew"
+        status, denied_renewal = self.request("POST", renewal_path, {
+            "lease_id": lease["lease_id"],
+            "now": "2026-11-20T10:01:20Z",
+        })
+        self.assertEqual(status, 401)
+        status, renewed = self.request("POST", renewal_path, {
+            "lease_id": lease["lease_id"],
+            "now": "2026-11-20T10:01:20Z",
+            "lease_seconds": 120,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(renewed["job"]["lease_expires_at"], "2026-11-20T10:03:20+00:00")
 
         status, stale = self.request("POST", f"/api/reports/jobs/{lease['id']}/complete", {
             "lease_id": "00000000-0000-4000-8000-000000000000",
