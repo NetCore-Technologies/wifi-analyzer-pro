@@ -181,6 +181,7 @@ FEATURE_MODULES = (
     "feature_178_router_route_table_audit",
     "feature_179_router_vlan_segmentation_audit",
     "feature_180_router_gateway_redundancy_audit",
+    "feature_181_router_incident_alert_policy_evaluator",
 )
 
 @lru_cache(maxsize=1)

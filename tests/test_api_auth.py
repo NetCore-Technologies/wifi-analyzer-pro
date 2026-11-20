@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 177)
-        self.assertEqual(len(catalog["features"]), 177)
+        self.assertEqual(catalog["count"], 178)
+        self.assertEqual(len(catalog["features"]), 178)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -346,6 +346,29 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["adapter_id"], "unifi")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
+
+    def test_router_incident_alert_policy_evaluator_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_incident_alert_policy_evaluator", {
+            "generated_at": "2026-11-20T10:00:00Z",
+            "policies": [{
+                "policy_id": "cpu-pressure",
+                "match_codes": ["resource.cpu_high"],
+                "minimum_severity": "warning",
+                "group_by": "router",
+            }],
+            "findings": [{
+                "site_id": "office", "router_id": "openwrt-office", "adapter_id": "openwrt",
+                "code": "resource.cpu_high", "severity": "warning",
+                "resource_type": "router", "resource_id": "openwrt-office",
+                "observed": 90, "threshold": 85,
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F181")
+        self.assertEqual(result["result"]["summary"]["new_alert_count"], 1)
+        self.assertEqual(result["result"]["alerts"][0]["status"], "new")
 
     def test_router_gateway_redundancy_audit_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

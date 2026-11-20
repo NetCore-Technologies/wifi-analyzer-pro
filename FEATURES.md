@@ -1,4 +1,4 @@
-# 177 WiFi Analyzer Pro feature tools (F001–F168, F172–F180)
+# 178 WiFi Analyzer Pro feature tools (F001–F168, F172–F181)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -205,3 +205,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F179 | Multi-vendor VLAN segmentation audit (`router_vlan_segmentation_audit`) | Router integrations | Compare normalized UniFi network profiles and MikroTik VLAN interfaces within each site; identify inconsistent subnets/names, duplicate VLAN IDs, unknown parents and down interfaces. |
 
 | F180 | Cross-router default-gateway redundancy audit (`router_gateway_redundancy_audit`) | Router integrations | Compare configured OpenWrt/MikroTik default routes by site, IP family and routing table; distinguish single-router paths, shared next hops, multiple configured paths and unknown activation without claiming failover is proven. |
+
+| F181 | Router incident alert policy evaluator (`router_incident_alert_policy_evaluator`) | Router operations | Apply site/adapter/code/severity/occurrence policies to normalized audit findings and generate deterministic new, ongoing, acknowledged and resolved alert candidates without sending notifications. |

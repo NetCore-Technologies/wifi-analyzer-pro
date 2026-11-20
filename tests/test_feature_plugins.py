@@ -378,6 +378,29 @@ PAYLOADS = {
             "ip_subnet": "192.0.2.0/24"
         }]
     },
+    "router_incident_alert_policy_evaluator": {
+        "generated_at": "2026-11-20T10:00:00Z",
+        "policies": [{
+            "policy_id": "router-health",
+            "match_codes": ["resource.cpu_high", "resource.cpu_critical"],
+            "minimum_severity": "warning",
+            "group_by": "router"
+        }],
+        "findings": [
+            {
+                "site_id": "home", "router_id": "openwrt-home", "adapter_id": "openwrt",
+                "code": "resource.cpu_high", "severity": "warning",
+                "resource_type": "router", "resource_id": "openwrt-home",
+                "observed": 91, "threshold": 85
+            },
+            {
+                "site_id": "branch", "router_id": "mikrotik-branch", "adapter_id": "mikrotik",
+                "code": "resource.cpu_critical", "severity": "critical",
+                "resource_type": "router", "resource_id": "mikrotik-branch",
+                "observed": 99, "threshold": 95
+            }
+        ]
+    },
     "router_gateway_redundancy_audit": {
         "snapshots": [
             {
@@ -577,15 +600,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 177)
-        self.assertEqual(len(set(FEATURE_MODULES)), 177)
-        self.assertEqual(count(), 177)
-        self.assertEqual(len(entries), 177)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 177)
+        self.assertEqual(len(FEATURE_MODULES), 178)
+        self.assertEqual(len(set(FEATURE_MODULES)), 178)
+        self.assertEqual(count(), 178)
+        self.assertEqual(len(entries), 178)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 178)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):

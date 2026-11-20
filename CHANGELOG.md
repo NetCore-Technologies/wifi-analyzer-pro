@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 177 independently callable feature modules (F001–F168 and F172–F180; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 178 independently callable feature modules (F001–F168 and F172–F181; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -32,6 +32,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add F178: an OpenWrt and MikroTik route-table audit for duplicate routes, default-route candidates, disabled/inactive/blackhole defaults and gateways without a directly connected prefix match; recursive, point-to-point and tunnel routes are explicitly left for operator review.
 - Add F179: a site-scoped VLAN segmentation audit for normalized UniFi network profiles and MikroTik VLAN interfaces, identifying subnet/name mismatches, duplicate VLAN IDs, missing parent interfaces and down VLAN interfaces without treating IDs reused in separate sites as conflicts.
 - Add F180: a cross-router default-gateway redundancy audit for OpenWrt and MikroTik. It compares route candidates by site, address family and routing table, distinguishes shared next hops from distinct configured paths, and explicitly does not claim failover or upstream independence has been tested.
+- Add F181: a deterministic router incident alert-policy evaluator with code/severity/site/adapter scopes, occurrence thresholds, stable deduplication keys, and new/ongoing/acknowledged/resolved states. It produces local alert candidates only and does not send notifications or webhooks.
 - Add F174: a bounded multi-vendor router snapshot drift report for OpenWrt, UniFi and MikroTik. It compares stable interface/radio/client/network identities, reports added/removed/changed records, and emits only allow-listed fields.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
