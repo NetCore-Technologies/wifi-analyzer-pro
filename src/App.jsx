@@ -10,11 +10,12 @@ import {
   Lock, Server, LayoutDashboard, ArrowDown, ArrowUp,
   Cpu, HardDrive, Thermometer, Database, Signal, Search,
   Settings, Gauge, Network, Eye, Rss, ScanLine, ChevronRight,
-  Moon, Sun, Menu, X, Terminal, Package, Antenna
+  Moon, Sun, Menu, X, Terminal, Package, Antenna, FileSearch
 } from "lucide-react";
 import { apiFetch } from "./lib/api.js";
 import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
 import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
+import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -868,6 +869,7 @@ const NAV=[
     {id:"diagnostics",label:"Diagnostics", Icon:Globe},
     {id:"speed",      label:"Speed Test",  Icon:Zap},
     {id:"devices",    label:"Devices",     Icon:Smartphone},
+    {id:"pcap",       label:"Packet Capture", Icon:FileSearch},
   ]},
   {g:"SYSTEM", items:[
     {id:"system",label:"System",           Icon:Monitor},
@@ -1113,6 +1115,7 @@ export default function App() {
 
   const panels={
     featureTools: <FeatureWorkbench/>,
+    pcap:         <PcapAnalyzer/>,
     agents:       <RouterAgentConsole/>,
     dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
