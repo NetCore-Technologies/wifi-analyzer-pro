@@ -955,9 +955,94 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": str(error)}, 400)
             return
 
+        if path == "/api/auth/users":
+            if not self.require_admin():
+                return
+            try:
+                user = AUTH.create_user(
+                    payload.get("username"),
+                    payload.get("password"),
+                    role=payload.get("role", "viewer"),
+                    site_ids=payload.get("site_ids"),
+                )
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except RuntimeError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            self.send_json({"user": user}, 201)
+            return
+
+        user_action = re.fullmatch(
+            r"/api/auth/users/([^/]+)/(role|sites|enable|disable|password|delete)",
+            path,
+        )
+        if user_action:
+            if not self.require_admin():
+                return
+            username = unquote(user_action.group(1))
+            action = user_action.group(2)
+            actor = self.session_info()
+            if action in {"delete", "disable"} and username == actor["username"]:
+                self.send_json({"error": "You cannot disable or delete your own administrator account"}, 409)
+                return
+            try:
+                if action == "role":
+                    role = payload.get("role")
+                    response = AUTH.update_user(
+                        username,
+                        role=role,
+                        site_ids=payload.get("site_ids", []),
+                        update_sites=(role == "viewer"),
+                    )
+                elif action == "sites":
+                    response = AUTH.update_user(
+                        username,
+                        site_ids=payload.get("site_ids"),
+                        update_sites=True,
+                    )
+                elif action == "enable":
+                    response = AUTH.update_user(username, enabled=True)
+                elif action == "disable":
+                    response = AUTH.update_user(username, enabled=False)
+                elif action == "password":
+                    AUTH.reset_password(username, payload.get("password"))
+                    response = next(
+                        item for item in AUTH.list_users()
+                        if item["username"] == username.strip().lower()
+                    )
+                else:
+                    AUTH.delete_user(username)
+                    response = {"username": username, "deleted": True}
+            except KeyError:
+                self.send_json({"error": "User not found"}, 404)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json({"user": response})
+            return
+
+        if path.startswith("/api/reports/jobs/"):
+            if not self.require_admin():
+                return
+        if path in {"/api/reports/jobs/enqueue", "/api/reports/jobs/claim"}:
+            if not self.require_admin():
+                return
+        if path in {"/api/agents/enroll"} or (
+            path.startswith("/api/agents/") and
+            (path.endswith("/credentials/rotate") or path.endswith("/credentials/revoke"))
+        ):
+            if not self.require_admin():
+                return
+        if path == "/api/sites/history":
+            if not self.require_admin():
+                return
+
         if path == "/api/auth/setup":
             try:
-                token = AUTH.setup(payload.get("password"))
+                token = AUTH.setup(payload.get("password"), username=payload.get("username", "admin"))
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
@@ -969,7 +1054,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/auth/login":
             try:
-                token = AUTH.login(payload.get("password"))
+                token = AUTH.login(payload.get("password"), username=payload.get("username", "admin"))
             except (PermissionError, RuntimeError) as error:
                 self.send_json({"error": str(error)}, 401)
                 return
@@ -1219,6 +1304,12 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth():
                 return
             try:
+                sites = payload.get("sites", [])
+                if not isinstance(sites, list):
+                    raise ValueError("sites must be a list")
+                for site in sites:
+                    if not isinstance(site, dict) or not self.require_site_access(site.get("site_id")):
+                        return
                 report = run_feature("consolidated_site_audit_report", payload)
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
