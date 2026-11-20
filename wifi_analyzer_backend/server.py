@@ -743,7 +743,7 @@ class Handler(BaseHTTPRequestHandler):
             "/health": lambda: {"status": "ok", "version": APP_VERSION, "os": OS, "mode": "demo" if DEMO_MODE else "live"},
         }
         try:
-            if path.startswith("/api/agents/") and path.endswith("/negotiations"):
+            if path != "/api/agents/negotiations" and path.startswith("/api/agents/") and path.endswith("/negotiations"):
                 agent_id = unquote(path[len("/api/agents/"):-len("/negotiations")]).strip("/")
                 if not agent_id or "/" in agent_id:
                     self.send_json({"error": "Agent negotiation history not found"}, 404)
