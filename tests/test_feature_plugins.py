@@ -328,18 +328,27 @@ PAYLOADS = {
             }
         }
     }
+,
+    "router_agent_credential_scope": {
+        "agent_id": "openwrt-home",
+        "adapter_id": "openwrt",
+        "agent_version": "1.2.0",
+        "advertised_capabilities": ["system.board", "inventory.snapshot", "network.interfaces"],
+        "requested_capabilities": ["system.board", "inventory.snapshot"],
+        "requested_permissions": ["read"]
+    }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_five_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_six_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 165)
-        self.assertEqual(len(set(FEATURE_MODULES)), 165)
-        self.assertEqual(count(), 165)
-        self.assertEqual(len(entries), 165)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 165)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 166)])
+        self.assertEqual(len(FEATURE_MODULES), 166)
+        self.assertEqual(len(set(FEATURE_MODULES)), 166)
+        self.assertEqual(count(), 166)
+        self.assertEqual(len(entries), 166)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 166)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 167)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -1016,6 +1025,24 @@ class FeatureCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate identities"):
             run("openwrt_agent_snapshot_diff", {
                 "current":{"snapshot":duplicate,"captured_at":"2026-11-20T10:00:00Z"}
+            })
+
+    def test_router_agent_credential_scope_accepts_only_supported_read_capabilities(self):
+        result = run("router_agent_credential_scope", PAYLOADS["router_agent_credential_scope"])["result"]
+        self.assertEqual(result["agent_id"], "openwrt-home")
+        self.assertEqual(result["permission"], "read")
+        self.assertEqual(result["allowed_capabilities"], ["inventory.snapshot", "system.board"])
+
+    def test_router_agent_credential_scope_rejects_write_and_unknown_capabilities(self):
+        with self.assertRaisesRegex(ValueError, "read permission"):
+            run("router_agent_credential_scope", {
+                **PAYLOADS["router_agent_credential_scope"],
+                "requested_permissions": ["read", "config.write"],
+            })
+        with self.assertRaisesRegex(ValueError, "not fully supported"):
+            run("router_agent_credential_scope", {
+                **PAYLOADS["router_agent_credential_scope"],
+                "requested_capabilities": ["system.board", "wireless.config.write"],
             })
 
 if __name__ == "__main__":

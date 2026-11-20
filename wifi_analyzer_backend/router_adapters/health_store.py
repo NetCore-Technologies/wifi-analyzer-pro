@@ -1,12 +1,15 @@
 """Persistent, bounded router-agent heartbeat metadata with no credential storage."""
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..site_history import default_history_path
 from .registry import list_manifests
@@ -17,6 +20,8 @@ MAX_CAPABILITIES = 64
 MAX_SNAPSHOTS_PER_AGENT = 100
 MAX_STORED_SNAPSHOT_BYTES = 512 * 1024
 MAX_STORED_SNAPSHOTS_TOTAL = 1000
+DEFAULT_AGENT_TOKEN_TTL_DAYS = 90
+MAX_AGENT_TOKEN_TTL_DAYS = 365
 _AGENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 _VERSION = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 _CAPABILITY = re.compile(r"^[a-z][a-z0-9_.-]{0,79}$")
@@ -32,6 +37,14 @@ _ERROR_CODES = {
 
 class DuplicateAgentSnapshotError(ValueError):
     """Raised when an agent submits an already stored capture timestamp."""
+
+
+class AgentCredentialConflictError(ValueError):
+    """Raised when an agent already has an active credential."""
+
+
+class AgentAuthenticationError(PermissionError):
+    """Raised when an agent bearer credential is invalid, expired or revoked."""
 
 
 class RouterAgentHealthStore:
@@ -72,6 +85,20 @@ class RouterAgentHealthStore:
         )
         connection.execute(
             """
+            CREATE TABLE IF NOT EXISTS router_agent_credentials (
+                agent_id TEXT PRIMARY KEY,
+                adapter_id TEXT NOT NULL,
+                agent_version TEXT NOT NULL,
+                token_hash TEXT NOT NULL,
+                allowed_capabilities TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                revoked_at TEXT
+            )
+            """
+        )
+        connection.execute(
+            """
             CREATE TABLE IF NOT EXISTS router_agent_heartbeats (
                 agent_id TEXT PRIMARY KEY,
                 adapter_id TEXT NOT NULL,
@@ -97,7 +124,187 @@ class RouterAgentHealthStore:
                 except OSError:
                     pass
 
-    def record_heartbeat(self, payload: dict) -> dict:
+
+    @staticmethod
+    def _validate_ttl_days(ttl_days: int) -> int:
+        if isinstance(ttl_days, bool) or not isinstance(ttl_days, int) or not 1 <= ttl_days <= MAX_AGENT_TOKEN_TTL_DAYS:
+            raise ValueError(f"ttl_days must be an integer between 1 and {MAX_AGENT_TOKEN_TTL_DAYS}")
+        return ttl_days
+
+    @staticmethod
+    def _agent_token_hash(token: str) -> str:
+        if not isinstance(token, str) or not 32 <= len(token) <= 256:
+            raise AgentAuthenticationError("Agent authentication required")
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _new_agent_token() -> str:
+        return "wpa_" + secrets.token_urlsafe(32)
+
+    def enroll_agent(
+        self, *, agent_id: str, adapter_id: str, agent_version: str,
+        allowed_capabilities: list[str], ttl_days: int = DEFAULT_AGENT_TOKEN_TTL_DAYS,
+    ) -> dict:
+        if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
+            raise ValueError("agent_id must be a 1 to 64 character identifier")
+        if not isinstance(adapter_id, str) or not adapter_id.strip():
+            raise ValueError("adapter_id is required")
+        adapter_id = adapter_id.strip().lower()
+        manifest = next((item for item in list_manifests() if item["adapter_id"] == adapter_id), None)
+        if manifest is None:
+            raise ValueError("adapter_id is not installed")
+        if not isinstance(agent_version, str) or not _VERSION.fullmatch(agent_version):
+            raise ValueError("agent_version must use numeric major.minor.patch version syntax")
+        self._validate_ttl_days(ttl_days)
+        if not isinstance(allowed_capabilities, list) or not 1 <= len(allowed_capabilities) <= MAX_CAPABILITIES:
+            raise ValueError(f"allowed_capabilities must contain 1 to {MAX_CAPABILITIES} values")
+        seen = set()
+        supported = set(manifest["capabilities"])
+        for capability in allowed_capabilities:
+            if not isinstance(capability, str) or not _CAPABILITY.fullmatch(capability):
+                raise ValueError("allowed_capabilities must use lowercase capability identifiers")
+            if capability in seen:
+                raise ValueError("allowed_capabilities must be unique")
+            if capability not in supported:
+                raise ValueError(f"Capability is not supported by {adapter_id}: {capability}")
+            seen.add(capability)
+        if "system.board" not in seen:
+            raise ValueError("Agent enrollment must include the system.board read capability")
+
+        now = datetime.now(timezone.utc)
+        created_at = now.isoformat()
+        expires_at = (now + timedelta(days=ttl_days)).isoformat()
+        token = self._new_agent_token()
+        token_hash = self._agent_token_hash(token)
+        with self._connection() as connection:
+            existing = connection.execute(
+                "SELECT revoked_at, expires_at FROM router_agent_credentials WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
+            if existing is not None and existing["revoked_at"] is None:
+                try:
+                    existing_expiry = datetime.fromisoformat(existing["expires_at"])
+                except (TypeError, ValueError):
+                    existing_expiry = now
+                if existing_expiry > now:
+                    raise AgentCredentialConflictError("Agent already has an active credential; rotate it instead")
+            connection.execute(
+                """
+                INSERT INTO router_agent_credentials
+                    (agent_id, adapter_id, agent_version, token_hash, allowed_capabilities,
+                     created_at, expires_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                ON CONFLICT(agent_id) DO UPDATE SET
+                    adapter_id = excluded.adapter_id,
+                    agent_version = excluded.agent_version,
+                    token_hash = excluded.token_hash,
+                    allowed_capabilities = excluded.allowed_capabilities,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at,
+                    revoked_at = NULL
+                """,
+                (agent_id, adapter_id, agent_version, token_hash,
+                 json.dumps(sorted(seen), separators=(",", ":")), created_at, expires_at),
+            )
+            connection.execute("DELETE FROM router_agent_heartbeats WHERE agent_id = ?", (agent_id,))
+        return {
+            "agent_id": agent_id, "adapter_id": adapter_id, "agent_version": agent_version,
+            "allowed_capabilities": sorted(seen), "created_at": created_at,
+            "expires_at": expires_at, "token": token,
+        }
+
+    def rotate_agent_credential(self, agent_id: str, *, ttl_days: int = DEFAULT_AGENT_TOKEN_TTL_DAYS) -> dict:
+        if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
+            raise ValueError("agent_id must be a 1 to 64 character identifier")
+        self._validate_ttl_days(ttl_days)
+        now = datetime.now(timezone.utc)
+        created_at = now.isoformat()
+        expires_at = (now + timedelta(days=ttl_days)).isoformat()
+        token = self._new_agent_token()
+        token_hash = self._agent_token_hash(token)
+        with self._connection() as connection:
+            credential = connection.execute(
+                "SELECT adapter_id, agent_version, allowed_capabilities, revoked_at "
+                "FROM router_agent_credentials WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
+            if credential is None:
+                raise ValueError("Agent credential was not found")
+            if credential["revoked_at"] is not None:
+                raise AgentAuthenticationError("Revoked agent credentials cannot be rotated; enrol the agent again")
+            connection.execute(
+                "UPDATE router_agent_credentials SET token_hash = ?, created_at = ?, expires_at = ? WHERE agent_id = ?",
+                (token_hash, created_at, expires_at, agent_id),
+            )
+        return {
+            "agent_id": agent_id, "adapter_id": credential["adapter_id"],
+            "agent_version": credential["agent_version"],
+            "allowed_capabilities": json.loads(credential["allowed_capabilities"]),
+            "created_at": created_at, "expires_at": expires_at, "token": token,
+        }
+
+    def revoke_agent_credential(self, agent_id: str) -> dict:
+        if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
+            raise ValueError("agent_id must be a 1 to 64 character identifier")
+        revoked_at = datetime.now(timezone.utc).isoformat()
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE router_agent_credentials SET revoked_at = ? WHERE agent_id = ? AND revoked_at IS NULL",
+                (revoked_at, agent_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError("Active agent credential was not found")
+        return {"agent_id": agent_id, "revoked_at": revoked_at, "revoked": True}
+
+    def list_agent_credentials(self) -> list[dict]:
+        now = datetime.now(timezone.utc)
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT agent_id, adapter_id, agent_version, allowed_capabilities,
+                       created_at, expires_at, revoked_at
+                FROM router_agent_credentials ORDER BY agent_id LIMIT ?
+                """,
+                (MAX_AGENTS,),
+            ).fetchall()
+        results = []
+        for row in rows:
+            try:
+                expiry = datetime.fromisoformat(row["expires_at"])
+            except (TypeError, ValueError):
+                expiry = now
+            status = "revoked" if row["revoked_at"] is not None else ("expired" if expiry <= now else "active")
+            results.append({
+                "agent_id": row["agent_id"], "adapter_id": row["adapter_id"],
+                "agent_version": row["agent_version"],
+                "allowed_capabilities": json.loads(row["allowed_capabilities"]),
+                "created_at": row["created_at"], "expires_at": row["expires_at"],
+                "revoked_at": row["revoked_at"], "status": status,
+            })
+        return results
+
+    def _require_agent_credential(self, connection, agent_id: str, token: str):
+        token_hash = self._agent_token_hash(token)
+        credential = connection.execute(
+            """
+            SELECT adapter_id, token_hash, allowed_capabilities, expires_at, revoked_at
+            FROM router_agent_credentials WHERE agent_id = ?
+            """,
+            (agent_id,),
+        ).fetchone()
+        if credential is None or credential["revoked_at"] is not None:
+            raise AgentAuthenticationError("Agent authentication required")
+        try:
+            expires_at = datetime.fromisoformat(credential["expires_at"])
+        except (TypeError, ValueError):
+            raise AgentAuthenticationError("Agent authentication required")
+        if expires_at <= datetime.now(timezone.utc):
+            raise AgentAuthenticationError("Agent authentication required")
+        if not hmac.compare_digest(credential["token_hash"], token_hash):
+            raise AgentAuthenticationError("Agent authentication required")
+        return credential
+
+    def record_heartbeat(self, payload: dict, *, token: str) -> dict:
         if not isinstance(payload, dict):
             raise ValueError("heartbeat must be an object")
         agent_id = payload.get("agent_id")
@@ -130,11 +337,17 @@ class RouterAgentHealthStore:
                 raise ValueError("capabilities must be unique")
             seen.add(capability)
         supported = set(manifest["capabilities"])
-        accepted = sorted(seen & supported)
-        rejected = sorted(seen - supported)
+        accepted = []
+        rejected = []
         timestamp = datetime.now(timezone.utc).isoformat()
 
         with self._connection() as connection:
+            credential = self._require_agent_credential(connection, agent_id, token)
+            if credential["adapter_id"] != adapter_id:
+                raise AgentAuthenticationError("Agent authentication required")
+            allowed = set(json.loads(credential["allowed_capabilities"]))
+            accepted = sorted(seen & supported & allowed)
+            rejected = sorted(seen - set(accepted))
             existing = connection.execute(
                 "SELECT agent_id FROM router_agent_heartbeats WHERE agent_id = ?",
                 (agent_id,),
@@ -174,7 +387,7 @@ class RouterAgentHealthStore:
         }
 
 
-    def record_snapshot(self, agent_id: str, snapshot: dict) -> dict:
+    def record_snapshot(self, agent_id: str, snapshot: dict, *, token: str) -> dict:
         if not isinstance(agent_id, str) or not _AGENT_ID.fullmatch(agent_id):
             raise ValueError("agent_id must be a 1 to 64 character identifier")
         if not isinstance(snapshot, dict) or snapshot.get("adapter_id") != "openwrt":
@@ -199,14 +412,17 @@ class RouterAgentHealthStore:
         received_at = datetime.now(timezone.utc).isoformat()
         try:
             with self._connection() as connection:
+                credential = self._require_agent_credential(connection, agent_id, token)
                 agent = connection.execute(
                     "SELECT adapter_id, capabilities FROM router_agent_heartbeats WHERE agent_id = ?",
                     (agent_id,),
                 ).fetchone()
                 if agent is None:
                     raise ValueError("agent must send an authenticated heartbeat before submitting snapshots")
-                if agent["adapter_id"] != snapshot["adapter_id"]:
-                    raise ValueError("snapshot adapter_id does not match the registered agent")
+                if agent["adapter_id"] != snapshot["adapter_id"] or credential["adapter_id"] != snapshot["adapter_id"]:
+                    raise AgentAuthenticationError("Agent authentication required")
+                if "inventory.snapshot" not in json.loads(credential["allowed_capabilities"]):
+                    raise ValueError("Agent credential does not include the inventory.snapshot capability")
                 if "inventory.snapshot" not in json.loads(agent["capabilities"]):
                     raise ValueError("agent has not negotiated the inventory.snapshot capability")
                 cursor = connection.execute(

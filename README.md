@@ -106,8 +106,13 @@ The local HTTP service exposes:
 | `GET /api/adapters` | List installed versioned router-adapter manifests and read-only capabilities |
 | `POST /api/adapters/negotiate` | Negotiate an authenticated agent’s advertised capabilities against an installed adapter contract |
 | `POST /api/adapters/openwrt/normalise` | Validate and normalise a supplied OpenWrt board/network/wireless/route snapshot |
-| `POST /api/agents/heartbeat` | Record an authenticated agent heartbeat and supported capabilities (no credentials or raw payloads) |
+| `POST /api/agents/heartbeat` | Record a heartbeat using that agent’s scoped bearer token |
+| `POST /api/agents/snapshot` | Store a normalised OpenWrt snapshot using the agent token and its `inventory.snapshot` scope |
 | `GET /api/agents/health` | Report latest agent health using server-received heartbeat timestamps |
+| `POST /api/agents/enroll` | Admin-only enrolment that issues a one-time, read-only scoped agent token |
+| `GET /api/agents/credentials` | Admin-only credential metadata listing; token hashes and bearer tokens are never returned |
+| `POST /api/agents/{agent_id}/credentials/rotate` | Admin-only token rotation; the previous token is invalidated immediately |
+| `POST /api/agents/{agent_id}/credentials/revoke` | Admin-only credential revocation |
 | `POST /api/agents/snapshot` | Store a normalised OpenWrt snapshot from a previously registered agent |
 | `GET /api/agents/snapshots` | List latest snapshot metadata for registered agents |
 | `GET /api/agents/snapshots/{agent_id}` | Read one agent’s latest credential-free normalised snapshot |

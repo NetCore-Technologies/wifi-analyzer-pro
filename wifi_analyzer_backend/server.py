@@ -20,13 +20,23 @@ if __package__:
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
-    from .router_adapters.health_store import DuplicateAgentSnapshotError, RouterAgentHealthStore
+    from .router_adapters.health_store import (
+        AgentAuthenticationError,
+        AgentCredentialConflictError,
+        DuplicateAgentSnapshotError,
+        RouterAgentHealthStore,
+    )
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
-    from router_adapters.health_store import DuplicateAgentSnapshotError, RouterAgentHealthStore
+    from router_adapters.health_store import (
+        AgentAuthenticationError,
+        AgentCredentialConflictError,
+        DuplicateAgentSnapshotError,
+        RouterAgentHealthStore,
+    )
 
 OS = platform.system()
 APP_VERSION = "1.0.7"
@@ -704,6 +714,9 @@ class Handler(BaseHTTPRequestHandler):
                 "count": len(router_adapter_manifests()),
                 "adapters": router_adapter_manifests(),
             },
+            "/api/agents/credentials": lambda: {
+                "credentials": AGENT_HEALTH.list_agent_credentials(),
+            },
             "/api/agents/health": lambda: run_feature("router_agent_health_report", {
                 "agents": AGENT_HEALTH.list_agents(),
                 "now": datetime.now(timezone.utc).isoformat(),
@@ -862,11 +875,68 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"token": token, "status": AUTH.status(token)})
             return
 
-        if path == "/api/agents/heartbeat":
+        if path == "/api/agents/enroll":
             if not self.require_auth():
                 return
             try:
-                heartbeat = AGENT_HEALTH.record_heartbeat(payload)
+                scope = run_feature("router_agent_credential_scope", payload)["result"]
+                credential = AGENT_HEALTH.enroll_agent(
+                    agent_id=scope["agent_id"],
+                    adapter_id=scope["adapter_id"],
+                    agent_version=scope["agent_version"],
+                    allowed_capabilities=scope["allowed_capabilities"],
+                    ttl_days=payload.get("ttl_days", 90),
+                )
+            except AgentCredentialConflictError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json({"credential": credential}, 201)
+            return
+
+        if path.startswith("/api/agents/") and path.endswith("/credentials/rotate"):
+            if not self.require_auth():
+                return
+            agent_id = unquote(path[len("/api/agents/"):-len("/credentials/rotate")]).strip("/")
+            if not agent_id or "/" in agent_id:
+                self.send_json({"error": "Agent not found"}, 404)
+                return
+            try:
+                credential = AGENT_HEALTH.rotate_agent_credential(
+                    agent_id, ttl_days=payload.get("ttl_days", 90)
+                )
+            except AgentAuthenticationError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 404 if "not found" in str(error).lower() else 400)
+                return
+            self.send_json({"credential": credential})
+            return
+
+        if path.startswith("/api/agents/") and path.endswith("/credentials/revoke"):
+            if not self.require_auth():
+                return
+            agent_id = unquote(path[len("/api/agents/"):-len("/credentials/revoke")]).strip("/")
+            if not agent_id or "/" in agent_id:
+                self.send_json({"error": "Agent not found"}, 404)
+                return
+            try:
+                result = AGENT_HEALTH.revoke_agent_credential(agent_id)
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 404)
+                return
+            self.send_json({"credential": result})
+            return
+
+        if path == "/api/agents/heartbeat":
+            try:
+                heartbeat = AGENT_HEALTH.record_heartbeat(payload, token=self.bearer_token())
+            except AgentAuthenticationError as error:
+                self.send_json({"error": str(error)}, 401)
+                return
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
@@ -874,11 +944,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/agents/snapshot":
-            if not self.require_auth():
-                return
             try:
                 result = run_feature("openwrt_agent_snapshot_ingest", payload)["result"]
-                saved = AGENT_HEALTH.record_snapshot(result["agent_id"], result["snapshot"])
+                saved = AGENT_HEALTH.record_snapshot(
+                    result["agent_id"], result["snapshot"], token=self.bearer_token()
+                )
+            except AgentAuthenticationError as error:
+                self.send_json({"error": str(error)}, 401)
+                return
             except DuplicateAgentSnapshotError as error:
                 self.send_json({"error": str(error)}, 409)
                 return

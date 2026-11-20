@@ -56,6 +56,19 @@ class AuthenticatedApiTests(unittest.TestCase):
         finally:
             connection.close()
 
+
+    def enroll_agent(self, admin_token, agent_id, capabilities):
+        status, response = self.request("POST", "/api/agents/enroll", {
+            "agent_id": agent_id,
+            "adapter_id": "openwrt",
+            "agent_version": "1.2.0",
+            "advertised_capabilities": capabilities,
+            "requested_capabilities": capabilities,
+            "requested_permissions": ["read"],
+        }, token=admin_token)
+        self.assertEqual(status, 201, response)
+        return response["credential"]["token"]
+
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")
         self.assertEqual(status, 200)
@@ -76,8 +89,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 165)
-        self.assertEqual(len(catalog["features"]), 165)
+        self.assertEqual(catalog["count"], 166)
+        self.assertEqual(len(catalog["features"]), 166)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -90,6 +103,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("router_agent_health_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_agent_snapshot_ingest", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_agent_snapshot_diff", {item["slug"] for item in catalog["features"]})
+        self.assertIn("router_agent_credential_scope", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -319,54 +333,54 @@ class AuthenticatedApiTests(unittest.TestCase):
 
     def test_router_agent_heartbeat_persists_and_health_endpoint_reports_agent_status(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
-        token = setup["token"]
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "openwrt-home", ["system.board", "wireless.radios"])
         heartbeat = {
-            "agent_id": "openwrt-home",
-            "adapter_id": "openwrt",
-            "agent_version": "1.2.0",
-            "status": "healthy",
-            "capabilities": ["system.board", "wireless.radios", "untrusted.write"],
+            "agent_id": "openwrt-home", "adapter_id": "openwrt", "agent_version": "1.2.0",
+            "status": "healthy", "capabilities": ["system.board", "wireless.radios", "untrusted.write"],
             "api_token": "must-not-be-persisted",
         }
-        status, saved = self.request("POST", "/api/agents/heartbeat", heartbeat, token=token)
+        status, denied = self.request("POST", "/api/agents/heartbeat", heartbeat, token=admin_token)
+        self.assertEqual(status, 401)
+        status, saved = self.request("POST", "/api/agents/heartbeat", heartbeat, token=agent_token)
         self.assertEqual(status, 201)
         self.assertEqual(saved["agent"]["rejected_capabilities"], ["untrusted.write"])
-        status, report = self.request("GET", "/api/agents/health", token=token)
+        status, report = self.request("GET", "/api/agents/health", token=admin_token)
         self.assertEqual(status, 200)
         self.assertEqual(report["result"]["summary"]["agent_count"], 1)
         self.assertEqual(report["result"]["agents"][0]["health_status"], "healthy")
         self.assertNotIn("api_token", report["result"]["agents"][0])
         self.assertNotIn("untrusted.write", report["result"]["agents"][0]["capabilities"])
-
-        status, updated = self.request("POST", "/api/agents/heartbeat", {**heartbeat, "status": "degraded"}, token=token)
+        status, updated = self.request("POST", "/api/agents/heartbeat", {**heartbeat, "status": "degraded"}, token=agent_token)
         self.assertEqual(status, 200)
         self.assertFalse(updated["agent"]["created"])
         self.assertEqual(updated["agent"]["status"], "degraded")
-
-    def test_router_agent_heartbeat_requires_authentication_and_rejects_unknown_adapter(self):
-        status, denied = self.request("POST", "/api/agents/heartbeat", {"agent_id":"edge","adapter_id":"openwrt","agent_version":"1.0.0"})
+    def test_router_agent_heartbeat_requires_an_enrolled_agent_credential(self):
+        status, denied = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"edge","adapter_id":"openwrt","agent_version":"1.0.0",
+        })
         self.assertEqual(status, 401)
-        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "edge", ["system.board"])
         status, invalid = self.request("POST", "/api/agents/heartbeat", {
             "agent_id":"edge","adapter_id":"unifi","agent_version":"1.0.0",
-        }, token=setup["token"])
+        }, token=agent_token)
         self.assertEqual(status, 400)
         self.assertIn("not installed", invalid["error"])
-
         for field, value in (("status", []), ("error_code", {})):
             bad = {"agent_id":"edge","adapter_id":"openwrt","agent_version":"1.0.0",field:value}
-            status, response = self.request("POST", "/api/agents/heartbeat", bad, token=setup["token"])
+            status, response = self.request("POST", "/api/agents/heartbeat", bad, token=agent_token)
             self.assertEqual(status, 400)
             self.assertIn(field, response["error"])
-
-
     def test_openwrt_agent_snapshot_is_retained_and_only_normalised_data_is_returned(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
-        token = setup["token"]
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "openwrt-home", ["system.board", "inventory.snapshot"])
         status, heartbeat = self.request("POST", "/api/agents/heartbeat", {
             "agent_id":"openwrt-home","adapter_id":"openwrt","agent_version":"1.2.0",
-            "status":"healthy","capabilities":["inventory.snapshot"],
-        }, token=token)
+            "status":"healthy","capabilities":["system.board","inventory.snapshot"],
+        }, token=agent_token)
         self.assertEqual(status, 201)
         raw_snapshot = {
             "captured_at":"2026-11-20T10:00:00Z",
@@ -378,59 +392,62 @@ class AuthenticatedApiTests(unittest.TestCase):
         }
         status, saved = self.request("POST", "/api/agents/snapshot", {
             "agent_id":"openwrt-home","snapshot":raw_snapshot,
-        }, token=token)
+        }, token=agent_token)
         self.assertEqual(status, 201)
         self.assertEqual(saved["snapshot"]["wireless_radio_count"], 1)
-        status, latest = self.request("GET", "/api/agents/snapshots/openwrt-home", token=token)
+        status, latest = self.request("GET", "/api/agents/snapshots/openwrt-home", token=admin_token)
         self.assertEqual(status, 200)
         self.assertEqual(latest["snapshot"]["snapshot"]["adapter_id"], "openwrt")
         self.assertNotIn("password", latest["snapshot"]["snapshot"]["wireless_radios"][0])
-        status, listing = self.request("GET", "/api/agents/snapshots", token=token)
+        status, listing = self.request("GET", "/api/agents/snapshots", token=admin_token)
         self.assertEqual(status, 200)
         self.assertEqual(len(listing["snapshots"]), 1)
         self.assertEqual(listing["snapshots"][0]["agent_id"], "openwrt-home")
         status, duplicate = self.request("POST", "/api/agents/snapshot", {
             "agent_id":"openwrt-home","snapshot":raw_snapshot,
-        }, token=token)
+        }, token=agent_token)
         self.assertEqual(status, 409)
         self.assertIn("already exists", duplicate["error"])
-
-    def test_openwrt_agent_snapshot_requires_registered_agent_and_authentication(self):
+    def test_openwrt_agent_snapshot_requires_agent_credential_and_heartbeat(self):
         status, denied = self.request("POST", "/api/agents/snapshot", {
             "agent_id":"missing","snapshot":{"captured_at":"2026-11-20T10:00:00Z"}
         })
         self.assertEqual(status, 401)
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "not-yet-online", ["system.board", "inventory.snapshot"])
+        status, admin_denied = self.request("POST", "/api/agents/snapshot", {
+            "agent_id":"not-yet-online","snapshot":{"captured_at":"2026-11-20T10:00:00Z","board":{}}
+        }, token=admin_token)
+        self.assertEqual(status, 401)
         status, rejected = self.request("POST", "/api/agents/snapshot", {
-            "agent_id":"missing","snapshot":{"captured_at":"2026-11-20T10:00:00Z"}
-        }, token=setup["token"])
+            "agent_id":"not-yet-online","snapshot":{"captured_at":"2026-11-20T10:00:00Z","board":{}}
+        }, token=agent_token)
         self.assertEqual(status, 400)
         self.assertIn("heartbeat", rejected["error"])
-
-
-    def test_openwrt_agent_snapshot_requires_negotiated_inventory_capability(self):
+    def test_openwrt_agent_snapshot_requires_credential_inventory_capability(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
-        token = setup["token"]
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "openwrt-no-inventory", ["system.board"])
         status, _ = self.request("POST", "/api/agents/heartbeat", {
             "agent_id":"openwrt-no-inventory","adapter_id":"openwrt","agent_version":"1.2.0",
             "status":"healthy","capabilities":["system.board"],
-        }, token=token)
+        }, token=agent_token)
         self.assertEqual(status, 201)
         status, rejected = self.request("POST", "/api/agents/snapshot", {
             "agent_id":"openwrt-no-inventory",
             "snapshot":{"captured_at":"2026-11-20T10:00:00Z","board":{}},
-        }, token=token)
+        }, token=agent_token)
         self.assertEqual(status, 400)
-        self.assertIn("inventory.snapshot", rejected["error"])
-
-
+        self.assertIn("credential does not include", rejected["error"])
     def test_openwrt_agent_snapshot_diff_endpoint_compares_two_retained_captures(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
-        token = setup["token"]
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "diff-agent", ["system.board", "inventory.snapshot"])
         self.request("POST", "/api/agents/heartbeat", {
             "agent_id":"diff-agent","adapter_id":"openwrt","agent_version":"1.2.0",
-            "status":"healthy","capabilities":["inventory.snapshot"],
-        }, token=token)
+            "status":"healthy","capabilities":["system.board","inventory.snapshot"],
+        }, token=agent_token)
         def capture(when, channel, kernel):
             snapshot = {
                 "captured_at":when,
@@ -442,14 +459,85 @@ class AuthenticatedApiTests(unittest.TestCase):
             }
             return self.request("POST", "/api/agents/snapshot", {
                 "agent_id":"diff-agent","snapshot":snapshot,
-            }, token=token)
+            }, token=agent_token)
         self.assertEqual(capture("2026-11-20T09:00:00Z",36,"6.6.1")[0],201)
         self.assertEqual(capture("2026-11-20T10:00:00Z",40,"6.6.2")[0],201)
-        status, report = self.request("GET", "/api/agents/snapshots/diff-agent/diff", token=token)
+        status, report = self.request("GET", "/api/agents/snapshots/diff-agent/diff", token=admin_token)
         self.assertEqual(status, 200)
         self.assertEqual(report["result"]["status"], "compared")
         self.assertEqual(report["result"]["summary"]["board_changed_field_count"], 1)
         self.assertEqual(report["result"]["summary"]["radio_changed"], 1)
+
+    def test_agent_credentials_are_scoped_rotatable_revocable_and_never_listed(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        capabilities = ["system.board", "inventory.snapshot"]
+        agent_token = self.enroll_agent(admin_token, "managed-openwrt", capabilities)
+        self.assertTrue(agent_token.startswith("wpa_"))
+        status, catalogue = self.request("GET", "/api/agents/credentials", token=admin_token)
+        self.assertEqual(status, 200)
+        credential = catalogue["credentials"][0]
+        self.assertEqual(credential["agent_id"], "managed-openwrt")
+        self.assertEqual(credential["status"], "active")
+        self.assertEqual(credential["allowed_capabilities"], ["inventory.snapshot", "system.board"])
+        self.assertNotIn("token", credential)
+        self.assertNotIn("token_hash", credential)
+
+        bad_scope = {
+            "agent_id":"managed-openwrt","adapter_id":"openwrt","agent_version":"1.2.0",
+            "status":"healthy","capabilities":["system.board","wireless.config.write"],
+        }
+        status, filtered = self.request("POST", "/api/agents/heartbeat", bad_scope, token=agent_token)
+        self.assertEqual(status, 201)
+        self.assertEqual(filtered["agent"]["capabilities"], ["system.board"])
+        self.assertEqual(filtered["agent"]["rejected_capabilities"], ["wireless.config.write"])
+
+        status, rotated = self.request("POST", "/api/agents/managed-openwrt/credentials/rotate", {}, token=admin_token)
+        self.assertEqual(status, 200)
+        new_token = rotated["credential"]["token"]
+        self.assertNotEqual(agent_token, new_token)
+        status, old_denied = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"managed-openwrt","adapter_id":"openwrt","agent_version":"1.2.0",
+        }, token=agent_token)
+        self.assertEqual(status, 401)
+        status, new_allowed = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"managed-openwrt","adapter_id":"openwrt","agent_version":"1.2.0",
+            "capabilities":["system.board"],
+        }, token=new_token)
+        self.assertEqual(status, 200)
+
+        status, revoked = self.request("POST", "/api/agents/managed-openwrt/credentials/revoke", {}, token=admin_token)
+        self.assertEqual(status, 200)
+        self.assertTrue(revoked["credential"]["revoked"])
+        status, revoked_denied = self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"managed-openwrt","adapter_id":"openwrt","agent_version":"1.2.0",
+        }, token=new_token)
+        self.assertEqual(status, 401)
+        status, final = self.request("GET", "/api/agents/credentials", token=admin_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(final["credentials"][0]["status"], "revoked")
+
+    def test_agent_enrollment_rejects_write_scopes_and_duplicate_active_agents(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        denied_scope = {
+            "agent_id":"least-privilege","adapter_id":"openwrt","agent_version":"1.2.0",
+            "advertised_capabilities":["system.board","inventory.snapshot"],
+            "requested_capabilities":["system.board","inventory.snapshot"],
+            "requested_permissions":["read","config.write"],
+        }
+        status, denied = self.request("POST", "/api/agents/enroll", denied_scope, token=admin_token)
+        self.assertEqual(status, 400)
+        self.assertIn("read permission", denied["error"])
+        self.enroll_agent(admin_token, "least-privilege", ["system.board"])
+        status, duplicate = self.request("POST", "/api/agents/enroll", {
+            **denied_scope,
+            "requested_permissions":["read"],
+            "advertised_capabilities":["system.board"],
+            "requested_capabilities":["system.board"],
+        }, token=admin_token)
+        self.assertEqual(status, 409)
+        self.assertIn("rotate", duplicate["error"])
 
 if __name__ == "__main__":
     unittest.main()
