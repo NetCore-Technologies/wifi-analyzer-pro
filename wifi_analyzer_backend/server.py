@@ -711,7 +711,25 @@ class Handler(BaseHTTPRequestHandler):
             "/health": lambda: {"status": "ok", "version": APP_VERSION, "os": OS, "mode": "demo" if DEMO_MODE else "live"},
         }
         try:
-            if path == "/api/sites/history":
+            if path == "/api/sites/history/report":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
+                values = params.get("site_ids", [])
+                if len(values) > 1:
+                    raise ValueError("site_ids may be supplied only once")
+                if values and values[0].strip():
+                    site_ids = [item.strip() for item in values[0].split(",") if item.strip()]
+                else:
+                    site_ids = HISTORY.site_ids(limit=20)
+                if len(site_ids) > 20:
+                    raise ValueError("site_ids may contain no more than 20 sites")
+                pairs = HISTORY.latest_pairs(site_ids)
+                report = run_feature("site_to_site_change_report", {"sites": pairs})
+                self.send_json({
+                    "report": report,
+                    "requested_site_count": len(site_ids),
+                    "reported_site_count": report["result"]["summary"]["site_count"],
+                })
+            elif path == "/api/sites/history":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
                 def single_parameter(name):
                     values = params.get(name, [])

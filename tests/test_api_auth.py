@@ -72,13 +72,14 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 158)
-        self.assertEqual(len(catalog["features"]), 158)
+        self.assertEqual(catalog["count"], 159)
+        self.assertEqual(len(catalog["features"]), 159)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_visualisation", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_discovery_history_snapshot", {item["slug"] for item in catalog["features"]})
+        self.assertIn("site_to_site_change_report", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -212,6 +213,47 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, invalid = self.request("POST", "/api/sites/history", {**snapshot, "captured_at": "invalid"}, token=token)
         self.assertEqual(status, 400)
         self.assertIn("ISO-8601", invalid["error"])
+
+    def test_saved_history_report_compares_latest_site_snapshots(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        def save(site_id, timestamp, access_points):
+            status, saved = self.request("POST", "/api/sites/history", {
+                "site_id": site_id, "captured_at": timestamp,
+                "access_points": access_points, "links": [],
+            }, token=token)
+            self.assertEqual(status, 201)
+            return saved
+
+        shared = "00:11:22:33:44:55"
+        save("home", "2026-11-20T09:00:00Z", [
+            {"ap_id": "old", "bssid": "00:11:22:33:44:66", "band": "2.4GHz"}
+        ])
+        save("home", "2026-11-20T10:00:00Z", [
+            {"ap_id": "new", "bssid": shared, "band": "5GHz"}
+        ])
+        save("branch", "2026-11-20T10:00:00Z", [
+            {"ap_id": "branch-ap", "bssid": shared, "band": "5GHz"}
+        ])
+        status, response = self.request("GET", "/api/sites/history/report?site_ids=home,branch", token=token)
+        self.assertEqual(status, 200)
+        report = response["report"]["result"]
+        self.assertEqual(report["summary"]["site_count"], 2)
+        self.assertEqual(report["summary"]["sites_with_baseline"], 1)
+        self.assertEqual(report["summary"]["cross_site_bssid_collision_count"], 1)
+        self.assertEqual(report["summary"]["added_access_point_count"], 1)
+        self.assertEqual(report["summary"]["removed_access_point_count"], 1)
+
+    def test_saved_history_report_requires_auth_and_limits_site_count(self):
+        status, denied = self.request("GET", "/api/sites/history/report")
+        self.assertEqual(status, 401)
+        self.assertIn("Authentication required", denied["error"])
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        too_many = ",".join(f"site-{index}" for index in range(21))
+        status, response = self.request("GET", f"/api/sites/history/report?site_ids={too_many}", token=token)
+        self.assertEqual(status, 400)
+        self.assertIn("no more than 20", response["error"])
 
 if __name__ == "__main__":
     unittest.main()

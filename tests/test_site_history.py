@@ -62,6 +62,28 @@ class SiteHistoryStoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "storage limit"):
                 store.record(huge)
 
+    def test_latest_pairs_returns_two_newest_snapshots_per_site(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SiteHistoryStore(Path(directory) / "history.sqlite3")
+            first = store.record(snapshot("home", "2026-11-20T09:00:00+00:00"))
+            latest = store.record(snapshot("home", "2026-11-20T10:00:00+00:00"))
+            branch = store.record(snapshot("branch", "2026-11-20T09:30:00+00:00"))
+            pairs = store.latest_pairs(["home", "branch", "missing"])
+            by_site = {item["site_id"]: item for item in pairs}
+            self.assertEqual(by_site["home"]["current"]["snapshot_id"], latest["id"])
+            self.assertEqual(by_site["home"]["previous"]["snapshot_id"], first["id"])
+            self.assertEqual(by_site["branch"]["current"]["snapshot_id"], branch["id"])
+            self.assertIsNone(by_site["branch"]["previous"])
+            self.assertEqual(store.site_ids(), ["branch", "home"])
+
+    def test_latest_pairs_rejects_duplicate_or_excessive_site_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SiteHistoryStore(Path(directory) / "history.sqlite3")
+            with self.assertRaisesRegex(ValueError, "unique"):
+                store.latest_pairs(["home", "home"])
+            with self.assertRaisesRegex(ValueError, "no more than 20"):
+                store.latest_pairs([f"site-{index}" for index in range(21)])
+
 
 if __name__ == "__main__":
     unittest.main()

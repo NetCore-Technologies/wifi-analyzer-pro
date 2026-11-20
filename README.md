@@ -101,6 +101,7 @@ The local HTTP service exposes:
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
+| `GET /api/sites/history/report` | Compare latest stored snapshots across sites; accepts optional comma-separated `site_ids` (maximum 20) |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.

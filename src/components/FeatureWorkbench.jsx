@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, apiBase } from '../lib/api.js';
 import SiteTopologyGraph from './SiteTopologyGraph.jsx';
+import SiteChangeReport from './SiteChangeReport.jsx';
 import { Play, Search, RefreshCw, Braces, Wifi, AlertCircle } from 'lucide-react';
 
 const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
@@ -46,6 +47,20 @@ export default function FeatureWorkbench() {
     finally { setBusy(false); }
   };
 
+
+  const loadStoredHistoryReport = async () => {
+    setBusy(true); setError(''); setResult(null);
+    try {
+      const response = await apiFetch(`${apiBase()}/api/sites/history/report`, {
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `History report returned HTTP ${response.status}`);
+      setResult(data.report);
+    } catch (err) { setError(err.message || 'Unable to build the stored site history report.'); }
+    finally { setBusy(false); }
+  };
+
   const run = async () => {
     setBusy(true); setError(''); setResult(null);
     try {
@@ -82,9 +97,10 @@ export default function FeatureWorkbench() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}><div style={{ fontSize: 12, fontWeight: 700 }}>JSON input</div><button onClick={useLatestScan} disabled={busy} style={{ border: '1px solid #263956', background: '#111827', color: '#06d6f0', borderRadius: 7, padding: '7px 9px', fontSize: 11, cursor: 'pointer' }}><Wifi size={12} style={{ verticalAlign: 'middle', marginRight: 5 }}/>Use latest scan</button></div>
           <textarea value={payloadText} onChange={e => setPayloadText(e.target.value)} rows={12} spellCheck="false" aria-label="Feature JSON input" style={{ ...input, resize: 'vertical', fontFamily: 'ui-monospace, monospace', lineHeight: 1.55 }}/>
           <button onClick={run} disabled={busy || !current} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(6,214,240,.13)', color: '#06d6f0', border: '1px solid #06d6f0', borderRadius: 7, padding: '9px 15px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? .6 : 1 }}><Play size={13}/>{busy ? 'Running…' : 'Run feature'}</button>
+          {selected === 'site_to_site_change_report' ? <button onClick={loadStoredHistoryReport} disabled={busy} style={{ marginTop: 10, marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 7, background: '#111827', color: '#a5f3fc', border: '1px solid #256779', borderRadius: 7, padding: '9px 12px', fontSize: 11, cursor: busy ? 'wait' : 'pointer' }}>Build report from saved history</button> : null}
         </div>
         {error ? <div role="alert" style={{ ...panel, borderColor: '#ef4444', color: '#fca5a5', fontSize: 12 }}><AlertCircle size={14} style={{ verticalAlign: 'middle', marginRight: 6 }}/>{error}</div> : null}
-        {result ? <div style={panel}><div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}><Braces size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: '#06d6f0' }}/>Result</div>{selected === 'site_topology_visualisation' ? <SiteTopologyGraph data={result.result} /> : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', margin: 0, color: '#cbd5e1', fontSize: 11, lineHeight: 1.55 }}>{JSON.stringify(result, null, 2)}</pre>}</div> : null}
+        {result ? <div style={panel}><div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}><Braces size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: '#06d6f0' }}/>Result</div>{selected === 'site_topology_visualisation' ? <SiteTopologyGraph data={result.result} /> : selected === 'site_to_site_change_report' ? <SiteChangeReport data={result.result} /> : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', margin: 0, color: '#cbd5e1', fontSize: 11, lineHeight: 1.55 }}>{JSON.stringify(result, null, 2)}</pre>}</div> : null}
       </section>
     </div>
   );

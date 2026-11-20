@@ -207,6 +207,58 @@ class SiteHistoryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def site_ids(self, *, limit: int = 20) -> list[str]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
+            raise ValueError("site limit must be an integer between 1 and 20")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT DISTINCT site_id FROM site_snapshots ORDER BY site_id LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [row["site_id"] for row in rows]
+
+    def latest_pairs(self, site_ids: list[str]) -> list[dict]:
+        if not isinstance(site_ids, list) or len(site_ids) > 20:
+            raise ValueError("site_ids must be a list containing no more than 20 sites")
+        cleaned = []
+        seen = set()
+        for site_id in site_ids:
+            if not isinstance(site_id, str) or not site_id.strip() or len(site_id) > 128:
+                raise ValueError("each site_id must contain 1 to 128 characters")
+            site_id = site_id.strip()
+            if site_id in seen:
+                raise ValueError("site_ids must be unique")
+            seen.add(site_id)
+            cleaned.append(site_id)
+        comparisons = []
+        with self._connection() as connection:
+            for site_id in sorted(cleaned):
+                rows = connection.execute(
+                    """
+                    SELECT id, site_id, captured_at, received_at,
+                           access_point_count, link_count, payload
+                    FROM site_snapshots WHERE site_id = ?
+                    ORDER BY captured_at DESC, id DESC LIMIT 2
+                    """,
+                    (site_id,),
+                ).fetchall()
+                if not rows:
+                    continue
+                def unpack(row):
+                    return {
+                        "snapshot_id": row["id"],
+                        "captured_at": row["captured_at"],
+                        "received_at": row["received_at"],
+                        "snapshot": json.loads(row["payload"]),
+                    }
+                current = unpack(rows[0])
+                previous = unpack(rows[1]) if len(rows) > 1 else None
+                comparisons.append({
+                    "site_id": site_id,
+                    "previous": previous,
+                    "current": current,
+                })
+        return comparisons
     def get(self, snapshot_id: int) -> dict | None:
         if isinstance(snapshot_id, bool) or not isinstance(snapshot_id, int) or snapshot_id < 1:
             raise ValueError("snapshot_id must be a positive integer")

@@ -210,19 +210,60 @@ PAYLOADS = {
         "captured_at": "2026-11-20T10:00:00+11:00",
         "access_points": [{"ap_id":"ap-hall","name":"Hall AP"}],
         "links": []
+    },
+    "site_to_site_change_report": {
+        "sites": [
+            {
+                "site_id": "home",
+                "previous": {
+                    "snapshot_id": 1, "captured_at": "2026-11-20T09:00:00+00:00",
+                    "snapshot": {
+                        "site_id": "home",
+                        "access_points": [
+                            {"ap_id":"gw","site_id":"home","bssid":"00:11:22:33:44:55","band":"5GHz"},
+                            {"ap_id":"old","site_id":"home","bssid":"00:11:22:33:44:66","band":"2.4GHz"}
+                        ],
+                        "links": [{"from_ap_id":"gw","to_ap_id":"old","relationship":"wired_uplink"}]
+                    }
+                },
+                "current": {
+                    "snapshot_id": 2, "captured_at": "2026-11-20T10:00:00+00:00",
+                    "snapshot": {
+                        "site_id": "home",
+                        "access_points": [
+                            {"ap_id":"gw","site_id":"home","bssid":"00:11:22:33:44:55","band":"5GHz"},
+                            {"ap_id":"new","site_id":"home","bssid":"00:11:22:33:44:77","band":"6GHz"}
+                        ],
+                        "links": [{"from_ap_id":"gw","to_ap_id":"new","relationship":"mesh_backhaul"}]
+                    }
+                }
+            },
+            {
+                "site_id": "branch",
+                "previous": None,
+                "current": {
+                    "snapshot_id": 3, "captured_at": "2026-11-20T10:00:00+00:00",
+                    "snapshot": {
+                        "site_id": "branch",
+                        "access_points": [{"ap_id":"branch-gw","site_id":"branch","bssid":"00:11:22:33:44:55","band":"5GHz"}],
+                        "links": []
+                    }
+                }
+            }
+        ]
     }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_fifty_eight_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_fifty_nine_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 158)
-        self.assertEqual(len(set(FEATURE_MODULES)), 158)
-        self.assertEqual(count(), 158)
-        self.assertEqual(len(entries), 158)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 158)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 159)])
+        self.assertEqual(len(FEATURE_MODULES), 159)
+        self.assertEqual(len(set(FEATURE_MODULES)), 159)
+        self.assertEqual(count(), 159)
+        self.assertEqual(len(entries), 159)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 159)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 160)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -730,6 +771,36 @@ class FeatureCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "timezone"):
             run("site_discovery_history_snapshot", {
                 "site_id": "home", "captured_at": "2026-11-20T10:00:00",
+            })
+
+    def test_site_to_site_change_report_compares_site_drift_and_cross_site_bssid_reuse(self):
+        result = run("site_to_site_change_report", PAYLOADS["site_to_site_change_report"])["result"]
+        self.assertEqual(result["summary"]["site_count"], 2)
+        self.assertEqual(result["summary"]["sites_with_baseline"], 1)
+        self.assertEqual(result["summary"]["sites_without_baseline"], 1)
+        self.assertEqual(result["summary"]["added_access_point_count"], 1)
+        self.assertEqual(result["summary"]["removed_access_point_count"], 1)
+        self.assertEqual(result["summary"]["added_link_count"], 1)
+        self.assertEqual(result["summary"]["removed_link_count"], 1)
+        self.assertEqual(result["summary"]["cross_site_bssid_collision_count"], 1)
+        home = next(item for item in result["sites"] if item["site_id"] == "home")
+        self.assertEqual(home["changes"]["added_access_points"][0]["ap_id"], "new")
+        self.assertEqual(home["changes"]["removed_access_points"][0]["ap_id"], "old")
+
+    def test_site_to_site_change_report_handles_first_baseline_and_rejects_duplicate_sites(self):
+        initial = run("site_to_site_change_report", {
+            "sites": [{
+                "site_id": "new-site", "previous": None,
+                "current": {"snapshot": {"site_id": "new-site", "access_points": [], "links": []}},
+            }]
+        })["result"]
+        self.assertEqual(initial["sites"][0]["baseline_status"], "initial_snapshot")
+        with self.assertRaisesRegex(ValueError, "site_id values must be unique"):
+            run("site_to_site_change_report", {
+                "sites": [
+                    {"site_id": "home", "current": {"snapshot": {"site_id": "home", "access_points": [], "links": []}}},
+                    {"site_id": "home", "current": {"snapshot": {"site_id": "home", "access_points": [], "links": []}}},
+                ]
             })
 
 if __name__ == "__main__":
