@@ -167,18 +167,22 @@ PAYLOADS = {
 
     "floorplan_zone_assignment": {"zones":[{"floorplan_id":"level-1","zone_id":"left","name":"Left wing","polygon":[{"x":0,"y":0},{"x":0.6,"y":0},{"x":0.6,"y":1},{"x":0,"y":1}]},{"floorplan_id":"level-1","zone_id":"right","name":"Right wing","polygon":[{"x":0.4,"y":0},{"x":1,"y":0},{"x":1,"y":1},{"x":0.4,"y":1}]}],"anchors":[{"ap_id":"ap-left","floorplan_id":"level-1","x":0.2,"y":0.5},{"ap_id":"ap-center","floorplan_id":"level-1","x":0.5,"y":0.5}]},
 
+    "site_topology_redundancy_audit": {"access_points":[{"ap_id":"a"},{"ap_id":"b"},{"ap_id":"c"},{"ap_id":"d"},{"ap_id":"e"}],"links":[{"from_ap_id":"a","to_ap_id":"b","relationship":"wired_uplink"},{"from_ap_id":"b","to_ap_id":"c","relationship":"wired_uplink"},{"from_ap_id":"c","to_ap_id":"a","relationship":"mesh_backhaul"},{"from_ap_id":"c","to_ap_id":"d","relationship":"wired_uplink"},{"from_ap_id":"a","to_ap_id":"e","relationship":"rf_neighbor"}]},
+
+    "site_topology_snapshot_diff": {"previous":{"access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"b","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"b","relationship":"wired_uplink"}]},"current":{"access_points":[{"ap_id":"a","site_id":"remote"},{"ap_id":"c","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"c","relationship":"mesh_backhaul"}]}},
+
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 148)
-        self.assertEqual(len(set(FEATURE_MODULES)), 148)
-        self.assertEqual(count(), 148)
-        self.assertEqual(len(entries), 148)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 148)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 149)])
+        self.assertEqual(len(FEATURE_MODULES), 150)
+        self.assertEqual(len(set(FEATURE_MODULES)), 150)
+        self.assertEqual(count(), 150)
+        self.assertEqual(len(entries), 150)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 150)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 151)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -403,6 +407,43 @@ class FeatureCatalogTests(unittest.TestCase):
         })["result"]
         self.assertEqual(result["assigned_count"], 1)
         self.assertEqual(result["ambiguous_count"], 1)
+
+
+    def test_topology_redundancy_finds_bridge_links_and_articulation_aps(self):
+        result = run("site_topology_redundancy_audit", {
+            "access_points": [{"ap_id": key} for key in "abcde"],
+            "links": [
+                {"from_ap_id": "a", "to_ap_id": "b", "relationship": "wired_uplink"},
+                {"from_ap_id": "b", "to_ap_id": "c", "relationship": "wired_uplink"},
+                {"from_ap_id": "c", "to_ap_id": "a", "relationship": "mesh_backhaul"},
+                {"from_ap_id": "c", "to_ap_id": "d", "relationship": "wired_uplink"},
+                {"from_ap_id": "a", "to_ap_id": "e", "relationship": "rf_neighbor"}
+            ]
+        })["result"]
+        self.assertEqual(result["component_count"], 2)
+        self.assertEqual(result["critical_access_points"], ["c"])
+        self.assertEqual(result["critical_links"], [
+            {"from_ap_id": "c", "to_ap_id": "d", "impact": "disconnects_component_if_removed"}
+        ])
+        self.assertEqual(result["rf_neighbor_links_excluded"], 1)
+
+    def test_topology_diff_reports_ap_and_link_changes(self):
+        result = run("site_topology_snapshot_diff", {
+            "previous": {
+                "access_points": [{"ap_id": "a", "site_id": "home"}, {"ap_id": "b", "site_id": "home"}],
+                "links": [{"from_ap_id": "a", "to_ap_id": "b", "relationship": "wired_uplink"}]
+            },
+            "current": {
+                "access_points": [{"ap_id": "a", "site_id": "remote"}, {"ap_id": "c", "site_id": "home"}],
+                "links": [{"from_ap_id": "a", "to_ap_id": "c", "relationship": "mesh_backhaul"}]
+            }
+        })["result"]
+        self.assertEqual(len(result["added_access_points"]), 1)
+        self.assertEqual(len(result["removed_access_points"]), 1)
+        self.assertEqual(len(result["changed_access_points"]), 1)
+        self.assertEqual(result["added_link_count"], 1)
+        self.assertEqual(result["removed_link_count"], 1)
+
 
 
 if __name__ == "__main__":
