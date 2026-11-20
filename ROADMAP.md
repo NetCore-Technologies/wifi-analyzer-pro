@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 100 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 141 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 140 distinct built-in feature tools (F001–F140), each in its own module with a stable slug and metadata.
+- ✅ 141 distinct built-in feature tools (F001–F141), each in its own module with a stable slug and metadata.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
@@ -65,7 +65,7 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 |---|---:|---|---|---:|---|
 | ✅ | F101–F120 | Shipped: same-SSID band visibility, roaming evidence/timelines, channel-width overlap, DFS/PSC planning, Wi-Fi 7 EHT/MLO and PMF/regulatory audits | 2026-11-20 | Implemented | F001–F100 registry; 20 module-level test payloads |
 | ✅ | F121–F140 | Shipped: client association inventory, airtime/throughput fairness, QoS/DSCP, retry/PHY checks, 802.11k/v/r, TWT, DHCP/DNS/gateway checks and association diagnostics | 2026-11-20 | Implemented | F001–F120; supplied AP/controller and client measurement records |
-| 1 | F141–F160 | Multi-AP site inventory, topology relationships, subnet and gateway correlation, floor-plan anchors | 2027-02-26 | 4–5 weeks | SQLite history; consented local discovery |
+| 🚧 | F141–F160 | F141 shipped: multi-site AP inventory snapshot, duplicate-BSSID detection and inventory coverage; remaining: topology relationships, subnet/gateway correlation and floor-plan anchors | 2027-02-26 | 1 feature shipped; 19 remain | SQLite history; consented local discovery |
 | 2 | F161–F180 | Router adapters, read-only OpenWrt/UniFi/MikroTik integrations, agent health and capability negotiation | 2027-04-09 | 5–6 weeks | Authenticated API; per-adapter contract tests |
 | 3 | F181–F200 | Scheduled reports, alert policies, webhook delivery, report comparison and backup/restore | 2027-05-07 | 4–5 weeks | Waves 2–4; encrypted local settings |
 
