@@ -890,11 +890,132 @@ const NAV=[
   ]},
 ];
 
+const PREFERENCE_KEY = "wifi-analyzer-pro.preferences";
+const REFRESH_INTERVALS = [5, 10, 15, 30, 60];
+const DEFAULT_PREFERENCES = {
+  refreshIntervalSeconds: 10,
+  compactSidebar: false,
+  hideDemoData: false,
+  reducedMotion: false,
+};
+
+function loadPreferences() {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(PREFERENCE_KEY) || "{}");
+    return {
+      refreshIntervalSeconds: REFRESH_INTERVALS.includes(stored.refreshIntervalSeconds)
+        ? stored.refreshIntervalSeconds : DEFAULT_PREFERENCES.refreshIntervalSeconds,
+      compactSidebar: stored.compactSidebar === true,
+      hideDemoData: stored.hideDemoData === true,
+      reducedMotion: stored.reducedMotion === true,
+    };
+  } catch {
+    return { ...DEFAULT_PREFERENCES };
+  }
+}
+
+function SettingsOverlay({ preferences, onChange, onClose }) {
+  const labelStyle = { fontSize: 12, color: C.text, fontWeight: 600 };
+  const hintStyle = { fontSize: 10, color: C.muted, marginTop: 3 };
+  const controlStyle = {
+    background: C.bg, color: C.text, border: `1px solid ${C.border}`,
+    borderRadius: 7, padding: "7px 9px", fontSize: 12,
+  };
+  return (
+    <div role="presentation" onMouseDown={event => {
+      if (event.target === event.currentTarget) onClose();
+    }} style={{
+      position: "fixed", inset: 0, zIndex: 1000, background: "rgba(2,6,14,.78)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 18,
+      backdropFilter: "blur(5px)",
+    }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="settings-title"
+        style={{
+          width: "min(480px, 100%)", maxHeight: "min(680px, 90vh)", overflowY: "auto",
+          background: C.card, border: `1px solid ${C.borderHov}`, borderRadius: 14,
+          boxShadow: "0 24px 80px rgba(0,0,0,.5)", padding: 20,
+        }}>
+        <div style={{ ...s.bet, marginBottom: 5 }}>
+          <div style={{ ...s.row, gap: 10 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 9, background: C.cyanFaint,
+              display: "grid", placeItems: "center", border: `1px solid ${C.cyan}33`,
+            }}><Settings size={16} color={C.cyan}/></div>
+            <div>
+              <div id="settings-title" style={{ fontSize: 15, fontWeight: 750, color: C.text }}>Signal Pulse settings</div>
+              <div style={{ fontSize: 10, color: C.muted }}>Local dashboard behaviour and accessibility</div>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close settings"
+            style={{ ...controlStyle, width: 32, height: 32, padding: 0, cursor: "pointer" }}>
+            <X size={14}/>
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gap: 1, marginTop: 18 }}>
+          <div style={{ ...s.bet, padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
+            <div>
+              <div style={labelStyle}>Automatic refresh</div>
+              <div style={hintStyle}>Refresh local observations in the background</div>
+            </div>
+            <select aria-label="Automatic refresh interval"
+              value={preferences.refreshIntervalSeconds}
+              onChange={event => onChange({ refreshIntervalSeconds: Number(event.target.value) })}
+              style={controlStyle}>
+              {REFRESH_INTERVALS.map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
+            </select>
+          </div>
+
+          <label style={{ ...s.bet, padding: "12px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+            <span>
+              <span style={labelStyle}>Compact sidebar</span>
+              <span style={{ ...hintStyle, display: "block" }}>Keep navigation collapsed between sessions</span>
+            </span>
+            <input type="checkbox" checked={preferences.compactSidebar}
+              onChange={event => onChange({ compactSidebar: event.target.checked })}
+              aria-label="Compact sidebar" style={{ width: 16, height: 16, accentColor: C.cyan }}/>
+          </label>
+
+          <label style={{ ...s.bet, padding: "12px 0", borderBottom: `1px solid ${C.border}`, cursor: "pointer" }}>
+            <span>
+              <span style={labelStyle}>Hide demo observations</span>
+              <span style={{ ...hintStyle, display: "block" }}>Do not show example networks or devices when live data is unavailable</span>
+            </span>
+            <input type="checkbox" checked={preferences.hideDemoData}
+              onChange={event => onChange({ hideDemoData: event.target.checked })}
+              aria-label="Hide demo observations" style={{ width: 16, height: 16, accentColor: C.cyan }}/>
+          </label>
+
+          <label style={{ ...s.bet, padding: "12px 0", cursor: "pointer" }}>
+            <span>
+              <span style={labelStyle}>Reduce motion</span>
+              <span style={{ ...hintStyle, display: "block" }}>Reduce animated transitions and visual effects</span>
+            </span>
+            <input type="checkbox" checked={preferences.reducedMotion}
+              onChange={event => onChange({ reducedMotion: event.target.checked })}
+              aria-label="Reduce motion" style={{ width: 16, height: 16, accentColor: C.cyan }}/>
+          </label>
+        </div>
+
+        <div style={{
+          marginTop: 14, padding: 11, borderRadius: 8, background: C.card2,
+          border: `1px solid ${C.border}`, fontSize: 10, lineHeight: 1.6, color: C.textSec,
+        }}>
+          <Shield size={12} color={C.green} style={{ verticalAlign: "middle", marginRight: 6 }}/>
+          Preferences are stored in this browser only. Network observations remain on the local analyzer unless you configure an external integration.
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const { logout } = useAuth();
   const [tab,setTab]=useState("dashboard");
   const [scanning,setScanning]=useState(false);
-  const [collapsed,setCollapsed]=useState(false);
+  const [preferences,setPreferences]=useState(loadPreferences);
+  const [settingsOpen,setSettingsOpen]=useState(false);
+  const collapsed=preferences.compactSidebar;
   const [toasts,setToasts]=useState([]);
   const [rssiData]=useState(genRSSI);
   const [speedData]=useState(genSpeed);
@@ -904,6 +1025,14 @@ export default function App() {
   const [liveSystem,setLiveSystem]=useState(null);
   const [liveDiag,setLiveDiag]=useState(null);
   const [checking,setChecking]=useState(true);
+
+  useEffect(()=>{
+    try {
+      window.localStorage.setItem(PREFERENCE_KEY, JSON.stringify(preferences));
+    } catch {
+      // Keep the active session usable when browser storage is unavailable.
+    }
+  },[preferences]);
 
   useEffect(()=>{
     let disposed=false;
@@ -937,12 +1066,16 @@ export default function App() {
       }
     };
     refreshLiveData();
-    const intervalId=setInterval(refreshLiveData,10000);
+    const intervalId=setInterval(refreshLiveData,preferences.refreshIntervalSeconds*1000);
     return()=>{disposed=true;clearInterval(intervalId);};
-  },[]);
+  },[preferences.refreshIntervalSeconds]);
 
-  const networks=Array.isArray(liveNets)?liveNets.map(toUiNetwork):NETWORKS;
-  const devices=Array.isArray(liveDevs)?liveDevs.map(toUiDevice):DEVICES;
+  const networks=liveMode&&Array.isArray(liveNets)
+    ?liveNets.map(toUiNetwork)
+    :preferences.hideDemoData?[]:(Array.isArray(liveNets)?liveNets.map(toUiNetwork):NETWORKS);
+  const devices=liveMode&&Array.isArray(liveDevs)
+    ?liveDevs.map(toUiDevice)
+    :preferences.hideDemoData?[]:(Array.isArray(liveDevs)?liveDevs.map(toUiDevice):DEVICES);
   const observedAlerts=liveMode?buildObservedAlerts(networks,liveDiag):[];
 
   const addToast=(msg,type="info")=>{
@@ -1014,8 +1147,18 @@ export default function App() {
 
   return (
     <div style={{display:"flex",height:"100vh",background:C.bg,color:C.text,fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
-      <style>{ANIM}</style>
+      <style>{ANIM}{preferences.reducedMotion?`
+        *,*::before,*::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+          scroll-behavior: auto !important;
+        }
+      `:""}</style>
       <Toast toasts={toasts} dismiss={dismissToast}/>
+      {settingsOpen&&<SettingsOverlay preferences={preferences}
+        onChange={updates=>setPreferences(current=>({...current,...updates}))}
+        onClose={()=>setSettingsOpen(false)}/>}
 
       <aside style={{width:collapsed?54:210,flexShrink:0,background:C.card,
         borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",
@@ -1025,12 +1168,17 @@ export default function App() {
           <div style={{width:30,height:30,borderRadius:8,background:C.cyanFaint,
             display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
             border:`1px solid ${C.cyan}33`,animation:"glow 3s ease-in-out infinite"}}>
-            <Wifi size={14} color={C.cyan}/>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none"
+              stroke={C.cyan} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"
+              aria-hidden="true">
+              <path d="M3 8.5a14 14 0 0 1 18 0M6.4 11.8a8.8 8.8 0 0 1 11.2 0"/>
+              <path d="M2.8 17h4.1l2-4 3.1 7 2.5-5h6.7"/>
+            </svg>
           </div>
           {!collapsed&&(
             <div>
               <div style={{fontSize:12,fontWeight:700,color:C.text,lineHeight:1,whiteSpace:"nowrap"}}>WiFi Analyzer</div>
-              <div style={{fontSize:9,color:C.cyan,fontWeight:700,letterSpacing:0.8}}>PRO v1.0.5</div>
+              <div style={{fontSize:9,color:C.cyan,fontWeight:700,letterSpacing:0.8}}>SIGNAL PULSE · PRO v1.0.7</div>
             </div>
           )}
         </div>
@@ -1068,7 +1216,7 @@ export default function App() {
         </div>
 
         <div style={{padding:"8px 8px",borderTop:`1px solid ${C.border}`}}>
-          <button onClick={()=>setCollapsed(x=>!x)}
+          <button onClick={()=>setPreferences(current=>({...current,compactSidebar:!current.compactSidebar}))}
             style={{width:"100%",padding:"7px",background:C.card2,
               border:`1px solid ${C.border}`,borderRadius:7,
               color:C.muted,cursor:"pointer",fontSize:11,display:"flex",
@@ -1126,7 +1274,7 @@ export default function App() {
                 cursor:"pointer",color:C.muted,transition:"all 0.15s"}}>
               <Lock size={14}/>
             </button>
-            <button onClick={()=>addToast("Settings coming in v1.1.0","info")}
+            <button onClick={()=>setSettingsOpen(true)} aria-label="Open settings" title="Settings"
               style={{width:32,height:32,display:"flex",alignItems:"center",justifyContent:"center",
                 background:C.card2,border:`1px solid ${C.border}`,borderRadius:7,
                 cursor:"pointer",color:C.muted,transition:"all 0.15s"}}>
