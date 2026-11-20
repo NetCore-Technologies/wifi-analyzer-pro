@@ -47,7 +47,7 @@ class RouterGatewayRedundancyAuditTests(unittest.TestCase):
         self.assertEqual(group["distinct_gateway_count"], 2)
         self.assertIn("gateway.multiple_configured_paths", [item["code"] for item in group["findings"]])
         self.assertIn("gateway.activation_unknown", [item["code"] for item in group["findings"]])
-        self.assertIn("not been tested", result["note"])
+        self.assertIn("simulate failover", result["note"])
 
     def test_reports_shared_upstream_next_hop_across_multiple_routers(self):
         result = run({"snapshots": [
