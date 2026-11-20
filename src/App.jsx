@@ -597,18 +597,60 @@ function SpeedPanel({ speedData }) {
 }
 
 function DevicesPanel({ devices: devsProp }) {
-  const DEVS = devsProp || DEVICES;
+  const DEVS = Array.isArray(devsProp) ? devsProp : DEVICES;
+  const onlineCount=DEVS.filter(device=>device.online===true).length;
+  const offlineCount=DEVS.filter(device=>device.online===false).length;
+  const unknownStatusCount=DEVS.length-onlineCount-offlineCount;
   const ICONS={Router:Server,Laptop:Monitor,Server:Database,Wearable:Eye,IoT:Rss,Unknown:AlertTriangle};
   const COLS ={Router:C.cyan,Laptop:C.blue,Server:C.purple,Wearable:C.green,IoT:C.yellow,Unknown:C.red};
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label="Devices Found"   value={DEVS.length} sub={`${DEVS.filter(d=>d.online!==false).length} online · ${DEVS.filter(d=>d.online===false).length} offline`} col={C.cyan} Icon={Smartphone} delay={1}/>
+        <Stat label="Devices Found" value={DEVS.length} sub={`${onlineCount} online · ${offlineCount} offline · ${unknownStatusCount} unknown`} col={C.cyan} Icon={Smartphone} delay={1}/>
         <Stat label="Gateway"         value={DEVS.find(d=>d.gw)?.ip||"N/A"} sub={DEVS.find(d=>d.gw)?.vendor||""} col={C.purple} Icon={Activity} delay={2}/>
         <Stat label="Vendors Found"   value={[...new Set(DEVS.map(d=>d.vendor).filter(Boolean))].length} sub="Unique manufacturers" col={C.green} Icon={CheckCircle} delay={3}/>
         <Stat label="Unknown"         value={DEVS.filter(d=>!d.vendor||d.vendor==="???").length} sub="Unidentified MAC vendor" col={C.red} Icon={AlertTriangle} delay={4}/>
       </div>
-      <div style={{...s.card,fontSize:12,color:C.muted}}>Alert delivery integrations are not connected in this build. Current alerts are displayed locally and are not sent to Discord, email or MQTT.</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+        {DEVS.map((d,i)=>{
+          const Icon=ICONS[d.type]||Smartphone;
+          const col=COLS[d.type]||C.muted;
+          return (
+            <div key={i} className={`hover-card anim-fade-d${Math.min(i+1,5)}`}
+              style={{...s.card,border:`1px solid ${d.type==="Unknown"?C.red+"44":C.border}`,
+                background:d.type==="Unknown"?C.redFaint:C.card}}>
+              <div style={{...s.bet,marginBottom:10}}>
+                <div style={{...s.row,gap:9}}>
+                  <div style={{...s.cen,width:36,height:36,borderRadius:8,background:col+"20"}}>
+                    <Icon size={16} color={col}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{d.name}</div>
+                    <div style={{fontSize:10,color:C.muted}}>{d.vendor}</div>
+                  </div>
+                </div>
+                <div style={{...s.row,gap:5}}>
+                  <PulseDot col={d.online===true?C.green:d.online===false?C.red:C.muted}/>
+                  <span style={{fontSize:10,color:d.online===true?C.green:d.online===false?C.red:C.muted,fontWeight:600}}>{d.online===true?"Online":d.online===false?"Offline":"Status unknown"}</span>
+                </div>
+              </div>
+              <div style={{...s.col,gap:5,padding:"8px 0",borderTop:`1px solid ${C.border}`}}>
+                {[[ "IP",d.ip,true ],[ "MAC",d.mac,true ],[ "Bandwidth",d.bw==null?"—":d.bw+" Mbps",false ]].map(([k,v,mono])=>(
+                  <div key={k} style={s.bet}>
+                    <span style={{fontSize:10,color:C.muted}}>{k}</span>
+                    <span style={{fontSize:11,...(mono?s.mono:{}),color:k==="Bandwidth"?C.cyan:C.textSec}}>{v}</span>
+                  </div>
+                ))}
+                <div style={s.bet}>
+                  <span style={{fontSize:10,color:C.muted}}>Signal</span>
+                  {d.rssi==null?<span style={{fontSize:10,color:C.muted}}>—</span>:<AnimatedBars rssi={d.rssi}/>}
+                </div>
+                {d.gw&&<Tag text="GATEWAY" col={C.cyan}/>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -672,24 +714,7 @@ function AlertsPanel({ alerts = [] }) {
           })}
         </div>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-        {[
-          {label:"Discord Webhook", desc:"Alert on rogue APs + outages",     on:true,  col:C.purple},
-          {label:"Email (SMTP)",    desc:"Daily digest + critical only",      on:false, col:C.cyan},
-          {label:"MQTT Broker",     desc:"Publish events to mqtt://broker",   on:true,  col:C.green},
-        ].map((c,i)=>(
-          <div key={i} className="hover-card" style={{...s.card,...s.bet}}>
-            <div>
-              <div style={{fontSize:12,fontWeight:600,color:C.text,marginBottom:2}}>{c.label}</div>
-              <div style={{fontSize:10,color:C.muted}}>{c.desc}</div>
-            </div>
-            <div style={{width:38,height:21,borderRadius:11,background:c.on?c.col:C.border,
-              position:"relative",cursor:"pointer",transition:"background 0.25s",flexShrink:0}}>
-              <div style={{position:"absolute",top:2.5,left:c.on?19:2.5,width:16,height:16,
-                borderRadius:"50%",background:"white",transition:"left 0.25s"}}/>
-            </div>
-          </div>
-        ))}
+      <div style={{...s.card,fontSize:12,color:C.muted}}>Alert delivery is not connected in this build. Current alerts are displayed locally and are not sent to Discord, email or MQTT.</div>
       </div>
     </div>
   );
