@@ -82,7 +82,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             connection.close()
 
 
-    def enroll_agent(self, admin_token, agent_id, capabilities):
+    def enroll_agent(self, admin_token, agent_id, capabilities, site_id=None):
         status, response = self.request("POST", "/api/agents/enroll", {
             "agent_id": agent_id,
             "adapter_id": "openwrt",
@@ -90,6 +90,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             "advertised_capabilities": capabilities,
             "requested_capabilities": capabilities,
             "requested_permissions": ["read"],
+            **({"site_id": site_id} if site_id is not None else {}),
         }, token=admin_token)
         self.assertEqual(status, 201, response)
         return response["credential"]["token"]
@@ -1268,6 +1269,79 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, final = self.request("GET", "/api/agents/credentials", token=admin_token)
         self.assertEqual(status, 200)
         self.assertEqual(final["credentials"][0]["status"], "revoked")
+
+    def test_router_agent_inventory_and_management_are_filtered_by_site_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+        home_token = self.enroll_agent(
+            owner_token, "scope-agent-home", ["system.board", "inventory.snapshot"], site_id="home"
+        )
+        branch_token = self.enroll_agent(
+            owner_token, "scope-agent-branch", ["system.board", "inventory.snapshot"], site_id="branch"
+        )
+        for agent_id, token in (
+            ("scope-agent-home", home_token),
+            ("scope-agent-branch", branch_token),
+        ):
+            status, heartbeat = self.request("POST", "/api/agents/heartbeat", {
+                "agent_id": agent_id, "adapter_id": "openwrt", "agent_version": "1.2.0",
+                "status": "healthy", "capabilities": ["system.board", "inventory.snapshot"],
+            }, token=token)
+            self.assertIn(status, (200, 201), heartbeat)
+
+        status, user = self.request("POST", "/api/users", {
+            "username": "home.netadmin", "password": "home network admin password",
+            "role": "network_admin", "all_sites": False, "site_ids": ["home"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, user)
+        site_admin = self.request("POST", "/api/auth/login", {
+            "username": "home.netadmin", "password": "home network admin password",
+        })[1]["token"]
+
+        status, credentials = self.request("GET", "/api/agents/credentials", token=site_admin)
+        self.assertEqual(status, 200)
+        self.assertEqual([item["agent_id"] for item in credentials["credentials"]], ["scope-agent-home"])
+        self.assertEqual(credentials["credentials"][0]["site_id"], "home")
+
+        status, health = self.request("GET", "/api/agents/health", token=site_admin)
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            {item["agent_id"] for item in health["result"]["agents"]},
+            {"scope-agent-home"},
+        )
+
+        status, denied = self.request(
+            "POST", "/api/agents/scope-agent-branch/credentials/rotate", {}, token=site_admin,
+        )
+        self.assertEqual(status, 404)
+        status, denied = self.request(
+            "POST", "/api/agents/scope-agent-branch/credentials/revoke", {}, token=site_admin,
+        )
+        self.assertEqual(status, 404)
+        status, denied = self.request(
+            "GET", "/api/agents/snapshots/scope-agent-branch", token=site_admin,
+        )
+        self.assertEqual(status, 404)
+
+        status, denied = self.request("POST", "/api/agents/enroll", {
+            "agent_id": "scope-agent-outside", "adapter_id": "openwrt", "agent_version": "1.2.0",
+            "advertised_capabilities": ["system.board", "inventory.snapshot"],
+            "requested_capabilities": ["system.board", "inventory.snapshot"],
+            "requested_permissions": ["read"], "site_id": "branch",
+        }, token=site_admin)
+        self.assertEqual(status, 403)
+
+        status, updated = self.request("POST", "/api/agents/scope-agent-home/site", {
+            "site_id": "branch",
+        }, token=site_admin)
+        self.assertEqual(status, 403)
+        status, updated = self.request("POST", "/api/agents/scope-agent-home/site", {
+            "site_id": "home",
+        }, token=site_admin)
+        self.assertEqual(status, 200)
+        self.assertEqual(updated["assignment"]["site_id"], "home")
 
     def test_agent_enrollment_rejects_write_scopes_and_duplicate_active_agents(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})

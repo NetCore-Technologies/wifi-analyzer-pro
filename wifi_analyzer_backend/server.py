@@ -744,6 +744,36 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def require_agent_site_access(self, agent_id):
+        assignment = AGENT_HEALTH.get_agent_scope(agent_id)
+        if assignment is None:
+            self.send_json({"error": "Agent not found"}, 404)
+            return False
+        scope = AUTH.site_access(self.bearer_token())
+        if scope is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        site_id = assignment.get("site_id")
+        if not scope["all_sites"] and (site_id is None or site_id not in scope["site_ids"]):
+            # Hide the existence of agents belonging to another site.
+            self.send_json({"error": "Agent not found"}, 404)
+            return False
+        return True
+
+    def visible_agent_records(self, records):
+        scope = AUTH.site_access(self.bearer_token())
+        if scope is None or scope["all_sites"]:
+            return records
+        assigned = {
+            item["agent_id"]: item.get("site_id")
+            for item in AGENT_HEALTH.list_agent_credentials()
+        }
+        return [
+            item for item in records
+            if (item.get("site_id") if item.get("site_id") is not None else assigned.get(item.get("agent_id")))
+            in scope["site_ids"]
+        ]
+
     def read_json_body(self):
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -849,13 +879,13 @@ class Handler(BaseHTTPRequestHandler):
                 "adapters": router_adapter_manifests(),
             },
             "/api/agents/credentials": lambda: {
-                "credentials": AGENT_HEALTH.list_agent_credentials(),
+                "credentials": self.visible_agent_records(AGENT_HEALTH.list_agent_credentials()),
             },
             "/api/agents/negotiations": lambda: {
-                "negotiations": AGENT_HEALTH.list_latest_agent_negotiations(),
+                "negotiations": self.visible_agent_records(AGENT_HEALTH.list_latest_agent_negotiations()),
             },
             "/api/agents/health": lambda: run_feature("router_agent_health_report", {
-                "agents": AGENT_HEALTH.list_agents(),
+                "agents": self.visible_agent_records(AGENT_HEALTH.list_agents()),
                 "now": datetime.now(timezone.utc).isoformat(),
                 "stale_after_seconds": 180,
             }),
@@ -911,15 +941,19 @@ class Handler(BaseHTTPRequestHandler):
                 if not agent_id or "/" in agent_id:
                     self.send_json({"error": "Agent negotiation history not found"}, 404)
                     return
+                if not self.require_agent_site_access(agent_id):
+                    return
                 self.send_json({
                     "negotiations": AGENT_HEALTH.get_agent_negotiations(agent_id, limit=20)
                 })
             elif path == "/api/agents/snapshots":
-                self.send_json({"snapshots": AGENT_HEALTH.list_latest_snapshots()})
+                self.send_json({"snapshots": self.visible_agent_records(AGENT_HEALTH.list_latest_snapshots())})
             elif path.startswith("/api/agents/snapshots/") and path.endswith("/diff"):
                 agent_id = unquote(path[len("/api/agents/snapshots/"):-len("/diff")])
                 if not agent_id or "/" in agent_id:
                     self.send_json({"error": "Agent snapshot diff not found"}, 404)
+                    return
+                if not self.require_agent_site_access(agent_id):
                     return
                 snapshots = AGENT_HEALTH.get_recent_snapshots(agent_id, limit=2)
                 if not snapshots:
@@ -936,6 +970,8 @@ class Handler(BaseHTTPRequestHandler):
                 agent_id = unquote(path[len("/api/agents/snapshots/"):])
                 if not agent_id or "/" in agent_id:
                     self.send_json({"error": "Agent snapshot not found"}, 404)
+                    return
+                if not self.require_agent_site_access(agent_id):
                     return
                 snapshot = AGENT_HEALTH.get_latest_snapshot(agent_id)
                 if snapshot is None:
@@ -1323,7 +1359,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/agents/enroll":
-            if not self.require_auth("agents.manage"): 
+            if not self.require_auth("agents.manage"):
+                return
+            user_site_scope = AUTH.site_access(self.bearer_token())
+            requested_site = payload.get("site_id")
+            if not self.require_site_access(
+                [requested_site] if requested_site is not None else [],
+                require_explicit=not user_site_scope["all_sites"],
+            ):
                 return
             try:
                 scope = run_feature("router_agent_credential_scope", payload)["result"]
@@ -1335,6 +1378,7 @@ class Handler(BaseHTTPRequestHandler):
                     allowed_capabilities=scope["allowed_capabilities"],
                     ttl_days=payload.get("ttl_days", 90),
                     negotiation=negotiation,
+                    site_id=requested_site,
                 )
             except AgentCredentialConflictError as error:
                 self.send_json({"error": str(error)}, 409)
@@ -1349,12 +1393,41 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"credential": credential}, 201)
             return
 
+        agent_site_update = re.fullmatch(r"/api/agents/([A-Za-z0-9][A-Za-z0-9._:-]{0,63})/site", path)
+        if agent_site_update:
+            if not self.require_auth("agents.manage"):
+                return
+            agent_id = agent_site_update.group(1)
+            if not self.require_agent_site_access(agent_id):
+                return
+            target_site = payload.get("site_id")
+            user_site_scope = AUTH.site_access(self.bearer_token())
+            if target_site is None:
+                if not user_site_scope["all_sites"]:
+                    self.send_json({"error": "Only all-site administrators may remove an agent's site assignment"}, 403)
+                    return
+            elif not self.require_site_access([target_site], require_explicit=True):
+                return
+            try:
+                assignment = AGENT_HEALTH.assign_agent_site(agent_id, target_site)
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400 if "site_id" in str(error) else 404)
+                return
+            self.audit_event(
+                "agent.site_assignment.updated", target_type="agent", target_id=agent_id,
+                metadata={"site_id": target_site},
+            )
+            self.send_json({"assignment": assignment})
+            return
+
         if path.startswith("/api/agents/") and path.endswith("/credentials/rotate"):
-            if not self.require_auth("agents.manage"): 
+            if not self.require_auth("agents.manage"):
                 return
             agent_id = unquote(path[len("/api/agents/"):-len("/credentials/rotate")]).strip("/")
             if not agent_id or "/" in agent_id:
                 self.send_json({"error": "Agent not found"}, 404)
+                return
+            if not self.require_agent_site_access(agent_id):
                 return
             try:
                 credential = AGENT_HEALTH.rotate_agent_credential(
@@ -1374,11 +1447,13 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/agents/") and path.endswith("/credentials/revoke"):
-            if not self.require_auth("agents.manage"): 
+            if not self.require_auth("agents.manage"):
                 return
             agent_id = unquote(path[len("/api/agents/"):-len("/credentials/revoke")]).strip("/")
             if not agent_id or "/" in agent_id:
                 self.send_json({"error": "Agent not found"}, 404)
+                return
+            if not self.require_agent_site_access(agent_id):
                 return
             try:
                 result = AGENT_HEALTH.revoke_agent_credential(agent_id)
