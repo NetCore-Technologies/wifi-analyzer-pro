@@ -19,6 +19,7 @@ if __package__:
     from .auth import AuthManager
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
+    from .live_capture import LiveCaptureManager
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
@@ -38,6 +39,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
+    from live_capture import LiveCaptureManager
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
@@ -68,6 +70,7 @@ HISTORY = SiteHistoryStore()
 AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
 AUDIT = SecurityAuditStore()
+LIVE_CAPTURE = LiveCaptureManager()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_wifi_iface():
@@ -645,6 +648,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_capture_file(self, path, capture_id):
+        size = path.stat().st_size
+        self.send_response(200)
+        self.send_header("Content-Type", "application/vnd.tcpdump.pcap")
+        self.send_header("Content-Disposition", f'attachment; filename="wifi-analyzer-{capture_id}.pcap"')
+        self.send_header("Content-Length", str(size))
+        self.add_common_headers()
+        self.end_headers()
+        with path.open("rb") as capture_file:
+            while chunk := capture_file.read(64 * 1024):
+                self.wfile.write(chunk)
+
     def bearer_token(self):
         value = self.headers.get("Authorization", "")
         scheme, separator, token = value.partition(" ")
@@ -747,6 +762,26 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "users.manage"
             if not self.require_auth(permission):
                 return
+
+        if path == "/api/capture/interfaces":
+            self.send_json(LIVE_CAPTURE.list_interfaces())
+            return
+        if path == "/api/capture/status":
+            self.send_json(LIVE_CAPTURE.status())
+            return
+        capture_download = re.fullmatch(r"/api/capture/([a-f0-9]{32})/download", path)
+        if capture_download:
+            capture_id = capture_download.group(1)
+            capture_path = LIVE_CAPTURE.capture_file(capture_id)
+            if capture_path is None:
+                self.send_json({"error": "Capture not found or not ready for download"}, 404)
+                return
+            self.audit_event(
+                "capture.downloaded", target_type="packet_capture", target_id=capture_id,
+                metadata={"captured_bytes": capture_path.stat().st_size},
+            )
+            self.send_capture_file(capture_path, capture_id)
+            return
 
         api_routes = {
             "/api/users": lambda: {"users": AUTH.list_users(self.bearer_token())},
@@ -977,6 +1012,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "Origin is not allowed"}, 403)
             return
 
+        if path.startswith("/api/capture/") and not self.require_auth("diagnostics.run"):
+            return
+
         if path == "/api/auth/logout":
             actor = AUTH.identity(self.bearer_token())
             if not AUTH.logout(self.bearer_token()):
@@ -1077,6 +1115,48 @@ class Handler(BaseHTTPRequestHandler):
                           "enabled": user["enabled"], "changed_fields": sorted(payload.keys())},
             )
             self.send_json({"user": user})
+            return
+
+        if path == "/api/capture/start":
+            try:
+                capture = LIVE_CAPTURE.start(
+                    interface=payload.get("interface"),
+                    duration_seconds=payload.get("duration_seconds", 15),
+                    packet_limit=payload.get("packet_limit", 250),
+                    filter_profile=payload.get("filter_profile", "all"),
+                )
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except RuntimeError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            self.audit_event(
+                "capture.started", target_type="packet_capture", target_id=capture["capture_id"],
+                metadata={
+                    "interface": capture["interface"],
+                    "duration_seconds": capture["duration_limit_seconds"],
+                    "packet_limit": capture["packet_limit"],
+                    "filter_profile": capture["filter_profile"],
+                },
+            )
+            self.send_json({"capture": capture}, 201)
+            return
+
+        if path == "/api/capture/stop":
+            try:
+                capture = LIVE_CAPTURE.stop(payload.get("capture_id"))
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except KeyError:
+                self.send_json({"error": "Capture not found"}, 404)
+                return
+            self.audit_event(
+                "capture.stopped", target_type="packet_capture", target_id=capture["capture_id"],
+                metadata={"state": capture["state"], "captured_bytes": capture["captured_bytes"]},
+            )
+            self.send_json({"capture": capture})
             return
 
         if path == "/api/reports/jobs/enqueue":
