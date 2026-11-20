@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import {
-  Activity, AlertTriangle, CheckCircle2, Clock3, FileSearch,
+  Activity, AlertTriangle, CheckCircle2, Clock3, Download, FileSearch,
   Radio, ShieldCheck, Upload, X,
 } from "lucide-react";
 import { apiFetch } from "../lib/api.js";
@@ -22,6 +22,74 @@ const bytes = value => {
   if (amount < 1024 * 1024) return `${(amount / 1024).toFixed(1)} KiB`;
   return `${(amount / (1024 * 1024)).toFixed(2)} MiB`;
 };
+
+function safeCaptureName(name) {
+  const stem = String(name || "capture").replace(/\\.[^.]*$/, "");
+  return stem.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "capture";
+}
+
+function downloadReport(content, mimeType, filename) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function captureReportCsv(analysis) {
+  const rows = [["section", "metric", "value"]];
+  const summary = analysis.summary || {};
+  const capture = analysis.capture || {};
+  for (const [key, value] of Object.entries({
+    format: capture.format,
+    link_type: capture.link_type_name,
+    byte_order: capture.byte_order,
+    interface_count: capture.interface_count ?? 1,
+    section_count: capture.section_count ?? "",
+    timestamp_resolution: capture.timestamp_resolution,
+    packet_count: summary.packet_count,
+    captured_bytes: summary.captured_bytes,
+    wire_bytes: summary.wire_bytes,
+    ipv4_packet_count: summary.ipv4_packet_count,
+    ipv6_packet_count: summary.ipv6_packet_count,
+    arp_packet_count: summary.arp_packet_count,
+    truncated_packet_count: summary.truncated_packet_count,
+    malformed_frame_count: summary.malformed_frame_count,
+    first_packet_at: summary.first_packet_at,
+    last_packet_at: summary.last_packet_at,
+    average_signal_dbm: analysis.radiotap_observations?.signal?.average_dbm,
+    average_noise_dbm: analysis.radiotap_observations?.noise?.average_dbm,
+    capture_sha256: capture.capture_sha256,
+  })) {
+    rows.push(["summary", key, value ?? ""]);
+  }
+  for (const section of [
+    "ether_type_counts",
+    "ip_protocol_counts",
+    "dscp_counts",
+    "wireless_frame_type_counts",
+    "wireless_subtype_counts",
+    "radiotap_channel_frequency_mhz",
+  ]) {
+    const values = section === "radiotap_channel_frequency_mhz"
+      ? analysis.radiotap_observations?.channel_frequency_mhz_counts || {}
+      : analysis[section] || {};
+    for (const [key, value] of Object.entries(values)) rows.push([section, key, value]);
+  }
+  for (const item of analysis.top_destination_ports || []) {
+    rows.push(["destination_ports", item.port, item.count]);
+  }
+  const escape = value => {
+    const text = String(value ?? "");
+    return /[",\\r\\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  return rows.map(row => row.map(escape).join(",")).join("\\r\\n") + "\\r\\n";
+}
 
 function Metric({ label, value, detail }) {
   return (
@@ -159,7 +227,7 @@ export default function PcapAnalyzer() {
             type="file"
             accept=".pcap,.pcapng,.cap,application/vnd.tcpdump.pcap,application/octet-stream"
             onChange={chooseFile}
-            aria-label="Choose a classic PCAP capture file"
+            aria-label="Choose a PCAP or PCAPNG capture file"
             style={{ display: "none" }}
           />
           {!file ? (
@@ -233,8 +301,32 @@ export default function PcapAnalyzer() {
               <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 800 }}>Capture summary</div>
               <div style={MUTED}>{String(capture.format || "pcap").toUpperCase()} · {capture.link_type_name} · {capture.byte_order}-endian · {capture.timestamp_resolution} timestamps · {number(capture.interface_count || 1)} interface{capture.interface_count === 1 || !capture.interface_count ? "" : "s"}{capture.section_count ? ` · ${number(capture.section_count)} sections` : ""}</div>
             </div>
-            <div style={{ ...MUTED, display: "flex", alignItems: "center", gap: 6 }}>
-              <CheckCircle2 size={14} color="#50e3d2"/> Analysis complete
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ ...MUTED, display: "flex", alignItems: "center", gap: 6 }}>
+                <CheckCircle2 size={14} color="#50e3d2"/> Analysis complete
+              </div>
+              <button type="button" onClick={() => downloadReport(
+                JSON.stringify({ schema_version: "1.0", generated_at: new Date().toISOString(), analysis }, null, 2),
+                "application/json;charset=utf-8",
+                `${safeCaptureName(file?.name)}-analysis.json`,
+              )} style={{
+                display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+                border: "1px solid #2a3f65", borderRadius: 7, padding: "6px 9px",
+                color: "#cbd5e1", background: "#111827", fontSize: 10, fontWeight: 700,
+              }}>
+                <Download size={12}/> JSON
+              </button>
+              <button type="button" onClick={() => downloadReport(
+                captureReportCsv(analysis),
+                "text/csv;charset=utf-8",
+                `${safeCaptureName(file?.name)}-analysis.csv`,
+              )} style={{
+                display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
+                border: "1px solid #2a3f65", borderRadius: 7, padding: "6px 9px",
+                color: "#cbd5e1", background: "#111827", fontSize: 10, fontWeight: 700,
+              }}>
+                <Download size={12}/> CSV
+              </button>
             </div>
           </div>
 
