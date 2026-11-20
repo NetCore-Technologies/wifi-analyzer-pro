@@ -80,7 +80,16 @@ def run(payload: dict) -> dict:
             normalised_aps.append(normalised)
         all_access_points.extend(normalised_aps)
 
-        inventory = inventory_snapshot({"site_id": site_id, "access_points": normalised_aps})
+        inventory_ready = all(
+            BSSID_PATTERN.fullmatch(str(ap.get("bssid") or "").replace("-", ":").upper())
+            for ap in normalised_aps
+        )
+        if inventory_ready:
+            inventory = inventory_snapshot({"site_id": site_id, "access_points": normalised_aps})
+            inventory_check = {"status": "complete", "result": inventory}
+            check_counts["inventory"] += 1
+        else:
+            inventory_check = _not_run("A valid BSSID is required for every AP before the inventory snapshot check can run")
         topology_ready = all(
             isinstance(ap.get("ap_id"), str) and ap["ap_id"].strip()
             for ap in normalised_aps
@@ -131,7 +140,7 @@ def run(payload: dict) -> dict:
             capacity_check = _not_run("No network segment allocation records were supplied")
 
         checks = {
-            "inventory": {"status": "complete", "result": inventory},
+            "inventory": inventory_check,
             "topology_relationships": topology_check,
             "topology_redundancy": redundancy_check,
             "gateway_paths": gateway_paths_check,
@@ -139,7 +148,6 @@ def run(payload: dict) -> dict:
             "gateway_redundancy": gateway_check,
             "segment_capacity": capacity_check,
         }
-        check_counts["inventory"] += 1
         for check_name, check in checks.items():
             if check.get("status") == "not_run":
                 check_counts[f"{check_name}_not_run"] += 1

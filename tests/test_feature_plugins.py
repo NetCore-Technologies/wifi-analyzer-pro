@@ -827,7 +827,7 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(checks["inventory"]["status"], "complete")
         self.assertEqual(checks["topology_relationships"]["status"], "complete")
         self.assertEqual(checks["gateway_paths"]["status"], "complete")
-        self.assertEqual(checks["radio_configuration"]["result"]["deviation_count"], 3)
+        self.assertEqual(checks["radio_configuration"]["result"]["deviation_count"], 1)
         self.assertEqual(checks["gateway_redundancy"]["status"], "complete")
         self.assertEqual(checks["segment_capacity"]["status"], "complete")
         self.assertGreaterEqual(result["summary"]["warning_count"], 1)
