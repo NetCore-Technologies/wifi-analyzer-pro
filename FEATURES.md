@@ -1,4 +1,4 @@
-# 173 WiFi Analyzer Pro feature tools (F001–F168, F172–F176)
+# 174 WiFi Analyzer Pro feature tools (F001–F168, F172–F177)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -197,3 +197,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F175 | Multi-vendor router fleet health audit (`router_fleet_health_audit`) | Router integrations | Audit normalized OpenWrt, UniFi and MikroTik snapshots for stale data, measured CPU/memory pressure, down interfaces/radios, offline APs and weak clients; unknown telemetry remains unknown. |
 
 | F176 | Multi-vendor router subnet overlap audit (`router_subnet_overlap_audit`) | Router integrations | Correlate normalized OpenWrt interface, UniFi network and MikroTik address CIDRs within each site; report duplicate or overlapping IPv4/IPv6 ranges across routers. |
+
+| F177 | Multi-vendor client roaming audit (`router_client_roaming_audit`) | Router integrations | Build normalized OpenWrt, UniFi and MikroTik client association timelines; identify observed AP handoffs, short multi-AP windows and weak measured RSSI while excluding wired clients. |

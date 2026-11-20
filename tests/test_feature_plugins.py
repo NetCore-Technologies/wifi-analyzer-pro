@@ -378,6 +378,24 @@ PAYLOADS = {
             "ip_subnet": "192.0.2.0/24"
         }]
     },
+    "router_client_roaming_audit": {
+        "snapshots": [{
+            "router_id": "unifi-office",
+            "site_id": "office",
+            "snapshot": {
+                "adapter_id": "unifi",
+                "captured_at": "2026-11-20T10:00:00Z",
+                "controller": {"hostname": "unifi.office.local"},
+                "associations": [{
+                    "client_mac": "AA:BB:CC:DD:EE:01",
+                    "ap_mac": "00:11:22:33:44:55",
+                    "ssid": "Office",
+                    "signal_dbm": -55,
+                    "is_wired": False
+                }]
+            }
+        }]
+    },
     "router_subnet_overlap_audit": {
         "snapshots": [
             {
@@ -468,14 +486,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 173)
-        self.assertEqual(len(set(FEATURE_MODULES)), 173)
-        self.assertEqual(count(), 173)
-        self.assertEqual(len(entries), 173)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 173)
+        self.assertEqual(len(FEATURE_MODULES), 174)
+        self.assertEqual(len(set(FEATURE_MODULES)), 174)
+        self.assertEqual(count(), 174)
+        self.assertEqual(len(entries), 174)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 174)
         self.assertEqual(
             [entry["id"] for entry in entries],
-            [f"F{i:03d}" for i in range(1, 169)] + ["F172", "F173", "F174", "F175", "F176"],
+            [f"F{i:03d}" for i in range(1, 169)]
+            + ["F172", "F173", "F174", "F175", "F176", "F177"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):
