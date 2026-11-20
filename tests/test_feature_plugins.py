@@ -385,12 +385,12 @@ PAYLOADS = {
                 "title": "Sample router report",
                 "generated_at": "2026-11-20T09:00:00+00:00",
                 "period": {
-                        "start": null,
-                        "end": null
+                        "start": None,
+                        "end": None
                 },
                 "filters": {
                         "site_allowlist": [],
-                        "include_details": true,
+                        "include_details": True,
                         "maximum_findings": 10
                 },
                 "summary": {
@@ -401,7 +401,7 @@ PAYLOADS = {
                         "warning_count": 0,
                         "info_count": 0,
                         "detail_count": 0,
-                        "details_truncated": false
+                        "details_truncated": False
                 },
                 "sites": [],
                 "sections": [
@@ -414,7 +414,7 @@ PAYLOADS = {
                                         "router_count": 0
                                 },
                                 "finding_count": 0,
-                                "findings_truncated": false
+                                "findings_truncated": False
                         }
                 ],
                 "findings": [],
@@ -427,12 +427,12 @@ PAYLOADS = {
                 "title": "Sample router report",
                 "generated_at": "2026-11-20T10:00:00+00:00",
                 "period": {
-                        "start": null,
-                        "end": null
+                        "start": None,
+                        "end": None
                 },
                 "filters": {
                         "site_allowlist": [],
-                        "include_details": true,
+                        "include_details": True,
                         "maximum_findings": 10
                 },
                 "summary": {
@@ -443,7 +443,7 @@ PAYLOADS = {
                         "warning_count": 0,
                         "info_count": 0,
                         "detail_count": 0,
-                        "details_truncated": false
+                        "details_truncated": False
                 },
                 "sites": [],
                 "sections": [
@@ -456,7 +456,7 @@ PAYLOADS = {
                                         "router_count": 0
                                 },
                                 "finding_count": 0,
-                                "findings_truncated": false
+                                "findings_truncated": False
                         }
                 ],
                 "findings": [],

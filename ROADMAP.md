@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 180 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 181 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 180 distinct callable feature modules (F001–F168 and F172–F183), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
+- ✅ 181 distinct callable feature modules (F001–F168 and F172–F184), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
@@ -67,7 +67,7 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 | ✅ | F121–F140 | Shipped: client association inventory, airtime/throughput fairness, QoS/DSCP, retry/PHY checks, 802.11k/v/r, TWT, DHCP/DNS/gateway checks and association diagnostics | 2026-11-20 | Implemented | F001–F120; supplied AP/controller and client measurement records |
 | 🚧 | F141–F160 | F141–F160 shipped: site inventory snapshots/comparisons, AP topology relationships and gateway-path audits, subnet correlation/capacity, gateway redundancy, floor-plan anchors/zones, topology redundancy/diffs/history, AP freshness, channel-reuse and radio-configuration standards audits, interactive topology visualisation, persistent site discovery history, stored site-to-site change reports, and consolidated site audit reporting; all deliverables in this wave are shipped | 2027-02-26 | 20 features shipped; 0 remains | SQLite history; consented local discovery |
 | 🚧 | F161–F180 | F161–F180 implementation committed: versioned OpenWrt read-only agent and scope-gated health telemetry; authenticated Router Agent Console; credential-free UniFi/MikroTik imports; cross-vendor snapshot drift, fleet health, subnet overlap, client roaming, VLAN consistency, route-table and cross-router gateway redundancy audits | 2026-11-20 | 20 implemented; final Python matrix and frontend verification pending | Authenticated API; offline adapter contracts; bounded schema validation |
-| 🚧 | F181–F200 | F181–F183 shipped: local incident alert-policy evaluation; versioned multi-source router audit report bundles; hash-validated report comparison with changed/added/removed findings and site/source deltas; remaining: scheduled execution, webhook delivery, encrypted backup/restore and operator notification workflows | 2027-05-07 | 3 deliverables shipped; 17 remain | F161–F180 normalized audit outputs; F182 report schema |
+| 🚧 | F181–F200 | F181–F184 shipped: local incident alert-policy evaluation; versioned report bundles and hash-validated comparisons; timezone-aware daily/weekly/monthly schedule planning with DST and month-length policies; remaining: scheduled execution, webhook delivery, encrypted backup/restore and operator notification workflows | 2027-05-07 | 4 deliverables shipped; 16 remain | F161–F180 audit outputs; F182 report schema |
 
 ### Longer-range direction (F201–F1100)
 

@@ -343,8 +343,25 @@ def run(payload: dict) -> dict:
                 "summary_changes": summary_changes,
             })
 
-    before_sites = {item["site_id"]: item for item in previous["sites"]}
-    after_sites = {item["site_id"]: item for item in current["sites"]}
+    def filtered_site_summaries(items):
+        groups = defaultdict(list)
+        for item in items:
+            groups[item["site_id"]].append(item)
+        summaries = {}
+        for site_id, site_findings in groups.items():
+            counts = Counter(item["severity"] for item in site_findings)
+            summaries[site_id] = {
+                "site_id": site_id,
+                "finding_count": len(site_findings),
+                "critical_count": counts["critical"],
+                "warning_count": counts["warning"],
+                "info_count": counts["info"],
+                "source_types": sorted({item["source_type"] for item in site_findings}),
+            }
+        return summaries
+
+    before_sites = filtered_site_summaries(previous_findings)
+    after_sites = filtered_site_summaries(current_findings)
     site_changes = []
     for site_id in sorted(set(before_sites) | set(after_sites)):
         left, right = before_sites.get(site_id), after_sites.get(site_id)

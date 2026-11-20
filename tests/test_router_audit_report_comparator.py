@@ -115,7 +115,7 @@ class RouterAuditReportComparatorTests(unittest.TestCase):
         current = _bundle("current", NOW, 92, extra=[{
             "code": "radio.down", "severity": "warning",
             "resource_type": "radio", "resource_id": "phy0",
-        }])
+        }], include_subnet=False)
         result = run({"previous": previous, "current": current})
         changed_sections = {
             item["source_id"]: item for item in result["sections"]["changed"]
@@ -188,7 +188,7 @@ class RouterAuditReportComparatorTests(unittest.TestCase):
         )
         result = run({"previous": previous, "current": current})
         self.assertEqual(result["summary"]["added_count"], 1)
-        self.assertEqual(result["summary"]["unchanged_count"], 2)
+        self.assertEqual(result["summary"]["unchanged_count"], 3)
 
     def test_rejects_tampered_hash_unknown_schema_and_wrong_report_order(self):
         previous = _bundle("previous", "2026-11-20T09:00:00Z", 90)
