@@ -378,6 +378,94 @@ PAYLOADS = {
             "ip_subnet": "192.0.2.0/24"
         }]
     },
+    "router_audit_report_comparator": {
+        "previous": {
+                "schema_version": "1.0",
+                "report_id": "sample-before",
+                "title": "Sample router report",
+                "generated_at": "2026-11-20T09:00:00+00:00",
+                "period": {
+                        "start": null,
+                        "end": null
+                },
+                "filters": {
+                        "site_allowlist": [],
+                        "include_details": true,
+                        "maximum_findings": 10
+                },
+                "summary": {
+                        "source_count": 1,
+                        "site_count": 0,
+                        "finding_count": 0,
+                        "critical_count": 0,
+                        "warning_count": 0,
+                        "info_count": 0,
+                        "detail_count": 0,
+                        "details_truncated": false
+                },
+                "sites": [],
+                "sections": [
+                        {
+                                "source_id": "health",
+                                "source_type": "router_fleet_health_audit",
+                                "title": "Router fleet health",
+                                "status": "audited",
+                                "summary": {
+                                        "router_count": 0
+                                },
+                                "finding_count": 0,
+                                "findings_truncated": false
+                        }
+                ],
+                "findings": [],
+                "note": "This bundle contains allow-listed summaries and normalized finding evidence only. Raw snapshots, credentials, unknown fields, and untrusted source messages are not copied. Findings retain the limitations of their source audits and do not prove root cause or live reachability.",
+                "content_hash": "71a6510ce8ac63d14947641b2e9689c8ac55f6a8e3ae40464b8f543079b08154"
+        },
+        "current": {
+                "schema_version": "1.0",
+                "report_id": "sample-after",
+                "title": "Sample router report",
+                "generated_at": "2026-11-20T10:00:00+00:00",
+                "period": {
+                        "start": null,
+                        "end": null
+                },
+                "filters": {
+                        "site_allowlist": [],
+                        "include_details": true,
+                        "maximum_findings": 10
+                },
+                "summary": {
+                        "source_count": 1,
+                        "site_count": 0,
+                        "finding_count": 0,
+                        "critical_count": 0,
+                        "warning_count": 0,
+                        "info_count": 0,
+                        "detail_count": 0,
+                        "details_truncated": false
+                },
+                "sites": [],
+                "sections": [
+                        {
+                                "source_id": "health",
+                                "source_type": "router_fleet_health_audit",
+                                "title": "Router fleet health",
+                                "status": "audited",
+                                "summary": {
+                                        "router_count": 0
+                                },
+                                "finding_count": 0,
+                                "findings_truncated": false
+                        }
+                ],
+                "findings": [],
+                "note": "This bundle contains allow-listed summaries and normalized finding evidence only. Raw snapshots, credentials, unknown fields, and untrusted source messages are not copied. Findings retain the limitations of their source audits and do not prove root cause or live reachability.",
+                "content_hash": "7ba5f846dbca3a65cd1e48e1863924a382ebafb425f78a0fc8f9b059346271fa"
+        },
+        "maximum_details": 10,
+        "include_details": True
+    },
     "router_audit_report_bundle_builder": {
         "report_id": "weekly-home",
         "title": "Weekly router audit",
@@ -627,15 +715,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 179)
-        self.assertEqual(len(set(FEATURE_MODULES)), 179)
-        self.assertEqual(count(), 179)
-        self.assertEqual(len(entries), 179)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 179)
+        self.assertEqual(len(FEATURE_MODULES), 180)
+        self.assertEqual(len(set(FEATURE_MODULES)), 180)
+        self.assertEqual(count(), 180)
+        self.assertEqual(len(entries), 180)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 180)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):

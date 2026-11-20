@@ -1,4 +1,4 @@
-# 179 WiFi Analyzer Pro feature tools (F001–F168, F172–F182)
+# 180 WiFi Analyzer Pro feature tools (F001–F168, F172–F183)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -209,3 +209,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F181 | Router incident alert policy evaluator (`router_incident_alert_policy_evaluator`) | Router operations | Apply site/adapter/code/severity/occurrence policies to normalized audit findings and generate deterministic new, ongoing, acknowledged and resolved alert candidates without sending notifications. |
 
 | F182 | Router audit report bundle builder (`router_audit_report_bundle_builder`) | Router operations | Combine F174–F181 audit results into a versioned, site-filterable, credential-free JSON report with severity rollups, bounded findings and a deterministic SHA-256 content hash. |
+
+| F183 | Router audit report comparator (`router_audit_report_comparator`) | Router operations | Validate F182 bundle SHA-256 hashes and compare reports by source/site/router/resource identity; classify unchanged, changed, added and removed findings with section/site deltas and bounded detail output. |

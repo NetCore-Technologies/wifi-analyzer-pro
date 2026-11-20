@@ -183,6 +183,7 @@ FEATURE_MODULES = (
     "feature_180_router_gateway_redundancy_audit",
     "feature_181_router_incident_alert_policy_evaluator",
     "feature_182_router_audit_report_bundle_builder",
+    "feature_183_router_audit_report_comparator",
 )
 
 @lru_cache(maxsize=1)
