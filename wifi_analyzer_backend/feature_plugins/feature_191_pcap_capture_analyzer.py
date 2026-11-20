@@ -418,6 +418,7 @@ def _pcapng_timestamp(units: int, interface: dict) -> str:
 def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
     cursor = 0
     byteorder = None
+    section_end_expected = None
     interfaces = []
     interface_metadata = []
     section_orders = []
@@ -434,6 +435,8 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
             raise ValueError("PCAPNG capture ends with an incomplete block header")
 
         if capture[cursor:cursor + 4] == PCAPNG_MAGIC:
+            if section_end_expected is not None and cursor != section_end_expected:
+                raise ValueError("PCAPNG section length does not end at the next section header")
             if remaining < 28:
                 raise ValueError("PCAPNG section header block is truncated")
             byte_order_magic = capture[cursor + 8:cursor + 12]
@@ -453,6 +456,12 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
             minor = _integer(capture, cursor + 14, 2, byteorder)
             if major != 1 or minor != 0:
                 raise ValueError("PCAPNG section version 1.0 is required")
+            section_length = int.from_bytes(capture[cursor + 16:cursor + 24], byteorder, signed=True)
+            if section_length < -1 or (section_length >= 0 and section_length % 4):
+                raise ValueError("PCAPNG section length must be -1 or a non-negative multiple of four")
+            section_end_expected = block_end + section_length if section_length >= 0 else None
+            if section_end_expected is not None and section_end_expected > len(capture):
+                raise ValueError("PCAPNG section length extends beyond the capture file")
             _pcapng_options(capture, cursor + 24, block_end - 4, byteorder)
             section_count += 1
             if section_count > MAX_SECTIONS:
@@ -471,6 +480,8 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
         block_end = cursor + block_length
         if _integer(capture, block_end - 4, 4, byteorder) != block_length:
             raise ValueError("PCAPNG block length trailer does not match")
+        if section_end_expected is not None and block_end > section_end_expected:
+            raise ValueError("PCAPNG block extends beyond its declared section length")
 
         if block_type == 1:  # Interface Description Block
             if block_length < 20:
@@ -574,6 +585,8 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
 
     if section_count == 0:
         raise ValueError("PCAPNG capture does not contain a section header block")
+    if section_end_expected is not None and cursor != section_end_expected:
+        raise ValueError("PCAPNG section length does not match the end of the capture file")
     unique_link_types = {item["link_type"] for item in interface_metadata}
     link_type = next(iter(unique_link_types)) if len(unique_link_types) == 1 else None
     link_type_name = (
