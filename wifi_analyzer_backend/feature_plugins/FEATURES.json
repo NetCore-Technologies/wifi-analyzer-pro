@@ -1523,5 +1523,18 @@
       "capture_base64": "standard-base64 classic PCAP or PCAPNG file, decoded size up to 512 KiB",
       "maximum_packets": "optional packet limit from 1 to 5000"
     }
+  },
+  {
+    "slug": "router_webhook_delivery_orchestrator",
+    "name": "Multi-subscription webhook delivery orchestrator",
+    "category": "Router operations",
+    "description": "Coordinate F190 subscription routing, F185 per-batch HMAC signing and F187 endpoint-specific DNS/TLS evidence; prepare independent deliveries or explain why each batch is blocked, without sending traffic or exposing signing secrets.",
+    "parameters": {
+      "now": "timezone-aware orchestration timestamp",
+      "subscriptions": "1 to 100 F190 subscription definitions",
+      "events": "normalized events accepted by F190",
+      "signing_keys": "key_id-to-secret mapping held outside persistent event storage",
+      "egress_evidence": "at most one matching F187 DNS/TLS evidence record per subscription"
+    }
   }
 ]

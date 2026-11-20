@@ -261,8 +261,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 188)
-        self.assertEqual(len(catalog["features"]), 188)
+        self.assertEqual(catalog["count"], 189)
+        self.assertEqual(len(catalog["features"]), 189)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -278,6 +278,105 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("router_agent_credential_scope", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_snapshot_delivery_envelope", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_negotiation_audit", {item["slug"] for item in catalog["features"]})
+
+    def test_multi_subscription_delivery_orchestrator_requires_site_scope_and_fresh_egress(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+        payload = {
+            "now": "2026-11-20T10:00:00Z",
+            "subscriptions": [{
+                "subscription_id": "home-health",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "key_id": "webhook-key-01",
+                "event_types": ["router.health"],
+                "minimum_severity": "warning",
+                "site_allowlist": ["home"],
+                "maximum_events_per_batch": 100,
+                "maximum_batches": 10,
+            }],
+            "events": [{
+                "event_id": "a" * 64,
+                "event_type": "router.health",
+                "severity": "warning",
+                "occurred_at": "2026-11-20T09:59:00Z",
+                "site_id": "home",
+                "router_id": "openwrt-home",
+                "summary": "Router health warning",
+                "attributes": {"finding_count": 1, "password": "must-not-leak"},
+            }],
+            "signing_keys": {"webhook-key-01": "sample-signing-material-at-least-32-bytes"},
+            "egress_evidence": [{
+                "subscription_id": "home-health",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "resolution_at": "2026-11-20T09:59:55Z",
+                "connected_at": "2026-11-20T10:00:00Z",
+                "resolved_addresses": ["1.1.1.1"],
+                "peer_ip": "1.1.1.1",
+                "connected_port": 443,
+                "tls_version": "TLSv1.3",
+                "tls_verified": True,
+                "hostname_verified": True,
+                "redirect_location": None,
+            }],
+        }
+
+        status, prepared = self.request(
+            "POST", "/api/features/router_webhook_delivery_orchestrator",
+            payload, token=owner_token,
+        )
+        self.assertEqual(status, 200, prepared)
+        result = prepared["result"]
+        self.assertEqual(result["status"], "prepared")
+        self.assertEqual(result["summary"]["prepared_delivery_count"], 1)
+        delivery = result["prepared_deliveries"][0]
+        self.assertEqual(delivery["subscription_id"], "home-health")
+        self.assertEqual(delivery["egress"]["connected_peer_ip"], "1.1.1.1")
+        self.assertIn("X-WiFiAnalyzer-Signature", delivery["headers"])
+        self.assertEqual(delivery["headers"]["Idempotency-Key"], delivery["batch_id"])
+        rendered = str(result)
+        self.assertNotIn("sample-signing-material-at-least-32-bytes", rendered)
+        self.assertNotIn("must-not-leak", rendered)
+
+        status, created = self.request("POST", "/api/users", {
+            "username": "branch.webhook-viewer",
+            "password": "branch webhook viewer password",
+            "role": "viewer",
+            "all_sites": False,
+            "site_ids": ["branch"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        branch_token = self.request("POST", "/api/auth/login", {
+            "username": "branch.webhook-viewer",
+            "password": "branch webhook viewer password",
+        })[1]["token"]
+        status, denied = self.request(
+            "POST", "/api/features/router_webhook_delivery_orchestrator",
+            payload, token=branch_token,
+        )
+        self.assertEqual(status, 403)
+
+        blocked_payload = {
+            **payload,
+            "egress_evidence": [{
+                **payload["egress_evidence"][0],
+                "resolution_at": "2026-11-20T09:57:55Z",
+                "connected_at": "2026-11-20T09:58:00Z",
+            }],
+        }
+        status, blocked = self.request(
+            "POST", "/api/features/router_webhook_delivery_orchestrator",
+            blocked_payload, token=owner_token,
+        )
+        self.assertEqual(status, 200, blocked)
+        self.assertEqual(blocked["result"]["status"], "blocked")
+        self.assertEqual(
+            blocked["result"]["blocked_deliveries"][0]["reasons"],
+            ["egress_evidence_stale"],
+        )
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -1771,7 +1870,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 188)
+        self.assertEqual(catalog["count"], 189)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,

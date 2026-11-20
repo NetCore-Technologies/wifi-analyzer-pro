@@ -111,7 +111,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 188 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 189 built-in tools |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
@@ -207,7 +207,7 @@ Scheduled-report jobs are stored in the local SQLite outbox and claimed using ex
 
 The authenticated delivery-package endpoint remains available for external integrations. It verifies the active lease and prepares the signed envelope using supplied DNS/TLS evidence; it does not transmit network traffic. The built-in worker and external dispatchers must not share the same claimed lease.
 
-F190 maps normalized events into bounded, deterministic subscription batches. The current worker supports one configured destination per process; autonomous multi-subscription fan-out is still on the roadmap. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.
+F190 maps normalized events into bounded, deterministic subscription batches. F192 now prepares a separate HMAC-signed delivery for each matched subscription only when its signing key and matching fresh DNS/TLS evidence are provided. It does not send network requests or store secrets; the downstream dispatcher must re-resolve and re-verify at send time. The built-in pinned-TLS report worker remains single-destination per process, so persistent multi-subscription fan-out and a dedicated dispatcher are still planned. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.
 
 
 ### API request limits

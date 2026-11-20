@@ -837,6 +837,45 @@ PAYLOADS = {
             "status": "bound"
         }]
     },
+    "router_webhook_delivery_orchestrator": {
+        "now": "2026-11-20T10:00:00Z",
+        "subscriptions": [{
+            "subscription_id": "home-health",
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "key_id": "webhook-key-01",
+            "event_types": ["router.health"],
+            "minimum_severity": "warning",
+            "site_allowlist": ["home"],
+            "maximum_events_per_batch": 100,
+            "maximum_batches": 10
+        }],
+        "events": [{
+            "event_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "event_type": "router.health",
+            "severity": "warning",
+            "occurred_at": "2026-11-20T09:59:00Z",
+            "site_id": "home",
+            "router_id": "openwrt-home",
+            "summary": "Router health warning",
+            "attributes": {"finding_count": 1}
+        }],
+        "signing_keys": {"webhook-key-01": "sample-signing-material-at-least-32-bytes"},
+        "egress_evidence": [{
+            "subscription_id": "home-health",
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "resolution_at": "2026-11-20T09:59:55Z",
+            "connected_at": "2026-11-20T10:00:00Z",
+            "resolved_addresses": ["1.1.1.1"],
+            "peer_ip": "1.1.1.1",
+            "connected_port": 443,
+            "tls_version": "TLSv1.3",
+            "tls_verified": true,
+            "hostname_verified": true,
+            "redirect_location": null
+        }]
+    },
     "router_agent_negotiation_audit": {
         "agent_id": "openwrt-home",
         "adapter_id": "openwrt",
@@ -858,15 +897,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 188)
-        self.assertEqual(len(set(FEATURE_MODULES)), 188)
-        self.assertEqual(count(), 188)
-        self.assertEqual(len(entries), 188)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 188)
+        self.assertEqual(len(FEATURE_MODULES), 189)
+        self.assertEqual(len(set(FEATURE_MODULES)), 189)
+        self.assertEqual(count(), 189)
+        self.assertEqual(len(entries), 189)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 189)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
