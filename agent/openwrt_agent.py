@@ -11,7 +11,6 @@ import logging
 import os
 import re
 import signal
-import ssl
 import stat
 import subprocess
 import sys
@@ -23,7 +22,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 AGENT_VERSION = "1.0.0"
@@ -433,6 +432,7 @@ class OpenWrtCollector:
             seen.add(interface)
             output = self._run(["iw", "dev", interface, "station", "dump"], optional=True)
             if output is None:
+                self.warnings.append("wireless_associations_unavailable")
                 continue
             stations = self._parse_stations(output)
             if stations:
@@ -491,6 +491,8 @@ class DurableOutbox:
             os.chmod(self.directory, 0o700)
 
     def load(self) -> dict | None:
+        if self.directory.is_symlink():
+            raise AgentError("Agent state directory must not be a symbolic link")
         if not self.path.exists():
             return None
         if self.path.is_symlink():
@@ -555,12 +557,20 @@ class DurableOutbox:
             return
 
 
+class _NoRedirect(HTTPRedirectHandler):
+    """Refuse redirects so an Authorization header cannot be forwarded elsewhere."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        return None
+
+
 class AgentApiClient:
     """Small standard-library HTTP client that never logs the bearer token."""
 
     def __init__(self, config: AgentConfig, opener: Callable | None = None):
         self.config = config
-        self.opener = opener or urlopen
+        # build_opener keeps urllib TLS verification defaults and replaces redirect handling.
+        self.opener = opener or build_opener(_NoRedirect()).open
 
     def post(self, endpoint: str, payload: dict) -> dict:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
@@ -579,14 +589,15 @@ class AgentApiClient:
             method="POST",
         )
         try:
-            opener_options = {"timeout": self.config.request_timeout_seconds}
-            if url.startswith("https://"):
-                opener_options["context"] = ssl.create_default_context()
-            response_context = self.opener(request, **opener_options)
+            response_context = self.opener(request, timeout=self.config.request_timeout_seconds)
             with response_context as response:
                 status = getattr(response, "status", 200)
                 raw = response.read(MAX_HTTP_RESPONSE_BYTES + 1)
         except HTTPError as error:
+            if 300 <= error.code < 400:
+                raise AgentTransportError(
+                    "API redirects are disabled to protect the agent credential; configure the final server URL"
+                ) from error
             if error.code in {401, 403}:
                 raise AgentConfigError("Agent credential was rejected or revoked; re-enrol or rotate it") from error
             raise AgentTransportError(f"API rejected the agent request (HTTP {error.code})") from error
@@ -651,18 +662,16 @@ class OpenWrtAgent:
 
     def run_once(self) -> dict:
         pending = self.outbox.load()
+        heartbeat_status = pending.get("agent_status", "healthy") if pending is not None else "healthy"
+        heartbeat_error = pending.get("error_code") if pending is not None else None
         try:
-            heartbeat = self._heartbeat("healthy")
+            heartbeat = self._heartbeat(heartbeat_status, heartbeat_error)
         except AgentTransportError:
             return {"status": "pending" if pending is not None else "offline", "pending": pending is not None}
         self._require_snapshot_scope(heartbeat)
 
         if pending is not None:
             try:
-                heartbeat = self._heartbeat(
-                    pending.get("agent_status", "healthy"), pending.get("error_code")
-                )
-                self._require_snapshot_scope(heartbeat)
                 delivery = self._flush_pending()
             except AgentTransportError:
                 return {"status": "pending", "pending": True}
@@ -676,10 +685,10 @@ class OpenWrtAgent:
 
         error_code = None
         if self.collector.warnings:
-            if any("wireless" in warning or "optional_command" in warning for warning in self.collector.warnings):
-                error_code = "RADIO_UNAVAILABLE"
-            elif any("network" in warning or "route" in warning for warning in self.collector.warnings):
+            if any("network" in warning or "route" in warning for warning in self.collector.warnings):
                 error_code = "NETWORK_TIMEOUT"
+            elif any("wireless" in warning or "optional_command" in warning for warning in self.collector.warnings):
+                error_code = "RADIO_UNAVAILABLE"
             else:
                 error_code = "SCAN_UNAVAILABLE"
 

@@ -23,6 +23,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add UUID-keyed OpenWrt snapshot delivery with payload-hash matching, replay-safe acknowledgements, conflicting-retry rejection and bounded delivery-ledger retention.
 - Add append-only, bounded router-agent negotiation history persisted transactionally with enrolment, including adapter/schema versions and sanitised advertised/requested/negotiated/rejected capability scopes.
 - Ship a standard-library OpenWrt read-only agent with fixed ubus/ip/iw command allowlists, no shell or configuration writes, HTTPS verification, procd service packaging and a mode-0600 single-delivery outbox for restart-safe retries.
+- Refuse HTTP redirects in the agent API client so its bearer credential cannot be forwarded to a redirected endpoint.
 - Add F170: a bounded UniFi Network export normalizer for APs, radios, client associations and network profiles; import is offline, schema-validated and allow-lists fields so passphrases and tokens never enter the common inventory schema.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
