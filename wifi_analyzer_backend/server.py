@@ -959,14 +959,44 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(response)
             return
 
-        job_action = re.fullmatch(r"/api/reports/jobs/([1-9][0-9]*)/(complete|fail|cancel)", path)
+        job_delivery = re.fullmatch(r"/api/reports/jobs/([1-9][0-9]*)/delivery-package", path)
+        if job_delivery:
+            if not self.require_auth():
+                return
+            try:
+                claimed_job = REPORT_JOBS.get_leased_job(
+                    int(job_delivery.group(1)),
+                    payload.get("lease_id"),
+                    now=payload.get("now"),
+                )
+                result = run_feature(
+                    "router_scheduled_report_delivery_package",
+                    {**payload, "claimed_job": claimed_job},
+                )
+            except ReportJobNotFoundError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json(result)
+            return
+
+        job_action = re.fullmatch(r"/api/reports/jobs/([1-9][0-9]*)/(complete|fail|cancel|renew)", path)
         if job_action:
             if not self.require_auth():
                 return
             job_id = int(job_action.group(1))
             action = job_action.group(2)
             try:
-                if action == "complete":
+                if action == "renew":
+                    response = REPORT_JOBS.renew_lease(
+                        job_id,
+                        payload.get("lease_id"),
+                        now=payload.get("now"),
+                        lease_seconds=payload.get("lease_seconds", 120),
+                    )
+                elif action == "complete":
                     response = REPORT_JOBS.complete(
                         job_id,
                         payload.get("lease_id"),
