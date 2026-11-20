@@ -72,8 +72,8 @@ def run(payload: dict) -> dict:
                 "from_ap_id": source, "to_ap_id": target,
                 "relationship": relationship, "link_index": index,
             })
-        else:
-            seen.add(key)
+            continue
+        seen.add(key)
 
         missing = [ap_id for ap_id in (source, target) if ap_id not in aps]
         if missing:
