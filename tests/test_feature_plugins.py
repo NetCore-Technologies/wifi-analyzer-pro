@@ -1,4 +1,4 @@
-"""Regression tests for the 100 independently registered feature tools."""
+"""Regression tests for the independently registered feature tools."""
 import unittest
 
 from wifi_analyzer_backend.feature_plugins import catalog, run, count
@@ -151,18 +151,20 @@ PAYLOADS = {
     "disconnect_reason_summary": {"events":[{"reason_code":4,"client_mac":"AA:BB:CC:DD:EE:01"},{"reason_code":15,"client_mac":"AA:BB:CC:DD:EE:02"}]},
     "association_rejection_summary": {"events":[{"status_code":17,"client_mac":"AA:BB:CC:DD:EE:01"},{"status_code":0,"client_mac":"AA:BB:CC:DD:EE:02"}]},
     "connection_health_evidence": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","rssi_dbm":-81,"retry_rate_pct":25,"tx_rate_mbps":54,"rx_rate_mbps":48}],"diagnostics":{"packet_loss_pct":7,"latency_ms":120}},
+    "site_inventory_snapshot": {"site_id":"home","access_points":[{"name":"Hall AP","bssid":"00:11:22:33:44:55","ssid":"Home","model":"AX AP","vendor":"Example","band":"5GHz","channel":36,"channel_width_mhz":80,"location":"hall"}]},
+
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 140)
-        self.assertEqual(len(set(FEATURE_MODULES)), 140)
-        self.assertEqual(count(), 140)
-        self.assertEqual(len(entries), 140)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 140)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 141)])
+        self.assertEqual(len(FEATURE_MODULES), 141)
+        self.assertEqual(len(set(FEATURE_MODULES)), 141)
+        self.assertEqual(count(), 141)
+        self.assertEqual(len(entries), 141)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 141)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 142)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -210,6 +212,36 @@ class FeatureCatalogTests(unittest.TestCase):
     def test_csv_export_quotes_delimiters(self):
         result = run("export_csv", {"networks": [{"ssid": "lab,west"}]})["result"]
         self.assertIn('"lab,west"', result["content"])
+
+
+    def test_site_inventory_snapshot_reports_sites_bands_and_duplicate_bssids(self):
+        result = run("site_inventory_snapshot", {
+            "site_id": "home",
+            "access_points": [
+                {"name": "Hall", "bssid": "00:11:22:33:44:55", "model": "AX",
+                 "band": "5GHz", "channel": 36, "channel_width_mhz": 80, "location": "hall"},
+                {"name": "Garage", "bssid": "00:11:22:33:44:55", "model": "AX",
+                 "band": "2.4GHz", "channel": 6, "channel_width_mhz": 20,
+                 "location": "garage", "site_id": "remote"}
+            ]
+        })["result"]
+        self.assertEqual(result["site_count"], 2)
+        self.assertEqual(result["access_points_by_band"], {"2.4GHz": 1, "5GHz": 1})
+        self.assertEqual(result["duplicate_bssid_count"], 1)
+        self.assertEqual(result["inventory_field_coverage_pct"], 100.0)
+
+    def test_site_inventory_snapshot_rejects_invalid_bssid_and_channel_width(self):
+        with self.assertRaisesRegex(ValueError, "BSSID"):
+            run("site_inventory_snapshot", {"access_points": [{"bssid": "not-a-mac"}]})
+        with self.assertRaisesRegex(ValueError, "channel_width_mhz"):
+            run("site_inventory_snapshot", {
+                "access_points": [{"bssid": "00:11:22:33:44:55", "channel_width_mhz": 10}]
+            })
+
+    def test_site_inventory_snapshot_keeps_empty_inventory_unknown(self):
+        result = run("site_inventory_snapshot", {"access_points": []})["result"]
+        self.assertEqual(result["access_point_count"], 0)
+        self.assertIsNone(result["inventory_field_coverage_pct"])
 
 
 if __name__ == "__main__":
