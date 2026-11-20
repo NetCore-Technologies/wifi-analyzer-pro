@@ -1,0 +1,176 @@
+"""Regression tests for the 100 independently registered feature tools."""
+import unittest
+
+from wifi_analyzer_backend.feature_plugins import catalog, run, count
+from wifi_analyzer_backend.feature_plugins.registry import FEATURE_MODULES
+
+SAMPLE = [
+    {"ssid": "Lab", "bssid": "02:11:22:33:44:55", "band": "2.4GHz", "channel": 6, "rssi": -52, "security": "WPA3"},
+    {"ssid": "Lab", "bssid": "00:11:22:33:44:66", "band": "5GHz", "channel": 36, "rssi": -72, "security": "WPA2"},
+    {"ssid": "Guest", "bssid": "00:11:22:33:44:77", "band": "6GHz", "channel": 5, "rssi": -88, "security": "Open"},
+]
+
+PAYLOADS = {
+    "interface_inventory": {},
+    "wireless_interface_inventory": {},
+    "wifi_scan": {"networks": SAMPLE, "source": "test"},
+    "normalise_bssid": {"bssid": "aa-bb-cc-dd-ee-ff"},
+    "normalise_ssid": {"ssid": "Office\nWiFi"},
+    "classify_frequency_band": {"frequency_mhz": 5975},
+    "frequency_to_channel": {"frequency_mhz": 5975},
+    "channel_to_frequency": {"channel": 5, "band": "6GHz"},
+    "signal_quality": {"rssi": -65},
+    "classify_signal": {"rssi": -65},
+    "measured_snr": {"rssi": -60, "noise": -95},
+    "sort_networks_by_signal": {"networks": SAMPLE},
+    "filter_networks_by_band": {"networks": SAMPLE, "band": "6GHz"},
+    "filter_networks_by_security": {"networks": SAMPLE, "security": "WPA3"},
+    "open_access_points": {"networks": SAMPLE},
+    "wpa3_access_points": {"networks": SAMPLE},
+    "hidden_networks": {"networks": SAMPLE + [{"ssid": "", "bssid": "00:11:22:33:44:88"}]},
+    "deduplicate_scan": {"networks": SAMPLE},
+    "scan_delta": {"current": SAMPLE, "previous": SAMPLE[:2]},
+    "scan_summary": {"networks": SAMPLE},
+    "strongest_networks": {"networks": SAMPLE},
+    "weakest_networks": {"networks": SAMPLE},
+    "group_by_ssid": {"networks": SAMPLE},
+    "strongest_per_ssid": {"networks": SAMPLE},
+    "oui_vendor_lookup": {"bssid": "DC:A6:32:00:00:01"},
+    "locally_administered_mac": {"mac": "02:11:22:33:44:55"},
+    "randomized_mac_detect": {"mac": "02:11:22:33:44:55"},
+    "channel_congestion": {"networks": SAMPLE},
+    "overlap_24ghz": {"networks": SAMPLE},
+    "recommend_24ghz_channel": {"networks": SAMPLE},
+    "recommend_5ghz_channel": {"networks": SAMPLE},
+    "recommend_6ghz_channel": {"networks": SAMPLE},
+    "channel_quality": {"networks": SAMPLE, "band": "2.4GHz", "channel": 6},
+    "dfs_channel_detect": {"channel": 100},
+    "six_ghz_psc_detect": {"channel": 5},
+    "recommend_channel_width": {"networks": SAMPLE, "band": "5GHz"},
+    "band_distribution": {"networks": SAMPLE},
+    "security_distribution": {"networks": SAMPLE},
+    "vendor_distribution": {"networks": SAMPLE},
+    "parse_iw_scan": {"text": "BSS aa:bb:cc:dd:ee:ff(on wlan0)\n freq: 5975\n signal: -55.00 dBm\n SSID: Test\n RSN:\n * Authentication suites: SAE\n"},
+    "parse_iwlist_scan": {"text": 'Cell 01 - Address: AA:BB:CC:DD:EE:FF\n ESSID:"Test"\n Frequency:5.975 GHz (Channel 5)\n Quality=50/70 Signal level=-55 dBm\n'} ,
+    "parse_netsh_scan": {"text": "SSID 1 : Test\n    BSSID 1 : aa:bb:cc:dd:ee:ff\n         Signal : 80%\n         Channel : 36\n         Authentication : WPA2-Personal\n"},
+    "parse_airport_scan": {"text": "SSID BSSID             RSSI CHANNEL HT CC SECURITY\nTest AA:BB:CC:DD:EE:FF -55 36,Y  Y  WPA2\n"},
+    "parse_system_profiler": {"text": '{"SPAirPortDataType": []}'},
+    "parse_station_dump": {"text": "signal: -55 dBm\ntx bitrate: 300.0 MBit/s\ntx retries: 4\n"},
+    "parse_iw_link": {"text": "Connected to aa:bb:cc:dd:ee:ff\nSSID: Test\nfreq: 5975\nsignal: -55 dBm\n"},
+    "parse_ethtool": {"text": "Speed: 1000Mb/s\nDuplex: Full\nLink detected: yes\n"},
+    "parse_route_table": {"text": "default via 192.168.1.1 dev wlan0 proto dhcp\n"},
+    "parse_arp_linux": {"text": "? (192.168.1.2) at aa:bb:cc:dd:ee:ff [ether] on wlan0"},
+    "parse_arp_windows": {"text": "  192.168.1.2          aa-bb-cc-dd-ee-ff     dynamic"},
+    "parse_resolv_conf": {"text": "nameserver 1.1.1.1\nnameserver 2606:4700:4700::1111\n"},
+    "parse_ping_output": {"text": "10 packets transmitted, 9 received, 10% packet loss\nrtt min/avg/max/mdev = 2.0/3.0/5.0/0.8 ms"},
+    "parse_traceroute": {"text": " 1  gateway (192.168.1.1)  1.23 ms  1.45 ms\n 2  * * *"},
+    "validate_network_record": {"network": SAMPLE[0]},
+    "validate_scan": {"networks": SAMPLE},
+    "subnet_summary": {"cidr": "192.168.1.50/24"},
+    "ip_in_subnet": {"ip": "192.168.1.4", "subnet": "192.168.1.0/24"},
+    "default_gateway_from_route": {"text": "default via 192.168.1.1 dev wlan0"},
+    "dns_servers_from_config": {"text": "nameserver 1.1.1.1"},
+    "reverse_dns_lookup": {"ip": "127.0.0.1"},
+    "dns_lookup_timing": {"host": "localhost"},
+    "latency_summary": {"samples_ms": [3, 5, 7, 9]},
+    "packet_loss_calculator": {"sent": 10, "received": 9},
+    "jitter_calculator": {"samples_ms": [1, 4, 2, 3]},
+    "interface_counter_delta": {"before": {"rx_bytes": 100}, "after": {"rx_bytes": 150}},
+    "interface_throughput": {"before": {"rx_bytes": 100}, "after": {"rx_bytes": 200}, "interval_seconds": 2},
+    "packet_error_rate": {"stats": {"rx_packets": 100, "tx_packets": 100, "rx_errors": 1}},
+    "inspect_url": {"url": "https://example.com/path"},
+    "tls_certificate_expiry": {"host": "localhost", "port": 1},
+    "security_rank": {"security": "WPA3"},
+    "security_warnings": {"networks": SAMPLE},
+    "rogue_ap_candidates": {"networks": SAMPLE, "trusted_bssids": [SAMPLE[0]["bssid"]], "trusted_networks": [{"ssid":"Guest"}]},
+    "evil_twin_candidates": {"networks": SAMPLE},
+    "duplicate_bssid_check": {"networks": SAMPLE + [SAMPLE[0]]},
+    "weak_signal_alerts": {"networks": SAMPLE, "threshold_dbm": -70},
+    "open_wifi_alerts": {"networks": SAMPLE},
+    "transition_mode_detect": {"networks": [{"ssid":"x", "security":"WPA2/WPA3"}]},
+    "redact_mac": {"mac": "AA:BB:CC:DD:EE:FF"},
+    "redact_ssid": {"networks": SAMPLE},
+    "anonymise_scan": {"networks": SAMPLE},
+    "ssid_hash": {"ssid": "Test"},
+    "scan_fingerprint": {"networks": SAMPLE},
+    "alert_severity": {"type": "evil_twin"},
+    "deduplicate_alerts": {"alerts": [{"type":"x"},{"type":"x"}]},
+    "alert_threshold": {"value": 90, "warning": 70, "critical": 85},
+    "export_json": {"networks": SAMPLE},
+    "export_csv": {"networks": SAMPLE},
+    "export_html": {"networks": SAMPLE},
+    "prometheus_metrics": {"networks": SAMPLE},
+    "network_report": {"networks": SAMPLE},
+    "history_window": {"history": list(range(20)), "limit": 5},
+    "signal_trend": {"samples_dbm": [-80, -78, -75, -70]},
+    "signal_percentiles": {"samples_dbm": [-80, -70, -60]},
+    "channel_rank": {"networks": SAMPLE, "band": "5GHz"},
+    "format_bytes": {"bytes": 1024},
+    "format_duration": {"seconds": 3661},
+    "safe_filename": {"name": "Wi-Fi scan/report 2026"},
+    "validate_settings": {"refresh_interval_seconds": 10, "scan_timeout_seconds": 20, "max_history": 500},
+    "health_report": {"networks": SAMPLE},
+    "wifi_generation_classify": {"capabilities": {"he": True}, "band": "6GHz"},
+}
+
+
+class FeatureCatalogTests(unittest.TestCase):
+    def test_exactly_one_hundred_distinct_features_are_registered(self):
+        entries = catalog()
+        self.assertEqual(len(FEATURE_MODULES), 100)
+        self.assertEqual(len(set(FEATURE_MODULES)), 100)
+        self.assertEqual(count(), 100)
+        self.assertEqual(len(entries), 100)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 100)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 101)])
+
+    def test_each_feature_executes_with_its_sample_payload(self):
+        for entry in catalog():
+            with self.subTest(feature=entry["slug"]):
+                self.assertIn(entry["slug"], PAYLOADS)
+                result = run(entry["slug"], PAYLOADS[entry["slug"]])
+                self.assertEqual(result["slug"], entry["slug"])
+                self.assertIsInstance(result["result"], dict)
+
+    def test_wpa3_and_six_ghz_parsing(self):
+        result = run("parse_iw_scan", PAYLOADS["parse_iw_scan"])["result"]["networks"][0]
+        self.assertEqual(result["channel"], 5)
+        self.assertEqual(result["band"], "6GHz")
+        self.assertEqual(result["security"], "WPA3")
+
+    def test_measured_snr_is_not_fabricated(self):
+        result = run("measured_snr", {"rssi": -55})["result"]
+        self.assertFalse(result["available"])
+        self.assertIsNone(result["snr_db"])
+
+    def test_html_report_escapes_untrusted_network_names(self):
+        result = run("export_html", {"networks": [{"ssid": "<script>alert(1)</script>"}]})["result"]
+        self.assertNotIn("<script>", result["content"])
+        self.assertIn("&lt;script&gt;", result["content"])
+
+    def test_channel_recommendations_need_real_band_observations(self):
+        for slug in ("recommend_24ghz_channel", "recommend_5ghz_channel", "recommend_6ghz_channel"):
+            result = run(slug, {"networks": []})["result"]
+            self.assertIsNone(result["recommended_channel"])
+            self.assertEqual(result["status"], "insufficient_observations")
+
+    def test_scan_validator_counts_non_object_records(self):
+        result = run("validate_scan", {"networks": [SAMPLE[0], None, "bad"]})["result"]
+        self.assertEqual(result["valid_count"], 1)
+        self.assertEqual(result["invalid_count"], 2)
+
+    def test_channel_width_uses_only_requested_band(self):
+        result = run("recommend_channel_width", {"band": "5GHz", "networks": SAMPLE})["result"]
+        self.assertEqual(result["observed_networks"], 1)
+
+    def test_prometheus_labels_escape_special_characters(self):
+        result = run("prometheus_metrics", {"networks": [{"bssid": 'aa"bb\\cc', "rssi": -50}]})["result"]["content"]
+        self.assertIn('bssid="aa\\"bb\\\\cc"', result)
+
+    def test_csv_export_quotes_delimiters(self):
+        result = run("export_csv", {"networks": [{"ssid": "lab,west"}]})["result"]
+        self.assertIn('"lab,west"', result["content"])
+
+
+if __name__ == "__main__":
+    unittest.main()
