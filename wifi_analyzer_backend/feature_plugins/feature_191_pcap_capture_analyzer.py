@@ -341,7 +341,7 @@ def _parse_packet(packet: bytes, link_type: int, state: dict) -> None:
 
 def _sorted_counts(counter: Counter, *, numeric=False) -> dict:
     if numeric:
-        return {key: counter[key] for key in sorted(counter, key=lambda item: int(item))}
+        return {key: counter[key] for key in sorted(counter, key=int)}
     return {key: counter[key] for key in sorted(counter)}
 
 
