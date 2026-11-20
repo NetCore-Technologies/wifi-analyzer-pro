@@ -225,3 +225,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F189 | Scheduled report webhook delivery package builder (`router_scheduled_report_delivery_package`) | Router operations | Require an active F188 worker lease, verify F182 report and payload hashes, gate on F187 fresh public DNS/TLS evidence, and create F185 HMAC-signed summary/finding events without sending a request. |
 
 | F190 | Router webhook subscription router (`router_webhook_subscription_router`) | Router operations | Route normalized events using type/severity/site subscriptions; deduplicate events, produce deterministic bounded batches and enforce exact HTTPS host allowlists without accepting signing secrets or sending requests. |
+
+| F191 | Bounded PCAP capture analyzer (`pcap_capture_analyzer`) | Packet analysis | Analyse classic PCAP files up to 512 KiB for Ethernet, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap statistics; omit payloads and endpoint addresses and do not start live capture. |
