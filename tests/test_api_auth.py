@@ -211,6 +211,25 @@ class AuthenticatedApiTests(unittest.TestCase):
             "password": "new viewer password phrase",
         })[0], 401)
 
+    def test_administrator_cannot_demote_its_own_active_session(self):
+        _, setup = self.request(
+            "POST", "/api/auth/setup", {"password": "correct horse battery staple"},
+        )
+        token = setup["token"]
+        status, _ = self.request("POST", "/api/auth/users", {
+            "username": "second.admin",
+            "password": "second administrator secure phrase",
+            "role": "admin",
+        }, token=token)
+        self.assertEqual(status, 201)
+        status, response = self.request("POST", "/api/auth/users/admin/role", {
+            "role": "viewer",
+            "site_ids": ["home"],
+        }, token=token)
+        self.assertEqual(status, 409)
+        self.assertIn("own active administrator", response["error"])
+        self.assertTrue(server.AUTH.validate(token))
+
     def test_viewer_cannot_demote_or_delete_the_last_administrator(self):
         _, setup = self.request(
             "POST", "/api/auth/setup", {"password": "correct horse battery staple"},
