@@ -8,7 +8,6 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
-import ipaddress
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -69,7 +68,7 @@ def _transport(
     name = IP_PROTOCOLS.get(protocol, "other")
     _increment(protocol_counts, name)
     if protocol == 6 and len(packet) >= offset + 20:
-        destination_ports[ _integer(packet, offset + 2, 2, "big") ] += 1
+        destination_ports[_integer(packet, offset + 2, 2, "big")] += 1
     elif protocol == 17 and len(packet) >= offset + 8:
         destination_ports[ _integer(packet, offset + 2, 2, "big") ] += 1
 
