@@ -95,8 +95,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 185)
-        self.assertEqual(len(catalog["features"]), 185)
+        self.assertEqual(catalog["count"], 186)
+        self.assertEqual(len(catalog["features"]), 186)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -422,6 +422,58 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["summary"]["event_count"], 1)
         self.assertNotIn("signing_secret", str(result))
         self.assertNotIn("api-test-secret", str(result))
+
+    def test_scheduled_report_delivery_package_uses_active_job_lease_and_approved_egress(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        bundle = build_report_bundle({
+            "report_id": "weekly-home",
+            "title": "Weekly home router report",
+            "generated_at": "2026-11-20T09:59:00Z",
+            "sources": [{
+                "source_id": "home-health",
+                "source_type": "router_fleet_health_audit",
+                "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []},
+            }],
+        })
+        occurrence_id = "c" * 64
+        intake = server.run_feature("router_scheduled_report_job_intake", {
+            "schedule_id": "daily-home",
+            "occurrence_id": occurrence_id,
+            "scheduled_at": "2026-11-20T09:59:00Z",
+            "report_bundle": bundle,
+        })["result"]
+        server.REPORT_JOBS.enqueue(intake, now="2026-11-20T09:58:00Z")
+        claimed = server.REPORT_JOBS.claim_due(
+            "api-worker", now="2026-11-20T10:00:00Z", lease_seconds=120,
+        )["jobs"][0]
+        status, result = self.request("POST", "/api/features/router_scheduled_report_delivery_package", {
+            "now": "2026-11-20T10:00:00Z",
+            "claimed_job": claimed,
+            "webhook": {
+                "endpoint": "https://hooks.example.net/reports",
+                "allowed_hosts": ["hooks.example.net"],
+                "key_id": "api-key",
+                "signing_secret": "api-test-secret-with-at-least-32-bytes",
+            },
+            "egress_evidence": {
+                "resolution_at": "2026-11-20T09:59:55Z",
+                "connected_at": "2026-11-20T10:00:00Z",
+                "resolved_addresses": ["1.1.1.1"],
+                "peer_ip": "1.1.1.1",
+                "connected_port": 443,
+                "tls_version": "TLSv1.3",
+                "tls_verified": True,
+                "hostname_verified": True,
+                "redirect_location": None,
+            },
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F189")
+        self.assertEqual(result["result"]["status"], "ready")
+        self.assertTrue(result["result"]["egress"]["approved"])
+        self.assertEqual(result["result"]["delivery"]["method"], "POST")
+        self.assertNotIn("api-test-secret-with-at-least-32-bytes", str(result))
 
     def test_scheduled_report_job_queue_is_authenticated_idempotent_and_lease_guarded(self):
         status, denied = self.request("GET", "/api/reports/jobs")

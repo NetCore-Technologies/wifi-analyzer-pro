@@ -1,4 +1,5 @@
 """Regression tests for the independently registered feature tools."""
+import hashlib
 import json
 import unittest
 
@@ -11,6 +12,29 @@ SAMPLE = [
     {"ssid": "Lab", "bssid": "00:11:22:33:44:66", "band": "5GHz", "channel": 36, "rssi": -72, "security": "WPA2"},
     {"ssid": "Guest", "bssid": "00:11:22:33:44:77", "band": "6GHz", "channel": 5, "rssi": -88, "security": "Open"},
 ]
+
+_SAMPLE_DELIVERY_REPORT = build_report_bundle({
+    "report_id": "weekly-home",
+    "title": "Sample weekly report",
+    "generated_at": "2026-11-20T09:59:00Z",
+    "sources": [{
+        "source_id": "home-health",
+        "source_type": "router_fleet_health_audit",
+        "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []}
+    }]
+})
+_SAMPLE_DELIVERY_SCHEDULE = "daily-home"
+_SAMPLE_DELIVERY_OCCURRENCE = "b" * 64
+_SAMPLE_DELIVERY_REPORT_ID = "weekly-home"
+_SAMPLE_DELIVERY_JOB_KEY = hashlib.sha256(json.dumps([
+    _SAMPLE_DELIVERY_SCHEDULE,
+    _SAMPLE_DELIVERY_OCCURRENCE,
+    _SAMPLE_DELIVERY_REPORT_ID,
+], separators=(",", ":")).encode()).hexdigest()
+_SAMPLE_DELIVERY_PAYLOAD_HASH = hashlib.sha256(json.dumps(
+    _SAMPLE_DELIVERY_REPORT,
+    ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+).encode()).hexdigest()
 
 PAYLOADS = {
     "interface_inventory": {},
@@ -386,6 +410,39 @@ PAYLOADS = {
             "timezone": "Australia/Sydney", "frequency": "daily", "local_time": "18:30"
         }],
         "occurrences_per_schedule": 3
+    },
+    "router_scheduled_report_delivery_package": {
+        "now": "2026-11-20T10:00:00Z",
+        "claimed_job": {
+            "id": 1,
+            "schedule_id": _SAMPLE_DELIVERY_SCHEDULE,
+            "occurrence_id": _SAMPLE_DELIVERY_OCCURRENCE,
+            "report_id": _SAMPLE_DELIVERY_REPORT_ID,
+            "job_key": _SAMPLE_DELIVERY_JOB_KEY,
+            "payload_hash": _SAMPLE_DELIVERY_PAYLOAD_HASH,
+            "status": "leased",
+            "lease_id": "00000000-0000-4000-8000-000000000001",
+            "lease_owner": "sample-worker",
+            "lease_expires_at": "2026-11-20T10:02:00Z",
+            "report_bundle": _SAMPLE_DELIVERY_REPORT
+        },
+        "webhook": {
+            "endpoint": "https://hooks.example.net/reports",
+            "allowed_hosts": ["hooks.example.net"],
+            "key_id": "sample-key",
+            "signing_secret": "sample-webhook-secret-with-at-least-32-bytes"
+        },
+        "egress_evidence": {
+            "resolution_at": "2026-11-20T09:59:55Z",
+            "connected_at": "2026-11-20T10:00:00Z",
+            "resolved_addresses": ["1.1.1.1", "2606:4700:4700::1111"],
+            "peer_ip": "1.1.1.1",
+            "connected_port": 443,
+            "tls_version": "TLSv1.3",
+            "tls_verified": True,
+            "hostname_verified": True,
+            "redirect_location": None
+        }
     },
     "router_scheduled_report_job_intake": {
         "schedule_id": "daily-home",
@@ -776,15 +833,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 185)
-        self.assertEqual(len(set(FEATURE_MODULES)), 185)
-        self.assertEqual(count(), 185)
-        self.assertEqual(len(entries), 185)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 185)
+        self.assertEqual(len(FEATURE_MODULES), 186)
+        self.assertEqual(len(set(FEATURE_MODULES)), 186)
+        self.assertEqual(count(), 186)
+        self.assertEqual(len(entries), 186)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 187)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):

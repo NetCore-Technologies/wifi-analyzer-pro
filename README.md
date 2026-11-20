@@ -96,7 +96,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 185 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 186 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
@@ -176,3 +176,6 @@ MIT — see [LICENSE](LICENSE).
 
 
 Scheduled report execution is coordinated through the authenticated `/api/reports/jobs` endpoints. Jobs are queued with an idempotency key, claimed by workers using expiring leases, and transitioned to completion, retry or dead-letter state; delivery remains the responsibility of an external worker that follows the signed webhook and egress policy contracts.
+
+
+Workers can prepare a report webhook package through `router_scheduled_report_delivery_package` only while holding the active report-job lease and supplying fresh DNS/TLS evidence that passes the egress policy. The feature creates a signed request envelope; outbound transmission remains an explicit worker responsibility.

@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 185 independently callable feature modules (F001–F168 and F172–F188; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 186 independently callable feature modules (F001–F168 and F172–F189; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -82,3 +82,5 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add F173: a bounded MikroTik RouterOS export normalizer for board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; imports are offline, allow-listed and credential-free.
 
 - Add F188: a durable SQLite scheduled-report job outbox with stable occurrence idempotency, transactional exclusive worker leases, lease renewal/expiry recovery, bounded exponential retry, dead-letter and cancellation states; authenticated APIs expose enqueue/claim/complete/fail without sending outbound requests from the server handler.
+
+- Add F189: a lease-guarded scheduled-report delivery package builder. It verifies the F188 job lease and normalized F182 report hashes, requires F187 approved public DNS/TLS evidence, and produces F185 HMAC-signed summary/finding events without making network requests.

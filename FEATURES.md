@@ -1,4 +1,4 @@
-# 185 WiFi Analyzer Pro feature tools (F001–F168, F172–F188)
+# 186 WiFi Analyzer Pro feature tools (F001–F168, F172–F189)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -221,3 +221,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F187 | Webhook egress and DNS-pinning policy verifier (`router_webhook_egress_policy_verifier`) | Router operations | Verify exact HTTPS host allowlists, public-only DNS answers, recent resolution, actual peer-IP pinning, TLS/hostname verification and redirect refusal without making network requests. |
 
 | F188 | Scheduled router report job intake (`router_scheduled_report_job_intake`) | Router operations | Validate F184 occurrence IDs and F182 bundle hashes, derive stable job keys and place bounded report payloads into the durable lease-based SQLite worker queue with retries and dead-letter handling. |
+
+| F189 | Scheduled report webhook delivery package builder (`router_scheduled_report_delivery_package`) | Router operations | Require an active F188 worker lease, verify F182 report and payload hashes, gate on F187 fresh public DNS/TLS evidence, and create F185 HMAC-signed summary/finding events without sending a request. |

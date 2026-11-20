@@ -6,6 +6,8 @@ import json
 import re
 from datetime import datetime, timezone
 
+from .feature_183_router_audit_report_comparator import _validate_bundle
+
 MAX_BUNDLE_BYTES = 512 * 1024
 MAX_ATTEMPTS = 10
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
@@ -68,6 +70,73 @@ def run(payload: dict) -> dict:
     bundle_json = json.dumps(report_bundle, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
     if len(bundle_json.encode("utf-8")) > MAX_BUNDLE_BYTES:
         raise ValueError(f"report_bundle exceeds the {MAX_BUNDLE_BYTES}-byte storage limit")
+
+    validated = _validate_bundle(report_bundle, "report_bundle")
+    raw_summary = report_bundle.get("summary", {})
+    if not isinstance(raw_summary, dict):
+        raise ValueError("report_bundle.summary must be an object")
+    safe_summary = {}
+    count_fields = {
+        "source_count", "site_count", "finding_count", "critical_count",
+        "warning_count", "info_count", "detail_count",
+    }
+    for key in count_fields:
+        value = raw_summary.get(key, 0)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"report_bundle.summary.{key} must be a non-negative integer")
+        safe_summary[key] = value
+    truncated = raw_summary.get("details_truncated", False)
+    if not isinstance(truncated, bool):
+        raise ValueError("report_bundle.summary.details_truncated must be a boolean")
+    safe_summary["details_truncated"] = truncated
+
+    raw_period = report_bundle.get("period", {})
+    if not isinstance(raw_period, dict):
+        raise ValueError("report_bundle.period must be an object")
+    safe_period = {}
+    for key in ("start", "end"):
+        value = raw_period.get(key)
+        safe_period[key] = _timestamp(value, f"report_bundle.period.{key}").isoformat() if value is not None else None
+
+    raw_filters = report_bundle.get("filters", {})
+    if not isinstance(raw_filters, dict):
+        raise ValueError("report_bundle.filters must be an object")
+    raw_sites = raw_filters.get("site_allowlist", [])
+    if not isinstance(raw_sites, list) or len(raw_sites) > 128:
+        raise ValueError("report_bundle.filters.site_allowlist must be a bounded list")
+    site_allowlist = sorted({_id(value, "report_bundle.filters.site_allowlist entry") for value in raw_sites})
+    include_details = raw_filters.get("include_details", True)
+    if not isinstance(include_details, bool):
+        raise ValueError("report_bundle.filters.include_details must be a boolean")
+    maximum_findings = raw_filters.get("maximum_findings", 500)
+    if isinstance(maximum_findings, bool) or not isinstance(maximum_findings, int) or not 1 <= maximum_findings <= 2000:
+        raise ValueError("report_bundle.filters.maximum_findings must be an integer from 1 to 2000")
+
+    safe_bundle = {
+        "schema_version": "1.0",
+        "report_id": validated["report_id"],
+        "title": validated["title"],
+        "generated_at": validated["generated_at"],
+        "period": safe_period,
+        "filters": {
+            "site_allowlist": site_allowlist,
+            "include_details": include_details,
+            "maximum_findings": maximum_findings,
+        },
+        "summary": safe_summary,
+        "sites": validated["sites"],
+        "sections": validated["sections"],
+        "findings": validated["findings"],
+        "note": (
+            "Validated router audit evidence only. Raw snapshots, credentials, unknown fields and source messages "
+            "are not retained in the scheduled job store."
+        ),
+    }
+    safe_body = json.dumps(safe_bundle, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    safe_bundle["content_hash"] = hashlib.sha256(safe_body.encode("utf-8")).hexdigest()
+    report_bundle = safe_bundle
+    bundle_json = json.dumps(report_bundle, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    payload_hash = hashlib.sha256(bundle_json.encode("utf-8")).hexdigest()
     max_attempts = payload.get("max_attempts", 5)
     if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or not 1 <= max_attempts <= MAX_ATTEMPTS:
         raise ValueError(f"max_attempts must be an integer from 1 to {MAX_ATTEMPTS}")
@@ -75,7 +144,6 @@ def run(payload: dict) -> dict:
     job_key = hashlib.sha256(
         json.dumps([schedule_id, occurrence_id, report_id], separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    payload_hash = hashlib.sha256(bundle_json.encode("utf-8")).hexdigest()
     return {
         "status": "prepared",
         "schedule_id": schedule_id,

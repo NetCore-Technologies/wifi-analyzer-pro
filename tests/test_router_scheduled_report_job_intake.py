@@ -57,6 +57,24 @@ class RouterScheduledReportJobIntakeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unsupported fields"):
             run(secret)
 
+    def test_strips_untrusted_nested_source_fields_before_job_persistence(self):
+        payload = valid_payload()
+        bundle = dict(payload["report_bundle"])
+        bundle["note"] = "private-source-message-secret"
+        bundle["sections"] = [{
+            **bundle["sections"][0],
+            "api_token": "section-token-secret",
+        }]
+        body = {key: value for key, value in bundle.items() if key != "content_hash"}
+        canonical = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        bundle["content_hash"] = hashlib.sha256(canonical.encode()).hexdigest()
+        result = run({**payload, "report_bundle": bundle})
+        rendered = str(result["report_bundle"])
+        self.assertNotIn("private-source-message-secret", rendered)
+        self.assertNotIn("section-token-secret", rendered)
+        self.assertNotIn("api_token", rendered)
+        self.assertIn("Raw snapshots, credentials", result["report_bundle"]["note"])
+
     def test_rejects_invalid_occurrence_timestamp_and_attempt_limits(self):
         payload = valid_payload()
         with self.assertRaisesRegex(ValueError, "64-character SHA-256"):
