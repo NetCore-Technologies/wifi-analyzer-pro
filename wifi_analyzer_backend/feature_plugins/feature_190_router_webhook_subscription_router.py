@@ -317,7 +317,8 @@ def run(payload: dict) -> dict:
         raise ValueError(f"subscription routing generated more than {MAX_BATCHES_TOTAL} batches")
     matched_event_count = sum(bool(value) for value in matched_by_event.values())
     unmatched_event_count = len(normalized_events) - matched_event_count
-    plans.sort(key=lambda item: (item["subscription_id"], item["batch_id"]))
+    # Subscriptions and events are already normalized into deterministic order.
+    # Preserve chunk order here so delivery batches never reorder event chronology.
     return {
         "status": "planned",
         "summary": {
