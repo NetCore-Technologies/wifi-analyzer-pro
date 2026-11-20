@@ -96,7 +96,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 186 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 187 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `GET /api/reports/jobs` | List authenticated scheduled-report jobs and state counts |
 | `POST /api/reports/jobs/enqueue` | Queue a hash-validated report occurrence idempotently |
