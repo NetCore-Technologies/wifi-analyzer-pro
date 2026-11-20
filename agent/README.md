@@ -88,6 +88,6 @@ The server's idempotency ledger returns the original acknowledgement for identic
 
 ## Transport security
 
-HTTPS with certificate verification is the default. Plain HTTP is refused unless allow_insecure_http is explicitly set to true; use that option only on a trusted isolated LAN for testing. Prefer HTTPS even for local deployments.
+HTTPS with certificate verification is the default. Redirect responses are refused so the agent bearer token cannot be forwarded to another URL; configure the final API URL directly. Plain HTTP is refused unless allow_insecure_http is explicitly set to true; use that option only on a trusted isolated LAN for testing. Prefer HTTPS even for local deployments.
 
 The agent's logs include cycle status and safe error categories only. They never print the bearer token, configuration contents, wireless keys, or raw command output. Revoke or rotate the agent credential from the administrator API if the router is decommissioned or the token may have been exposed.

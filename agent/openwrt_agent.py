@@ -11,7 +11,6 @@ import logging
 import os
 import re
 import signal
-import ssl
 import stat
 import subprocess
 import sys
@@ -23,7 +22,7 @@ from pathlib import Path
 from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 
 AGENT_VERSION = "1.0.0"
@@ -558,12 +557,20 @@ class DurableOutbox:
             return
 
 
+class _NoRedirect(HTTPRedirectHandler):
+    """Refuse redirects so an Authorization header cannot be forwarded elsewhere."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        return None
+
+
 class AgentApiClient:
     """Small standard-library HTTP client that never logs the bearer token."""
 
     def __init__(self, config: AgentConfig, opener: Callable | None = None):
         self.config = config
-        self.opener = opener or urlopen
+        # build_opener keeps urllib TLS verification defaults and replaces redirect handling.
+        self.opener = opener or build_opener(_NoRedirect()).open
 
     def post(self, endpoint: str, payload: dict) -> dict:
         body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
@@ -582,14 +589,15 @@ class AgentApiClient:
             method="POST",
         )
         try:
-            opener_options = {"timeout": self.config.request_timeout_seconds}
-            if url.startswith("https://"):
-                opener_options["context"] = ssl.create_default_context()
-            response_context = self.opener(request, **opener_options)
+            response_context = self.opener(request, timeout=self.config.request_timeout_seconds)
             with response_context as response:
                 status = getattr(response, "status", 200)
                 raw = response.read(MAX_HTTP_RESPONSE_BYTES + 1)
         except HTTPError as error:
+            if 300 <= error.code < 400:
+                raise AgentTransportError(
+                    "API redirects are disabled to protect the agent credential; configure the final server URL"
+                ) from error
             if error.code in {401, 403}:
                 raise AgentConfigError("Agent credential was rejected or revoked; re-enrol or rotate it") from error
             raise AgentTransportError(f"API rejected the agent request (HTTP {error.code})") from error

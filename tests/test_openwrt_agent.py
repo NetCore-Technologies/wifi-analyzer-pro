@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.request import Request
 from types import SimpleNamespace
 
 from agent.openwrt_agent import (
@@ -16,6 +17,7 @@ from agent.openwrt_agent import (
     AgentConfigError,
     AgentTransportError,
     CollectorError,
+    _NoRedirect,
     DurableOutbox,
     OpenWrtAgent,
     OpenWrtCollector,
@@ -171,6 +173,24 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(result[0]["signal"], -64)
         self.assertEqual(result[0]["tx"]["rate"], 300.5)
 
+
+class AgentApiClientSecurityTests(unittest.TestCase):
+    def test_agent_api_client_refuses_redirects_to_protect_the_bearer_token(self):
+        config = make_config("/tmp/wifi-analyzer-agent-redirect-test")
+        client = AgentApiClient(config)
+        director = client.opener.__self__
+        handler = next((item for item in director.handlers if isinstance(item, _NoRedirect)), None)
+        self.assertIsNotNone(handler)
+        request = Request(
+            config.server_url + "/api/agents/heartbeat",
+            headers={"Authorization": f"Bearer {TOKEN}"},
+        )
+        redirected = handler.redirect_request(
+            request, None, 302, "Found", {},
+            "https://attacker.invalid/collect",
+        )
+        self.assertIsNone(redirected)
+        self.assertEqual(request.get_header("Authorization"), f"Bearer {TOKEN}")
 
 class ConfigAndOutboxTests(unittest.TestCase):
     def test_https_config_is_validated_and_token_is_not_rendered(self):
