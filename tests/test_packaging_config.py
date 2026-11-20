@@ -1,7 +1,9 @@
 """Regression checks for standalone packaging of dynamically loaded plugins."""
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -36,10 +38,29 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         )
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
+    def test_live_capture_can_be_imported_by_direct_server_execution(self):
+        environment = os.environ.copy()
+        backend_path = str(ROOT / "wifi_analyzer_backend")
+        current_path = environment.get("PYTHONPATH", "")
+        environment["PYTHONPATH"] = backend_path + (os.pathsep + current_path if current_path else "")
+        result = subprocess.run(
+            [sys.executable, "-c", "import live_capture; assert live_capture.LiveCaptureManager"],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_docker_runtime_copies_signed_audit_checkpoint_support(self):
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn(
             "COPY --chown=10001:10001 wifi_analyzer_backend/audit_checkpoint.py ./audit_checkpoint.py",
+            dockerfile,
+        )
+        self.assertIn(
+            "COPY --chown=10001:10001 wifi_analyzer_backend/live_capture.py ./live_capture.py",
             dockerfile,
         )
 

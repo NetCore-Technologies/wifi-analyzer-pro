@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import socket
 import subprocess
 import threading
 import time
@@ -13,14 +12,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .site_history import default_history_path
+if __package__:
+    from .site_history import default_history_path
+else:
+    from site_history import default_history_path
 
 MAX_DURATION_SECONDS = 60
 MAX_PACKETS = 1000
 SNAPLEN_BYTES = 256
 MAX_CAPTURE_BYTES = 512 * 1024
 CAPTURE_RETENTION_SECONDS = 24 * 60 * 60
-_INTERFACE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
+_INTERFACE = re.compile(r"^(?:[A-Za-z0-9_.:@-]{1,64}|\\\\Device\\\\NPF_\\{[A-Fa-f0-9-]{36}\\})$")
 _CAPTURE_ID = re.compile(r"^[a-f0-9]{32}$")
 
 FILTER_PROFILES = {
@@ -56,7 +58,6 @@ class LiveCaptureManager:
         self._active_id: str | None = None
 
     def _ensure_directory(self) -> None:
-        existed = self.directory.exists()
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         if os.name != "nt":
             try:
@@ -218,6 +219,8 @@ class LiveCaptureManager:
                         close_fds=True,
                         start_new_session=(os.name != "nt"),
                     )
+                if os.name != "nt":
+                    os.chmod(stderr_path, 0o600)
             except (OSError, subprocess.SubprocessError) as error:
                 capture_path.unlink(missing_ok=True)
                 stderr_path.unlink(missing_ok=True)
@@ -319,6 +322,13 @@ class LiveCaptureManager:
                 error = "tcpdump did not produce a usable capture; check host privileges and interface support."
         else:
             error = None
+            if os.name != "nt":
+                try:
+                    capture["file_path"].chmod(0o600)
+                except OSError:
+                    error = "Could not secure the completed capture file permissions."
+                    complete = False
+                    capture["file_path"].unlink(missing_ok=True)
 
         with self._lock:
             capture["state"] = "completed" if complete else "failed"

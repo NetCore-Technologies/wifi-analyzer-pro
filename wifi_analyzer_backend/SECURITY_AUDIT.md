@@ -56,31 +56,3 @@ public key only proves internal consistency, not that the signing identity is
 the one previously trusted. A checkpoint attests to a verified ledger head at
 one point in time; it does not export the event bodies or provide a remote
 append-only archive by itself.
-
-
-## Explicit live packet capture
-
-The authenticated Packet Capture page can enumerate interfaces reported by the
-host's `tcpdump -D`, start one operator-requested capture, stop it early, and
-download the resulting classic PCAP for the existing offline analyzer. The
-server requires `diagnostics.run` permission for interface inventory, capture
-status, start/stop and download.
-
-Live capture requires `tcpdump`/libpcap and OS capture privileges. WiFi Analyzer
-Pro does not install packet drivers, elevate privileges, enable monitor mode,
-or change network configuration. Interface selection is limited to the current
-libpcap inventory. Capture profiles are fixed safe presets (`all`, `dns`,
-`dhcp`, `arp`, `tcp`, `udp`, `icmp`); arbitrary shell commands and free-form
-BPF expressions are not accepted.
-
-The operator must explicitly confirm authorization before starting. A capture
-is limited to 60 seconds, 1,000 packets, 256-byte snap length and 512 KiB on
-disk. Only one capture may run at a time. Capture files are stored in a
-private local directory and stale files are removed when a new capture starts
-once the 24-hour retention period has elapsed. Packet contents are only
-downloaded when the operator explicitly requests the PCAP; offline analysis
-continues to redact endpoint addresses and payloads from its results.
-
-Capture permissions differ by OS and package. Run the service with a dedicated
-least-privilege account granted packet-capture access where supported; avoid
-running the entire application as root solely to capture packets.
