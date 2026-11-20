@@ -736,6 +736,95 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(len(listing["jobs"]), 1)
         self.assertEqual(listing["summary"]["counts_by_status"]["completed"], 1)
 
+    def test_report_jobs_are_isolated_by_site_scope_for_reads_enqueue_and_worker_claims(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+
+        def make_bundle(site_id, report_id):
+            return build_report_bundle({
+                "report_id": report_id,
+                "title": "Scoped report " + site_id,
+                "generated_at": "2026-11-20T10:00:00Z",
+                "site_allowlist": [site_id],
+                "sources": [{
+                    "source_id": site_id + "-health",
+                    "source_type": "router_fleet_health_audit",
+                    "result": {
+                        "status": "audited",
+                        "summary": {"router_count": 1, "warning_count": 0},
+                        "routers": [{
+                            "router_id": "router-" + site_id,
+                            "site_id": site_id,
+                            "findings": [],
+                        }],
+                    },
+                }],
+            })
+
+        def enqueue(site_id, report_id, occurrence):
+            return self.request("POST", "/api/reports/jobs/enqueue", {
+                "schedule_id": "daily-" + site_id,
+                "occurrence_id": occurrence * 64,
+                "scheduled_at": "2026-11-20T10:01:00Z",
+                "report_bundle": make_bundle(site_id, report_id),
+            }, token=owner_token)
+
+        status, home_result = enqueue("home", "weekly-home", "a")
+        self.assertEqual(status, 201, home_result)
+        status, branch_result = enqueue("branch", "weekly-branch", "b")
+        self.assertEqual(status, 201, branch_result)
+        home_job_id = home_result["job"]["id"]
+        branch_job_id = branch_result["job"]["id"]
+
+        status, created = self.request("POST", "/api/users", {
+            "username": "home.reports",
+            "password": "home reports user password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["home"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        user_token = self.request("POST", "/api/auth/login", {
+            "username": "home.reports",
+            "password": "home reports user password",
+        })[1]["token"]
+
+        status, listing = self.request("GET", "/api/reports/jobs", token=user_token)
+        self.assertEqual(status, 200, listing)
+        self.assertEqual([item["id"] for item in listing["jobs"]], [home_job_id])
+        self.assertEqual(listing["summary"]["job_count"], 1)
+        self.assertEqual(listing["summary"]["counts_by_status"]["pending"], 1)
+
+        status, visible = self.request("GET", "/api/reports/jobs/" + str(home_job_id), token=user_token)
+        self.assertEqual(status, 200, visible)
+        status, hidden = self.request("GET", "/api/reports/jobs/" + str(branch_job_id), token=user_token)
+        self.assertEqual(status, 404, hidden)
+
+        status, rejected_enqueue = self.request("POST", "/api/reports/jobs/enqueue", {
+            "schedule_id": "daily-branch-unauthorised",
+            "occurrence_id": "c" * 64,
+            "scheduled_at": "2026-11-20T10:01:00Z",
+            "report_bundle": make_bundle("branch", "outside-branch"),
+        }, token=user_token)
+        self.assertEqual(status, 403, rejected_enqueue)
+
+        status, claim = self.request("POST", "/api/reports/jobs/claim", {
+            "worker_id": "home-worker",
+            "now": "2026-11-20T10:02:00Z",
+            "limit": 10,
+        }, token=user_token)
+        self.assertEqual(status, 200, claim)
+        self.assertEqual([item["id"] for item in claim["jobs"]], [home_job_id])
+
+        status, denied_cancel = self.request(
+            "POST", "/api/reports/jobs/" + str(branch_job_id) + "/cancel",
+            {}, token=user_token,
+        )
+        self.assertEqual(status, 404, denied_cancel)
+        self.assertEqual(server.REPORT_JOBS.get(branch_job_id)["status"], "pending")
+
     def test_router_scheduled_report_planner_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
         token = setup["token"]
@@ -1299,6 +1388,10 @@ class AuthenticatedApiTests(unittest.TestCase):
         site_admin = self.request("POST", "/api/auth/login", {
             "username": "home.netadmin", "password": "home network admin password",
         })[1]["token"]
+
+        status, site_catalog = self.request("GET", "/api/sites", token=site_admin)
+        self.assertEqual(status, 200)
+        self.assertEqual(site_catalog["site_ids"], ["home"])
 
         status, credentials = self.request("GET", "/api/agents/credentials", token=site_admin)
         self.assertEqual(status, 200)

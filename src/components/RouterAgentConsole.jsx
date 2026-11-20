@@ -119,6 +119,8 @@ export default function RouterAgentConsole() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [agentId, setAgentId] = useState("");
+  const [siteId, setSiteId] = useState("");
+  const [knownSiteIds, setKnownSiteIds] = useState([]);
   const [agentVersion, setAgentVersion] = useState("1.0.0");
   const [ttlDays, setTtlDays] = useState(90);
   const [selectedCapabilities, setSelectedCapabilities] = useState(DEFAULT_CAPABILITIES);
@@ -129,12 +131,13 @@ export default function RouterAgentConsole() {
     else setLoading(true);
     setError("");
     try {
-      const [healthData, credentialData, snapshotData, negotiationData, adapterData] = await Promise.all([
+      const [healthData, credentialData, snapshotData, negotiationData, adapterData, siteData] = await Promise.all([
         requestJSON("/api/agents/health"),
         requestJSON("/api/agents/credentials"),
         requestJSON("/api/agents/snapshots"),
         requestJSON("/api/agents/negotiations"),
         requestJSON("/api/adapters"),
+        requestJSON("/api/sites"),
       ]);
       const healthReport = healthData?.result || healthData;
       setHealth(healthReport);
@@ -142,6 +145,7 @@ export default function RouterAgentConsole() {
       setSnapshots(Array.isArray(snapshotData?.snapshots) ? snapshotData.snapshots : []);
       setNegotiations(Array.isArray(negotiationData?.negotiations) ? negotiationData.negotiations : []);
       setAdapters(Array.isArray(adapterData?.adapters) ? adapterData.adapters : []);
+      setKnownSiteIds(Array.isArray(siteData?.site_ids) ? siteData.site_ids : []);
       setSelectedAgentId((current) => {
         if (current) return current;
         const first = healthReport?.agents?.[0]?.agent_id
@@ -228,6 +232,7 @@ export default function RouterAgentConsole() {
     try {
       const capabilities = [...new Set(selectedCapabilities)];
       if (!agentId.trim()) throw new Error("Enter an agent ID.");
+      if (!siteId.trim()) throw new Error("Assign this router agent to a site.");
       if (!capabilities.includes("system.board") || !capabilities.includes("inventory.snapshot")) {
         throw new Error("Enrolment requires system.board and inventory.snapshot.");
       }
@@ -235,6 +240,7 @@ export default function RouterAgentConsole() {
         method: "POST",
         body: JSON.stringify({
           agent_id: agentId.trim(),
+          site_id: siteId.trim(),
           adapter_id: "openwrt",
           agent_version: agentVersion,
           advertised_capabilities: capabilities,
@@ -245,6 +251,7 @@ export default function RouterAgentConsole() {
       });
       showIssuedToken(response.credential, "Enrolment");
       setAgentId("");
+      setSiteId("");
       await load(true);
       setSelectedAgentId(response.credential?.agent_id || "");
     } catch (requestError) {
@@ -287,6 +294,25 @@ export default function RouterAgentConsole() {
       await load(true);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Credential revocation failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const assignSite = async (id) => {
+    if (!id || !siteId.trim() || saving) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await requestJSON("/api/agents/" + encodeURIComponent(id) + "/site", {
+        method: "POST",
+        body: JSON.stringify({ site_id: siteId.trim() }),
+      });
+      setNotice("Assigned " + id + " to " + response.assignment.site_id + ".");
+      await load(true);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Could not update the site assignment.");
     } finally {
       setSaving(false);
     }
@@ -386,6 +412,12 @@ export default function RouterAgentConsole() {
                 Agent ID
                 <input className="agent-console-input" value={agentId} onChange={(event) => setAgentId(event.target.value)} placeholder="openwrt-home" maxLength={64} required />
               </label>
+              <label style={{ color: COLORS.secondary, fontSize: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+                Assigned site ID
+                <input className="agent-console-input" list="wpa-known-sites-enrol" value={siteId} onChange={(event) => setSiteId(event.target.value)} placeholder="e.g. head-office" maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._:-]{0,63}" required />
+                <datalist id="wpa-known-sites-enrol">{knownSiteIds.map(site => <option key={site} value={site}/>)}</datalist>
+                <span style={{ color: COLORS.muted }}>Health, credentials and inventory from this agent are tied to this site.</span>
+              </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 100px", gap: 8 }}>
                 <label style={{ color: COLORS.secondary, fontSize: 10, display: "flex", flexDirection: "column", gap: 5 }}>
                   Agent version
@@ -434,6 +466,14 @@ export default function RouterAgentConsole() {
               </div>
               {activeAgent.credential && <div style={{ color: COLORS.muted, fontSize: 10, marginTop: 11 }}>
                 Credential expires {timestamp(activeAgent.credential.expires_at)} · created {timestamp(activeAgent.credential.created_at)}
+              </div>}
+              {activeAgent.credential && <div style={{ display: "grid", gap: 7, marginTop: 12, paddingTop: 10, borderTop: "1px solid " + COLORS.border }}>
+                <div style={{ color: COLORS.secondary, fontSize: 10 }}>Assigned site: <strong style={{ color: COLORS.cyan }}>{activeAgent.credential.site_id || "Unassigned"}</strong></div>
+                <div style={{ display: "grid", gridTemplateColumns: "minmax(120px,1fr) auto", gap: 7 }}>
+                  <input className="agent-console-input" list="wpa-known-sites-assign" value={siteId} onChange={(event) => setSiteId(event.target.value)} placeholder="New site ID" maxLength={64}/>
+                  <button className="agent-console-button" disabled={saving || !siteId.trim()} onClick={() => assignSite(selectedAgentId)}>Assign site</button>
+                </div>
+                <datalist id="wpa-known-sites-assign">{knownSiteIds.map(site => <option key={site} value={site}/>)}</datalist>
               </div>}
             </>}
           </Panel>

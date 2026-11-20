@@ -35,14 +35,22 @@ export default function TeamAccessPanel() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("analyst");
+  const [siteIds, setSiteIds] = useState([]);
+  const [allSites, setAllSites] = useState(false);
+  const [selectedSiteIds, setSelectedSiteIds] = useState([]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const response = await apiFetch(`${API_BASE}/api/users`, { signal: AbortSignal.timeout(8000) });
+      const [response, siteResponse] = await Promise.all([
+        apiFetch(`${API_BASE}/api/users`, { signal: AbortSignal.timeout(8000) }),
+        apiFetch(`${API_BASE}/api/sites`, { signal: AbortSignal.timeout(8000) }),
+      ]);
       const data = await readResponse(response);
+      const siteData = await readResponse(siteResponse);
       setUsers(Array.isArray(data.users) ? data.users : []);
+      setSiteIds(Array.isArray(siteData.site_ids) ? siteData.site_ids : []);
     } catch (loadError) {
       setError(loadError.message || "Could not load the user directory.");
     } finally {
@@ -62,13 +70,19 @@ export default function TeamAccessPanel() {
       const response = await apiFetch(`${API_BASE}/api/users`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, role }),
+        body: JSON.stringify({
+          username, password, role,
+          all_sites: allSites,
+          site_ids: allSites ? [] : selectedSiteIds,
+        }),
         signal: AbortSignal.timeout(10000),
       });
       const data = await readResponse(response);
       setUsers(current => [...current, data.user].sort((a, b) => a.username.localeCompare(b.username)));
       setUsername("");
       setPassword("");
+      setAllSites(false);
+      setSelectedSiteIds([]);
       setNotice(`Created account for ${data.user.username}.`);
     } catch (createError) {
       setError(createError.message || "Could not create this account.");
@@ -143,6 +157,25 @@ export default function TeamAccessPanel() {
               {availableRoles.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
+          <div style={{ display: "grid", gap: 7, gridColumn: "1 / -1", borderTop: "1px solid #1e2d47", paddingTop: 10 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#cbd5e1", fontSize: 11 }}>
+              <input type="checkbox" checked={allSites} onChange={event => {
+                setAllSites(event.target.checked);
+                if (event.target.checked) setSelectedSiteIds([]);
+              }}/>
+              Grant access to all sites
+            </label>
+            <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 11 }}>
+              Assigned sites (new accounts have no site access until assigned)
+              <select multiple size={Math.min(5, Math.max(2, siteIds.length))}
+                value={selectedSiteIds} disabled={allSites || siteIds.length === 0}
+                onChange={event => setSelectedSiteIds(Array.from(event.target.selectedOptions, option => option.value))}
+                style={{ ...styles.input, minHeight: 76 }} aria-label="Sites assigned to the new user">
+                {siteIds.map(siteId => <option key={siteId} value={siteId}>{siteId}</option>)}
+              </select>
+            </label>
+            {siteIds.length === 0 ? <div style={styles.muted}>No sites are registered yet. Enrol a site agent or save a site snapshot first.</div> : null}
+          </div>
           <button type="submit" disabled={saving} style={{ ...styles.button, opacity: saving ? .6 : 1 }}>Create account</button>
         </form>
       </section>
@@ -175,6 +208,39 @@ export default function TeamAccessPanel() {
                   </select>
                 )}
               </div>
+              {user.role !== "owner" ? (
+                <div style={{ gridColumn: "1 / -1", display: "grid", gap: 7, borderTop: "1px solid #1e2d47", paddingTop: 9 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#cbd5e1", fontSize: 11 }}>
+                    <input type="checkbox" checked={Boolean(user.all_sites)}
+                      disabled={saving || !user.enabled || (identity?.role !== "owner" && user.role === "admin")}
+                      onChange={event => updateUser(user, {
+                        all_sites: event.target.checked,
+                        site_ids: event.target.checked ? [] : (user.site_ids || []),
+                      })}/>
+                    All sites
+                    <span style={styles.muted}>{user.all_sites ? "Unrestricted" : (user.site_ids || []).length + " assigned"}</span>
+                  </label>
+                  <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 10 }}>
+                    Assigned sites
+                    <select multiple size={Math.min(4, Math.max(2, siteIds.length))}
+                      value={user.all_sites ? [] : (user.site_ids || [])}
+                      disabled={saving || !user.enabled || user.all_sites || (identity?.role !== "owner" && user.role === "admin") || siteIds.length === 0}
+                      onChange={event => updateUser(user, {
+                        all_sites: false,
+                        site_ids: Array.from(event.target.selectedOptions, option => option.value),
+                      })}
+                      style={{ ...styles.input, minHeight: 62 }}
+                      aria-label={"Sites assigned to " + user.username}>
+                      {[...new Set([...siteIds, ...(user.site_ids || [])])].sort().map(siteId =>
+                        <option key={siteId} value={siteId}>{siteId}</option>
+                      )}
+                    </select>
+                    <span style={styles.muted}>Hold Ctrl/Command to select multiple sites. Empty selection means no site access.</span>
+                  </label>
+                </div>
+              ) : (
+                <div style={{ gridColumn: "1 / -1", color: "#06d6f0", fontSize: 10 }}>Workspace owner · all sites</div>
+              )}
               <button type="button" disabled={saving || user.role === "owner" || (identity?.role !== "owner" && user.role === "admin")} onClick={() => updateUser(user, { enabled: !user.enabled })}
                 style={{ ...styles.button, borderColor: user.enabled ? "#f59e0b" : "#22c55e", color: user.enabled ? "#f59e0b" : "#22c55e", background: "transparent", whiteSpace: "nowrap" }}>
                 {user.enabled ? "Disable" : "Enable"}
@@ -184,7 +250,7 @@ export default function TeamAccessPanel() {
           {!loading && users.length === 0 ? <div style={styles.muted}>No accounts found.</div> : null}
         </div>
       </section>
-      <p style={{ ...styles.muted, margin: 0, lineHeight: 1.6 }}>This local directory does not yet provide per-site isolation, SSO, MFA or centralised identity federation. Keep remote access behind a VPN and do not expose the local API directly to the public internet.</p>
+      <p style={{ ...styles.muted, margin: 0, lineHeight: 1.6 }}>Site assignments are enforced by the API. Existing accounts retain their previous all-site access until an owner narrows it; SSO and MFA remain separate enterprise identity requirements. Keep remote access behind a VPN and do not expose the local API directly to the public internet.</p>
     </div>
   );
 }

@@ -1040,9 +1040,15 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"summary": AUDIT.summary()})
             elif path == "/api/sites":
                 scope = AUTH.site_access(self.bearer_token())
-                discovered = HISTORY.site_ids(limit=100)
-                site_ids = discovered if scope["all_sites"] else [
-                    site_id for site_id in discovered if site_id in scope["site_ids"]
+                discovered = set(HISTORY.site_ids(limit=100))
+                discovered.update(
+                    credential["site_id"]
+                    for credential in AGENT_HEALTH.list_agent_credentials()
+                    if credential.get("site_id")
+                )
+                ordered_sites = sorted(discovered)[:100]
+                site_ids = ordered_sites if scope["all_sites"] else [
+                    site_id for site_id in ordered_sites if site_id in scope["site_ids"]
                 ]
                 self.send_json({"site_ids": site_ids, "all_sites": scope["all_sites"]})
             elif path == "/api/sites/history/report":
