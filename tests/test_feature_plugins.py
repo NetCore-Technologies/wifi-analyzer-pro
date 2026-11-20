@@ -178,19 +178,30 @@ PAYLOADS = {
     "site_ap_channel_reuse_audit": {"radios":[{"radio_id":"r1","ap_id":"a","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20},{"radio_id":"r2","ap_id":"b","site_id":"home","band":"2.4GHz","channel":3,"channel_width_mhz":20},{"radio_id":"r3","ap_id":"c","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20}]} ,
     "site_topology_history_timeline": {"snapshots":[{"captured_at":"2026-11-20T09:00:00Z","access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"b","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"b","relationship":"wired_uplink"}]},{"captured_at":"2026-11-20T10:00:00Z","access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"c","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"c","relationship":"mesh_backhaul"}]}]},
     "site_topology_gateway_path_audit": {"access_points":[{"ap_id":"gw","site_id":"home"},{"ap_id":"ap-2","site_id":"home"},{"ap_id":"isolated","site_id":"home"},{"ap_id":"remote","site_id":"branch"}],"gateway_ap_ids":["gw"],"links":[{"from_ap_id":"gw","to_ap_id":"ap-2","relationship":"wired_uplink"},{"from_ap_id":"gw","to_ap_id":"isolated","relationship":"rf_neighbor"},{"from_ap_id":"ap-2","to_ap_id":"remote","relationship":"mesh_backhaul"}]},
+    "site_radio_configuration_audit": {
+        "radios": [
+            {"radio_id":"home-5g","site_id":"home","band":"5GHz","channel_width_mhz":80,"security":"WPA3","tx_power_dbm":20},
+            {"radio_id":"branch-5g","site_id":"branch","band":"5GHz","channel_width_mhz":40,"security":"WPA2","tx_power_dbm":30},
+            {"radio_id":"guest-24g","site_id":"guest","band":"2.4GHz","channel_width_mhz":20,"security":"WPA2","tx_power_dbm":10}
+        ],
+        "standards": [
+            {"site_id":"*","band":"5GHz","channel_width_mhz":80,"security":"WPA3","min_tx_power_dbm":5,"max_tx_power_dbm":23},
+            {"site_id":"home","band":"5GHz","channel_width_mhz":80,"security":"WPA3","min_tx_power_dbm":10,"max_tx_power_dbm":22}
+        ]
+    },
 
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_fifty_five_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_fifty_six_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 155)
-        self.assertEqual(len(set(FEATURE_MODULES)), 155)
-        self.assertEqual(count(), 155)
-        self.assertEqual(len(entries), 155)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 155)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 156)])
+        self.assertEqual(len(FEATURE_MODULES), 156)
+        self.assertEqual(len(set(FEATURE_MODULES)), 156)
+        self.assertEqual(count(), 156)
+        self.assertEqual(len(entries), 156)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 156)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 157)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -596,6 +607,53 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(result["summary"]["unknown_gateway_ap_ids"], ["missing"])
         self.assertEqual(result["access_points"][0]["status"], "unknown")
 
+
+    def test_site_radio_configuration_audit_applies_site_overrides_and_wildcard_defaults(self):
+        result = run("site_radio_configuration_audit", PAYLOADS["site_radio_configuration_audit"])["result"]
+        by_id = {item["radio_id"]: item for item in result["radios"]}
+        self.assertEqual(by_id["home-5g"]["status"], "compliant")
+        self.assertEqual(by_id["branch-5g"]["status"], "deviation")
+        self.assertEqual(
+            {item["field"] for item in by_id["branch-5g"]["deviations"]},
+            {"channel_width_mhz", "security", "tx_power_dbm"},
+        )
+        self.assertEqual(by_id["guest-24g"]["status"], "no_standard")
+        self.assertEqual(result["compliant_count"], 1)
+        self.assertEqual(result["deviation_count"], 1)
+        self.assertEqual(result["unknown_count"], 1)
+
+    def test_site_radio_configuration_audit_keeps_missing_measurements_unknown(self):
+        result = run("site_radio_configuration_audit", {
+            "radios": [{"radio_id": "ap-1-radio-1", "site_id": "home", "band": "5GHz"}],
+            "standards": [{"site_id": "home", "band": "5GHz", "min_tx_power_dbm": 5}],
+        })["result"]
+        self.assertEqual(result["radios"][0]["status"], "unknown")
+        self.assertEqual(result["radios"][0]["unknown_fields"], ["tx_power_dbm"])
+
+    def test_site_radio_configuration_audit_rejects_duplicate_and_invalid_records(self):
+        with self.assertRaisesRegex(ValueError, "radio_id values must be unique"):
+            run("site_radio_configuration_audit", {
+                "radios": [
+                    {"radio_id": "same", "site_id": "home", "band": "5GHz"},
+                    {"radio_id": "same", "site_id": "home", "band": "5GHz"},
+                ],
+            })
+        with self.assertRaisesRegex(ValueError, "site/band standard may be declared only once"):
+            run("site_radio_configuration_audit", {
+                "standards": [
+                    {"site_id": "home", "band": "5GHz", "security": "WPA3"},
+                    {"site_id": "home", "band": "5GHz", "channel_width_mhz": 80},
+                ],
+            })
+        with self.assertRaisesRegex(ValueError, "must be a finite number"):
+            run("site_radio_configuration_audit", {
+                "radios": [{"radio_id": "ap-radio", "site_id": "home", "band": "5GHz", "tx_power_dbm": float("nan")}],
+                "standards": [{"site_id": "home", "band": "5GHz", "min_tx_power_dbm": 5}],
+            })
+        with self.assertRaisesRegex(ValueError, "must be one of"):
+            run("site_radio_configuration_audit", {
+                "radios": [{"radio_id": "ap-radio", "site_id": "home", "band": "60GHz"}],
+            })
 
 if __name__ == "__main__":
     unittest.main()

@@ -159,6 +159,7 @@ FEATURE_MODULES = (
     "feature_153_site_ap_channel_reuse_audit",
     "feature_154_site_topology_history_timeline",
     "feature_155_site_topology_gateway_path_audit",
+    "feature_156_site_radio_configuration_audit",
 )
 
 @lru_cache(maxsize=1)

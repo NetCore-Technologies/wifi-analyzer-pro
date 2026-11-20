@@ -69,10 +69,11 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 155)
-        self.assertEqual(len(catalog["features"]), 155)
+        self.assertEqual(catalog["count"], 156)
+        self.assertEqual(len(catalog["features"]), 156)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -128,6 +129,23 @@ class AuthenticatedApiTests(unittest.TestCase):
         finally:
             connection.close()
 
+
+    def test_site_radio_configuration_audit_is_executable_through_the_authenticated_api(self):
+        _, setup = self.request(
+            "POST", "/api/auth/setup", {"password": "correct horse battery staple"}
+        )
+        status, result = self.request(
+            "POST",
+            "/api/features/site_radio_configuration_audit",
+            {
+                "radios": [{"radio_id": "ap-1-5g", "site_id": "home", "band": "5GHz", "channel_width_mhz": 80, "security": "WPA3", "tx_power_dbm": 18}],
+                "standards": [{"site_id": "home", "band": "5GHz", "channel_width_mhz": 80, "security": "WPA3", "min_tx_power_dbm": 10, "max_tx_power_dbm": 23}],
+            },
+            token=setup["token"],
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F156")
+        self.assertEqual(result["result"]["radios"][0]["status"], "compliant")
 
 if __name__ == "__main__":
     unittest.main()
