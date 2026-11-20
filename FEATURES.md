@@ -1,4 +1,4 @@
-# 120 WiFi Analyzer Pro feature tools
+# 140 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -125,6 +125,27 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 118 | Multi-Link Operation summary (`multi_link_operation_summary`) | PHY analysis | Summarise supplied Wi-Fi 7 MLO link records by active state, band and signal. |
 | 119 | Protected Management Frames audit (`pmf_security_audit`) | Security | Audit explicit PMF/802.11w states from scan or controller observations. |
 | 120 | Regulatory channel allowlist check (`regulatory_channel_allowlist_check`) | RF planning | Compare observed channels against an OS/controller-supplied regional allowlist. |
+
+| 121 | Client association inventory (`client_association_inventory`) | Client operations | Join AP/controller client associations to advertised BSS records and report unmatched associations. |
+| 122 | Stale client detector (`stale_client_detector`) | Client operations | Identify client records whose supplied last-seen timestamps exceed a configurable age threshold. |
+| 123 | Airtime fairness summary (`airtime_fairness_summary`) | Client QoS | Calculate measured per-client airtime allocation and Jain fairness from AP/controller counters. |
+| 124 | Client throughput fairness (`client_throughput_fairness`) | Client QoS | Calculate per-client transmit/receive throughput and Jain fairness from byte deltas over a measured interval. |
+| 125 | DSCP traffic distribution (`dscp_traffic_distribution`) | Client QoS | Summarise packet counts by observed six-bit DSCP value from a supplied capture or controller export. |
+| 126 | Application QoS policy audit (`application_qos_policy_audit`) | Client QoS | Compare observed per-application DSCP markings with an explicit operator-supplied policy map. |
+| 127 | Client retry rate (`client_retry_rate`) | Client QoS | Calculate per-client retransmission ratios from AP-reported transmit and retry counters. |
+| 128 | PHY rate asymmetry (`phy_rate_asymmetry`) | Client QoS | Compare measured uplink and downlink PHY rates for associated clients. |
+| 129 | Client/AP capability compatibility (`client_ap_capability_match`) | Client operations | Compare advertised client and AP band/feature sets and list unsupported client requirements. |
+| 130 | OFDMA and MU-MIMO evidence (`ofdma_mu_mimo_evidence`) | PHY analysis | Summarise explicit AP/controller OFDMA and MU-MIMO support and usage counters. |
+| 131 | Target Wake Time summary (`twt_power_save_summary`) | PHY analysis | Summarise explicitly advertised and active 802.11ax Target Wake Time sessions. |
+| 132 | 802.11k/v/r capability audit (`bss_transition_capability_audit`) | Roaming | Report explicit neighbour-report, BSS-transition and fast-transition capabilities per AP. |
+| 133 | Mobility domain consistency (`mobility_domain_consistency`) | Roaming | Find same-ESS APs with missing or inconsistent 802.11r mobility-domain identifiers. |
+| 134 | DHCP lease audit (`dhcp_lease_audit`) | Network operations | Find expired leases and duplicate IP or MAC assignments in a supplied DHCP lease snapshot. |
+| 135 | DNS resolver latency comparison (`dns_resolver_latency_compare`) | Network operations | Compare measured resolver lookup success, median and p95 latency across supplied probes. |
+| 136 | Gateway reachability matrix (`gateway_reachability_matrix`) | Network operations | Summarise reachability and latency evidence from explicit gateway/next-hop probes. |
+| 137 | Roaming interruption analysis (`roaming_interruption_analysis`) | Roaming | Measure disconnect-to-reconnect interruption duration for client handover event pairs. |
+| 138 | Disconnect reason summary (`disconnect_reason_summary`) | Client operations | Classify and count IEEE 802.11 disassociation/deauthentication reason codes in supplied logs. |
+| 139 | Association rejection summary (`association_rejection_summary`) | Client operations | Classify IEEE 802.11 association response status codes from supplied AP/controller logs. |
+| 140 | Connection health evidence (`connection_health_evidence`) | Client QoS | Flag measured per-client link quality concerns using explicit and configurable signal, retry, rate, loss and latency evidence. |
 
 ## Authentication and UI
 
