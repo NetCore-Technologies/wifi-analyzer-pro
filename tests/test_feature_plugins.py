@@ -278,8 +278,8 @@ PAYLOADS = {
     "openwrt_snapshot_normalizer": {
         "captured_at": "2026-11-20T10:00:00+11:00",
         "board": {"model":"Example OpenWrt Router","hostname":"router","kernel":"6.6.1","release":{"distribution":"OpenWrt","version":"24.10.0","target":"qualcommax/ipq807x"}},
-        "interfaces": [{"interface":"lan","device":"br-lan","proto":"static","up":true,"ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
-        "wireless": [{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":2437,"channel":6,"channel_width_mhz":20,"signal":-52,"noise":-95,"txpower":20,"security":"WPA3","up":true,"password":"must-never-be-copied"}],
+        "interfaces": [{"interface":"lan","device":"br-lan","proto":"static","up":True,"ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
+        "wireless": [{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":2437,"channel":6,"channel_width_mhz":20,"signal":-52,"noise":-95,"txpower":20,"security":"WPA3","up":True,"password":"must-never-be-copied"}],
         "associations": [{"interface":"phy0-ap0","stations":[{"mac":"AA:BB:CC:DD:EE:01","signal":-61,"tx":{"rate":600},"rx":{"rate":433}}]}],
         "routes": [{"target":"0.0.0.0/0","nexthop":"192.168.1.254","device":"eth1","metric":10}]
     }
