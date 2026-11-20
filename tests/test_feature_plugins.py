@@ -155,18 +155,20 @@ PAYLOADS = {
 
     "ap_topology_relationships": {"access_points":[{"ap_id":"ap-a","site_id":"home"},{"ap_id":"ap-b","site_id":"home"},{"ap_id":"ap-c","site_id":"branch"}],"links":[{"from_ap_id":"ap-a","to_ap_id":"ap-b","relationship":"wired_uplink","source":"lldp"},{"from_ap_id":"ap-b","to_ap_id":"ap-c","relationship":"mesh_backhaul","source":"controller"},{"from_ap_id":"ap-a","to_ap_id":"ap-c","relationship":"rf_neighbor","source":"beacon_observation"}]},
 
+    "site_network_segment_correlation": {"segments":[{"segment_id":"main","site_id":"home","cidr":"192.168.1.0/24","gateway_ip":"192.168.1.1","vlan_id":10}],"access_points":[{"ap_id":"ap-1","site_id":"home","management_ip":"192.168.1.20"}]},
+
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 142)
-        self.assertEqual(len(set(FEATURE_MODULES)), 142)
-        self.assertEqual(count(), 142)
-        self.assertEqual(len(entries), 142)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 142)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 143)])
+        self.assertEqual(len(FEATURE_MODULES), 143)
+        self.assertEqual(len(set(FEATURE_MODULES)), 143)
+        self.assertEqual(count(), 143)
+        self.assertEqual(len(entries), 143)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 143)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 144)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -279,6 +281,31 @@ class FeatureCatalogTests(unittest.TestCase):
             run("ap_topology_relationships", {
                 "access_points": [{"ap_id": "a"}, {"ap_id": "b"}],
                 "links": [{"from_ap_id": "a", "to_ap_id": "b", "relationship": "guessed"}]
+            })
+
+
+    def test_site_subnet_correlation_reports_ambiguous_membership(self):
+        result = run("site_network_segment_correlation", {
+            "segments": [
+                {"segment_id": "main", "site_id": "home", "cidr": "10.0.0.0/24", "gateway_ip": "10.0.0.1"},
+                {"segment_id": "overlap", "site_id": "home", "cidr": "10.0.0.128/25", "gateway_ip": "10.0.0.129"},
+                {"segment_id": "remote", "site_id": "remote", "cidr": "172.16.0.0/16", "gateway_ip": "172.16.0.1"}
+            ],
+            "access_points": [
+                {"ap_id": "ap-home", "site_id": "home", "management_ip": "10.0.0.150"},
+                {"ap_id": "ap-remote", "site_id": "remote", "management_ip": "172.16.0.2"},
+                {"ap_id": "ap-unaddressed", "site_id": "home"}
+            ]
+        })["result"]
+        self.assertEqual(result["overlap_count"], 1)
+        self.assertEqual(result["access_points_by_match_status"]["ambiguous"], 1)
+        self.assertEqual(result["access_points_by_match_status"]["matched"], 1)
+        self.assertEqual(result["access_points_by_match_status"]["missing_management_ip"], 1)
+
+    def test_site_subnet_correlation_rejects_gateway_outside_cidr(self):
+        with self.assertRaisesRegex(ValueError, "belong to the segment"):
+            run("site_network_segment_correlation", {
+                "segments": [{"segment_id": "main", "site_id": "home", "cidr": "192.168.1.0/24", "gateway_ip": "192.168.2.1"}]
             })
 
 
