@@ -65,9 +65,9 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 |---|---:|---|---|---:|---|
 | ✅ | F101–F120 | Shipped: same-SSID band visibility, roaming evidence/timelines, channel-width overlap, DFS/PSC planning, Wi-Fi 7 EHT/MLO and PMF/regulatory audits | 2026-11-20 | Implemented | F001–F100 registry; 20 module-level test payloads |
 | 1 | F121–F140 | Client quality, QoS-aware roaming, connection health and association diagnostics | 2026-12-18 | 3–4 weeks | F101–F120; timestamped AP/controller observations |
-| 3 | F141–F160 | Multi-AP site inventory, topology relationships, subnet and gateway correlation, floor-plan anchors | 2027-02-26 | 4–5 weeks | SQLite history; consented local discovery |
-| 4 | F161–F180 | Router adapters, read-only OpenWrt/UniFi/MikroTik integrations, agent health and capability negotiation | 2027-04-09 | 5–6 weeks | Authenticated API; per-adapter contract tests |
-| 5 | F181–F200 | Scheduled reports, alert policies, webhook delivery, report comparison and backup/restore | 2027-05-07 | 4–5 weeks | Waves 2–4; encrypted local settings |
+| 2 | F141–F160 | Multi-AP site inventory, topology relationships, subnet and gateway correlation, floor-plan anchors | 2027-02-26 | 4–5 weeks | SQLite history; consented local discovery |
+| 3 | F161–F180 | Router adapters, read-only OpenWrt/UniFi/MikroTik integrations, agent health and capability negotiation | 2027-04-09 | 5–6 weeks | Authenticated API; per-adapter contract tests |
+| 4 | F181–F200 | Scheduled reports, alert policies, webhook delivery, report comparison and backup/restore | 2027-05-07 | 4–5 weeks | Waves 2–4; encrypted local settings |
 
 ### Longer-range direction (F201–F1100)
 
