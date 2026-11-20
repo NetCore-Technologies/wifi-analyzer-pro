@@ -24,12 +24,12 @@ class TokenBucketRateLimiterTests(unittest.TestCase):
     def test_buckets_are_isolated_and_identifiers_are_not_retained(self):
         limiter = TokenBucketRateLimiter()
         limiter.consume("user-secret-a", capacity=1, period_seconds=60, now=10)
-        limiter.consume("user-secret-b", capacity=1, period_seconds=60, now=10)
+        self.assertTrue(limiter.consume("user-secret-b", capacity=1, period_seconds=60, now=10)["allowed"])
         self.assertEqual(limiter.bucket_count, 2)
         self.assertNotIn("user-secret-a", repr(limiter._buckets))
         self.assertNotIn("user-secret-b", repr(limiter._buckets))
-        self.assertTrue(limiter.consume("user-secret-b", capacity=1, period_seconds=60, now=10)["allowed"])
         self.assertFalse(limiter.consume("user-secret-a", capacity=1, period_seconds=60, now=10)["allowed"])
+        self.assertFalse(limiter.consume("user-secret-b", capacity=1, period_seconds=60, now=10)["allowed"])
 
     def test_expired_entries_are_pruned_and_storage_stays_bounded(self):
         limiter = TokenBucketRateLimiter(max_buckets=3, idle_ttl_seconds=5)

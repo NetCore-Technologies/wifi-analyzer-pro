@@ -298,9 +298,12 @@ class AuthManagerTests(unittest.TestCase):
 
         owner = self.auth.identity(token)
         self.auth.update_user(token, owner["id"], password="replacement owner passphrase")
-        self.assertFalse(self.auth.identity(token)["mfa_enabled"])
+        # Password reset intentionally invalidates all sessions, including the
+        # session which initiated the reset. Sign in again with the new password.
+        self.assertIsNone(self.auth.identity(token))
         new_session = self.auth.login("replacement owner passphrase")
         self.assertTrue(self.auth.validate(new_session))
+        self.assertFalse(self.auth.identity(new_session)["mfa_enabled"])
 
     def test_mfa_setup_requires_password_expires_and_can_be_disabled(self):
         token = self.auth.setup("correct horse battery staple")

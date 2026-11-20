@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api.js";
 import { useAuth } from "../auth/AuthContext.jsx";
 
@@ -29,6 +29,21 @@ export default function AccountSecurityPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    apiFetch(`${API_BASE}/api/auth/status`, { signal: AbortSignal.timeout(8000) })
+      .then(readResponse)
+      .then(data => {
+        if (!active) return;
+        setMfaEnabled(Boolean(data.identity?.mfa_enabled));
+        setRecoveryRemaining(data.identity?.recovery_codes_remaining ?? 0);
+      })
+      .catch(() => {
+        // Keep the already authenticated identity's MFA status if the refresh fails.
+      });
+    return () => { active = false; };
+  }, []);
 
   const beginSetup = async event => {
     event.preventDefault();
