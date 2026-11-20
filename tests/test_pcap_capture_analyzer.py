@@ -227,6 +227,27 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "section header block has an invalid total length"):
             run({"capture_base64": base64.b64encode(corrupt).decode("ascii")})
 
+    def test_accepts_zero_pcapng_snaplen_with_analyzer_frame_limit(self):
+        capture = (
+            pcapng_section()
+            + pcapng_interface(1, snaplen=0)
+            + pcapng_enhanced_packet(0, ethernet_ipv4_udp())
+        )
+        result = run({"capture_base64": base64.b64encode(capture).decode("ascii")})
+        self.assertEqual(result["capture"]["interfaces"][0]["snap_length_bytes"], 0)
+        self.assertEqual(result["summary"]["packet_count"], 1)
+        self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
+
+    def test_pcapng_interface_metadata_limit_applies_across_sections(self):
+        sixty_four_interfaces = b"".join(pcapng_interface(1) for _ in range(64))
+        capture = (
+            pcapng_section() + sixty_four_interfaces
+            + pcapng_section() + sixty_four_interfaces
+            + pcapng_section() + pcapng_interface(1)
+        )
+        with self.assertRaisesRegex(ValueError, "128-interface metadata limit"):
+            run({"capture_base64": base64.b64encode(capture).decode("ascii")})
+
     def test_enforces_pcapng_section_and_interface_metadata_limits(self):
         too_many_interfaces = pcapng_section() + b"".join(
             pcapng_interface(1) for _ in range(129)
