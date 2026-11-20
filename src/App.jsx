@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "./lib/api.js";
 import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
+import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -871,6 +872,7 @@ const NAV=[
   {g:"SYSTEM", items:[
     {id:"system",label:"System",           Icon:Monitor},
     {id:"router",label:"Router Support",   Icon:Server},
+    {id:"agents",label:"Router Agents",    Icon:Shield},
   ]},
   {g:"INSIGHTS", items:[
     {id:"viz",    label:"Visualisation",   Icon:BarChart2},
@@ -978,6 +980,7 @@ export default function App() {
 
   const panels={
     featureTools: <FeatureWorkbench/>,
+    agents:       <RouterAgentConsole/>,
     dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
