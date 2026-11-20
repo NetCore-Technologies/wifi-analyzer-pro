@@ -1,6 +1,6 @@
-# 100 WiFi Analyzer Pro feature tools
+# 120 WiFi Analyzer Pro feature tools
 
-The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; modules are grouped in pairs across the 50 feature commits. Tools are read-only; network-changing actions are deliberately excluded.
+The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
 | ID | Feature | Category | Description |
 |---:|---|---|---|
@@ -104,6 +104,27 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | F098 | Validate application settings (`validate_settings`) | Utilities | Validate polling and scan settings before saving. |
 | F099 | Backend health report (`health_report`) | System | Return runtime version, mode and feature-plugin count. |
 | F100 | Wi-Fi generation classifier (`wifi_generation_classify`) | RF analysis | Infer the highest advertised PHY generation from supplied PHY capability flags. |
+
+| 101 | Same-SSID band presence (`same_ssid_band_presence`) | Roaming | Group visible SSIDs by advertised band and count their BSSID observations. |
+| 102 | Band-steering evidence (`band_steering_evidence`) | Roaming | Compare measured RSSI for the same SSID across bands without inferring AP steering decisions. |
+| 103 | Roaming candidate ranking (`roaming_candidate_ranking`) | Roaming | Rank same-SSID BSSIDs by measured signal improvement over the connected BSSID. |
+| 104 | Association roam events (`association_roam_events`) | Roaming | Diff client association snapshots and classify roam, network-change, connect and disconnect events. |
+| 105 | Roaming timeline summary (`roaming_timeline_summary`) | Roaming | Summarise observed roaming and network-change events per client from association diffs. |
+| 106 | Sticky-client candidates (`sticky_client_candidates`) | Roaming | Flag weak client associations when supplied AP-side observations show a stronger same-SSID alternative. |
+| 107 | Association dwell summary (`association_dwell_summary`) | Roaming | Calculate per-client and per-BSSID association dwell durations from supplied timestamp intervals. |
+| 108 | Roam latency summary (`roam_latency_summary`) | Roaming | Compare latency measurements before and after roaming, preserving sample counts and median values. |
+| 109 | Roaming stability score (`roaming_stability_score`) | Roaming | Calculate a transparent heuristic from observed roam events per client and a chosen time window. |
+| 110 | Band occupancy delta (`band_occupancy_delta`) | RF planning | Compare per-band BSS observation counts between two scans. |
+| 111 | Channel width frequency range (`channel_width_frequency_range`) | RF planning | Calculate the nominal occupied frequency span for a channel centre and channel width. |
+| 112 | Frequency overlap score (`frequency_overlap_score`) | RF planning | Compute frequency-span overlap between two channel observations with measured widths. |
+| 113 | Channel separation ranking (`channel_separation_rank`) | RF planning | Rank candidate channel centres by minimum non-overlap separation from observed channel spans. |
+| 114 | Channel overlap pairs (`channel_overlap_pairs`) | RF planning | Find overlapping nominal channel spans in a set of access-point observations. |
+| 115 | DFS frequency intersection (`dfs_frequency_intersection`) | RF planning | Check whether a nominal 5 GHz channel span intersects the commonly used DFS frequency range. |
+| 116 | 6 GHz PSC availability plan (`six_ghz_psc_plan`) | RF planning | List Preferred Scanning Channels not present in a supplied 6 GHz scan. |
+| 117 | Wi-Fi 7 EHT capability summary (`wifi7_eht_summary`) | PHY analysis | Summarise explicitly supplied EHT and Wi-Fi 7 capability flags without inferring unsupported features. |
+| 118 | Multi-Link Operation summary (`multi_link_operation_summary`) | PHY analysis | Summarise supplied Wi-Fi 7 MLO link records by active state, band and signal. |
+| 119 | Protected Management Frames audit (`pmf_security_audit`) | Security | Audit explicit PMF/802.11w states from scan or controller observations. |
+| 120 | Regulatory channel allowlist check (`regulatory_channel_allowlist_check`) | RF planning | Compare observed channels against an OS/controller-supplied regional allowlist. |
 
 ## Authentication and UI
 
