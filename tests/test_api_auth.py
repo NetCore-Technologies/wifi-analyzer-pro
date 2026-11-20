@@ -471,6 +471,16 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["summary"]["packet_count"], 0)
         self.assertFalse(result["result"]["privacy"]["packet_payloads_returned"])
 
+        pcapng = "Cg0NChwAAABNPCsaAQAAAP//////////HAAAAAEAAAAUAAAAAQAAAP//AAAUAAAA"
+        status, ng_result = self.request("POST", "/api/features/pcap_capture_analyzer", {
+            "capture_base64": pcapng,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(ng_result["result"]["capture"]["format"], "pcapng")
+        self.assertEqual(ng_result["result"]["capture"]["link_type_name"], "ethernet")
+        self.assertEqual(ng_result["result"]["capture"]["interface_count"], 1)
+        self.assertEqual(ng_result["result"]["summary"]["packet_count"], 0)
+
     def test_scheduled_report_delivery_package_uses_active_job_lease_and_approved_egress(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
         token = setup["token"]
