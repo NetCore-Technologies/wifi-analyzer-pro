@@ -16,7 +16,9 @@ class AuthenticatedApiTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.previous_auth = server.AUTH
+        self.previous_history = server.HISTORY
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
+        server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
         self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         self.httpd.daemon_threads = True
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -28,6 +30,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.httpd.server_close()
         self.thread.join(timeout=2)
         server.AUTH = self.previous_auth
+        server.HISTORY = self.previous_history
         self.temp.cleanup()
 
     def request(self, method, path, payload=None, token=None, origin=None):
@@ -69,12 +72,13 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 157)
-        self.assertEqual(len(catalog["features"]), 157)
+        self.assertEqual(catalog["count"], 158)
+        self.assertEqual(len(catalog["features"]), 158)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_visualisation", {item["slug"] for item in catalog["features"]})
+        self.assertIn("site_discovery_history_snapshot", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -165,6 +169,49 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["feature"], "F157")
         self.assertEqual(result["result"]["summary"]["access_point_count"], 2)
+
+    def test_site_history_requires_auth_and_supports_persisted_save_list_and_read(self):
+        status, denied = self.request("GET", "/api/sites/history")
+        self.assertEqual(status, 401)
+        self.assertIn("Authentication required", denied["error"])
+
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        snapshot = {
+            "site_id": "home",
+            "captured_at": "2026-11-20T10:00:00Z",
+            "access_points": [{"ap_id": "gw"}, {"ap_id": "ap-1"}],
+            "links": [{"from_ap_id": "gw", "to_ap_id": "ap-1", "relationship": "wired_uplink"}],
+        }
+        status, saved = self.request("POST", "/api/sites/history", snapshot, token=token)
+        self.assertEqual(status, 201)
+        snapshot_id = saved["snapshot"]["id"]
+        self.assertEqual(saved["snapshot"]["access_point_count"], 2)
+
+        status, listing = self.request("GET", "/api/sites/history?site_id=home&limit=1", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(listing["snapshots"]), 1)
+        self.assertEqual(listing["snapshots"][0]["id"], snapshot_id)
+
+        status, detail = self.request("GET", f"/api/sites/history/{snapshot_id}", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(detail["snapshot"]["snapshot"]["access_points"][0]["site_id"], "home")
+
+        status, missing = self.request("GET", "/api/sites/history/999999", token=token)
+        self.assertEqual(status, 404)
+        self.assertIn("not found", missing["error"].lower())
+
+    def test_site_history_rejects_duplicate_snapshots_and_invalid_payloads(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        snapshot = {"site_id": "home", "captured_at": "2026-11-20T10:00:00Z", "access_points": [], "links": []}
+        self.assertEqual(self.request("POST", "/api/sites/history", snapshot, token=token)[0], 201)
+        status, duplicate = self.request("POST", "/api/sites/history", snapshot, token=token)
+        self.assertEqual(status, 409)
+        self.assertIn("already exists", duplicate["error"])
+        status, invalid = self.request("POST", "/api/sites/history", {**snapshot, "captured_at": "invalid"}, token=token)
+        self.assertEqual(status, 400)
+        self.assertIn("ISO-8601", invalid["error"])
 
 if __name__ == "__main__":
     unittest.main()

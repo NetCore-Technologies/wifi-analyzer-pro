@@ -1,4 +1,4 @@
-# 157 WiFi Analyzer Pro feature tools
+# 158 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -164,11 +164,12 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 155 | Site AP-to-gateway path audit (`site_topology_gateway_path_audit`) | Site inventory | Trace AP backhaul paths to supplied gateway APs and distinguish unreachable, unknown and cross-site evidence. |
 | 156 | Site radio configuration audit (`site_radio_configuration_audit`) | Site inventory | Compare AP radio channel widths, security and transmit power with explicit site/band standards; missing observations remain unknown. |
 | 157 | Interactive site topology visualisation (`site_topology_visualisation`) | Site inventory | Create deterministic, per-site AP layers and typed physical/RF/cross-site links for interactive inspection in the Workbench. |
+| 158 | Persistent site discovery history snapshot (`site_discovery_history_snapshot`) | Site inventory | Validate bounded timestamped AP/topology snapshots before saving to a local SQLite history database with per-site retention. |
 
 
 ## Authentication and UI
 
-The app now has first-run local password setup, login, logout, expiring in-memory bearer sessions, failed-login lockout, and a searchable feature workbench. The password verifier is stored under `~/.config/wifi-analyzer-pro/auth.json` with restrictive permissions; it is never written to the repository. The backend API is protected after setup. An expired bearer token clears the browser session and returns the UI to the sign-in screen. For LAN/remote access, continue to use a VPN or authenticated reverse proxy and explicitly configure allowed CORS origins.
+The app now has first-run local password setup, login, logout, expiring in-memory bearer sessions, failed-login lockout, a searchable feature workbench, and authenticated local site-history endpoints backed by SQLite. The password verifier is stored under `~/.config/wifi-analyzer-pro/auth.json` with restrictive permissions; it is never written to the repository. The backend API is protected after setup. An expired bearer token clears the browser session and returns the UI to the sign-in screen. For LAN/remote access, continue to use a VPN or authenticated reverse proxy and explicitly configure allowed CORS origins. Site snapshots are stored locally under the platform state directory (or `WIFI_ANALYZER_HISTORY_DB` when set), with restrictive file permissions, a 90-day default retention window and a 1,000-snapshot per-site cap.
 
 ## Important measurement caveats
 

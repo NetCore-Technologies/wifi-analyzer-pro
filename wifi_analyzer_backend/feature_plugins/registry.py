@@ -161,6 +161,7 @@ FEATURE_MODULES = (
     "feature_155_site_topology_gateway_path_audit",
     "feature_156_site_radio_configuration_audit",
     "feature_157_site_topology_visualisation",
+    "feature_158_site_discovery_history_snapshot",
 )
 
 @lru_cache(maxsize=1)

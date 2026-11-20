@@ -98,6 +98,9 @@ The local HTTP service exposes:
 | `POST /api/auth/logout` | Revoke the current bearer session |
 | `GET /api/features` | Authenticated catalogue of the 157 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
+| `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
+| `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
+| `GET /api/sites/history/{id}` | Read one saved site snapshot |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.

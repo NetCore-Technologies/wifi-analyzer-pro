@@ -8,7 +8,7 @@ Then open:  http://<pi-ip>:199
 
 import sys, os, json, platform, subprocess, re, time, mimetypes
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, parse_qs
 
 # Runtime dependencies must be installed by the installer or bundled by PyInstaller.
 # Never mutate the user's Python environment when the application starts.
@@ -17,9 +17,11 @@ import psutil
 if __package__:
     from .auth import AuthManager
     from .feature_plugins import catalog as feature_catalog, run as run_feature
+    from .site_history import DuplicateSnapshotError, SiteHistoryStore
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from feature_plugins import catalog as feature_catalog, run as run_feature
+    from site_history import DuplicateSnapshotError, SiteHistoryStore
 
 OS = platform.system()
 APP_VERSION = "1.0.7"
@@ -32,6 +34,7 @@ CORS_ORIGINS = {
 } or DEFAULT_CORS_ORIGINS
 
 AUTH = AuthManager()
+HISTORY = SiteHistoryStore()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_wifi_iface():
@@ -664,7 +667,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        path = urlparse(self.path).path
+        request_url = urlparse(self.path)
+        path = request_url.path
         if path == "/api/auth/status":
             self.send_json(AUTH.status(self.bearer_token()))
             return
@@ -707,7 +711,42 @@ class Handler(BaseHTTPRequestHandler):
             "/health": lambda: {"status": "ok", "version": APP_VERSION, "os": OS, "mode": "demo" if DEMO_MODE else "live"},
         }
         try:
-            if path in api_routes:
+            if path == "/api/sites/history":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
+                def single_parameter(name):
+                    values = params.get(name, [])
+                    if len(values) > 1:
+                        raise ValueError(f"{name} may be supplied only once")
+                    return values[0] if values else None
+                raw_limit = single_parameter("limit")
+                raw_before_id = single_parameter("before_id")
+                raw_site_id = single_parameter("site_id")
+                try:
+                    limit = 50 if raw_limit is None else int(raw_limit)
+                    before_id = None if raw_before_id is None else int(raw_before_id)
+                except ValueError as error:
+                    raise ValueError("limit and before_id must be integers") from error
+                snapshots = HISTORY.list(site_id=raw_site_id, limit=limit, before_id=before_id)
+                self.send_json({
+                    "snapshots": snapshots,
+                    "next_before_id": snapshots[-1]["id"] if len(snapshots) == limit else None,
+                })
+            elif path.startswith("/api/sites/history/"):
+                identifier = unquote(path[len("/api/sites/history/"):])
+                if not identifier or "/" in identifier:
+                    self.send_json({"error": "Snapshot not found"}, 404)
+                    return
+                try:
+                    snapshot_id = int(identifier)
+                except ValueError:
+                    self.send_json({"error": "Snapshot not found"}, 404)
+                    return
+                snapshot = HISTORY.get(snapshot_id)
+                if snapshot is None:
+                    self.send_json({"error": "Snapshot not found"}, 404)
+                else:
+                    self.send_json({"snapshot": snapshot})
+            elif path in api_routes:
                 self.send_json(api_routes[path]())
             elif path.startswith("/api/"):
                 self.send_json({"error": "Not found"}, 404)
@@ -715,6 +754,8 @@ class Handler(BaseHTTPRequestHandler):
                 serve_static(self, path)
         except (BrokenPipeError, ConnectionResetError):
             return
+        except ValueError as error:
+            self.send_json({"error": str(error)}, 400)
         except Exception as error:
             print(f"[ERROR] {path}: {error}")
             if not self.wfile.closed:
@@ -758,6 +799,25 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 401)
                 return
             self.send_json({"token": token, "status": AUTH.status(token)})
+            return
+
+        if path == "/api/sites/history":
+            if not self.require_auth():
+                return
+            try:
+                prepared = run_feature("site_discovery_history_snapshot", payload)["result"]
+                saved = HISTORY.record(prepared)
+            except DuplicateSnapshotError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception as error:
+                print(f"[HISTORY ERROR] {error}")
+                self.send_json({"error": "History storage failed"}, 500)
+                return
+            self.send_json({"snapshot": saved}, 201)
             return
 
         if path.startswith("/api/features/"):

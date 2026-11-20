@@ -205,19 +205,25 @@ PAYLOADS = {
             {"from_ap_id":"missing","to_ap_id":"ap-a","relationship":"wired_uplink"}
         ]
     },
-
+,
+    "site_discovery_history_snapshot": {
+        "site_id": "home",
+        "captured_at": "2026-11-20T10:00:00+11:00",
+        "access_points": [{"ap_id":"ap-hall","name":"Hall AP"}],
+        "links": []
+    }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_fifty_seven_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_fifty_eight_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 157)
-        self.assertEqual(len(set(FEATURE_MODULES)), 157)
-        self.assertEqual(count(), 157)
-        self.assertEqual(len(entries), 157)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 157)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 158)])
+        self.assertEqual(len(FEATURE_MODULES), 158)
+        self.assertEqual(len(set(FEATURE_MODULES)), 158)
+        self.assertEqual(count(), 158)
+        self.assertEqual(len(entries), 158)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 158)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 159)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -702,6 +708,29 @@ class FeatureCatalogTests(unittest.TestCase):
             run("site_topology_visualisation", {
                 **base,
                 "links": [{"from_ap_id": "gw", "to_ap_id": "other", "relationship": "invented"}],
+            })
+
+    def test_site_discovery_history_snapshot_normalises_site_and_timestamp(self):
+        result = run("site_discovery_history_snapshot", {
+            "site_id": " home ",
+            "captured_at": "2026-11-20T10:00:00+11:00",
+            "access_points": [{"ap_id": "ap-1", "name": "Hall"}],
+            "links": [],
+        })["result"]
+        self.assertEqual(result["site_id"], "home")
+        self.assertEqual(result["captured_at"], "2026-11-19T23:00:00+00:00")
+        self.assertEqual(result["access_points"][0]["site_id"], "home")
+        self.assertEqual(result["access_point_count"], 1)
+
+    def test_site_discovery_history_snapshot_rejects_cross_site_aps_and_naive_timestamps(self):
+        base = {"site_id": "home", "captured_at": "2026-11-20T10:00:00Z"}
+        with self.assertRaisesRegex(ValueError, "different site"):
+            run("site_discovery_history_snapshot", {
+                **base, "access_points": [{"ap_id": "ap-1", "site_id": "branch"}],
+            })
+        with self.assertRaisesRegex(ValueError, "timezone"):
+            run("site_discovery_history_snapshot", {
+                "site_id": "home", "captured_at": "2026-11-20T10:00:00",
             })
 
 if __name__ == "__main__":
