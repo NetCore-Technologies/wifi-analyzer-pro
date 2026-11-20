@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 MAX_CAPTURE_BYTES = 512 * 1024
 MAX_ENCODED_BYTES = ((MAX_CAPTURE_BYTES + 2) // 3) * 4
 MAX_PACKETS = 5000
+MAX_INTERFACES = 128
+MAX_SECTIONS = 64
 MAX_SNAPLEN = 262144
 MAX_FRAME_BYTES = 262144
 
@@ -453,6 +455,8 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
                 raise ValueError("PCAPNG section version 1.0 is required")
             _pcapng_options(capture, cursor + 24, block_end - 4, byteorder)
             section_count += 1
+            if section_count > MAX_SECTIONS:
+                raise ValueError(f"PCAPNG capture exceeds the {MAX_SECTIONS}-section limit")
             section_orders.append(byteorder)
             interfaces = []
             cursor = block_end
@@ -483,6 +487,8 @@ def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
             options = _pcapng_options(capture, cursor + 16, block_end - 4, byteorder)
             denominator, resolution_name, offset_seconds = _pcapng_interface_options(options, byteorder)
             interface_id = len(interfaces)
+            if interface_id >= MAX_INTERFACES:
+                raise ValueError(f"PCAPNG capture exceeds the {MAX_INTERFACES}-interface-per-section limit")
             interface = {
                 "interface_id": interface_id,
                 "link_type": link_type,
