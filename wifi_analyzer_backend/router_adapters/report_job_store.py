@@ -313,6 +313,21 @@ class RouterReportJobStore:
             row = connection.execute("SELECT * FROM router_report_jobs WHERE id=?", (job_id,)).fetchone()
             return self._job(row)
 
+    def get_leased_job(self, job_id, lease_id, *, now=None):
+        """Return the authoritative job only while the supplied lease is active."""
+        job_id = self._job_id(job_id)
+        lease_id = self._lease_id(lease_id)
+        moment = self._timestamp(now, "now") if now is not None else datetime.now(timezone.utc)
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM router_report_jobs "
+                "WHERE id=? AND status='leased' AND lease_id=? AND lease_expires_at>?",
+                (job_id, lease_id, moment.isoformat()),
+            ).fetchone()
+            if row is None:
+                raise ReportJobNotFoundError("job lease is missing, expired or no longer owned")
+            return self._job(row, include_bundle=True)
+
     @staticmethod
     def _job_id(value):
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
