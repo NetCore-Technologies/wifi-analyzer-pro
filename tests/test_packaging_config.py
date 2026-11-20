@@ -1,6 +1,7 @@
 """Regression checks for standalone packaging of dynamically loaded plugins."""
 from __future__ import annotations
 
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -27,6 +28,13 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         self.assertIn('rm -rf "$SMOKE_DIR"', arm64_script)
         self.assertIn("smoke_test_frozen_features.py", arm64_script)
         self.assertIn("WIFI_ANALYZER_SMOKE_URL", smoke_helper)
+        syntax = subprocess.run(
+            ["bash", "-n", str(ROOT / "wifi_analyzer_backend" / "build_arm64_binary.sh")],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
 
     def test_release_smoke_test_executes_dynamic_feature_plugins_while_server_is_running(self):
         release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
