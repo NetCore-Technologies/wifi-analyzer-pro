@@ -176,6 +176,7 @@ FEATURE_MODULES = (
     "feature_173_mikrotik_snapshot_normalizer",
     "feature_174_router_snapshot_drift_report",
     "feature_175_router_fleet_health_audit",
+    "feature_176_router_subnet_overlap_audit",
 )
 
 @lru_cache(maxsize=1)

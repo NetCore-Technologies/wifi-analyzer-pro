@@ -378,6 +378,25 @@ PAYLOADS = {
             "ip_subnet": "192.0.2.0/24"
         }]
     },
+    "router_subnet_overlap_audit": {
+        "snapshots": [
+            {
+                "router_id": "openwrt-gateway", "site_id": "home",
+                "snapshot": {
+                    "adapter_id": "openwrt", "captured_at": "2026-11-20T10:00:00Z",
+                    "interfaces": [{"interface": "lan", "ipv4_addresses": ["192.0.2.1/24"]}]
+                }
+            },
+            {
+                "router_id": "unifi-controller", "site_id": "home",
+                "snapshot": {
+                    "adapter_id": "unifi", "captured_at": "2026-11-20T10:00:00Z",
+                    "controller": {"hostname": "unifi.home.local"},
+                    "networks": [{"id": "lan", "name": "LAN", "ip_subnet": "192.0.2.0/24"}]
+                }
+            }
+        ]
+    },
     "router_fleet_health_audit": {
         "now": "2026-11-20T10:00:00Z",
         "snapshots": [{
@@ -449,14 +468,14 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 172)
-        self.assertEqual(len(set(FEATURE_MODULES)), 172)
-        self.assertEqual(count(), 172)
-        self.assertEqual(len(entries), 172)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 172)
+        self.assertEqual(len(FEATURE_MODULES), 173)
+        self.assertEqual(len(set(FEATURE_MODULES)), 173)
+        self.assertEqual(count(), 173)
+        self.assertEqual(len(entries), 173)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 173)
         self.assertEqual(
             [entry["id"] for entry in entries],
-            [f"F{i:03d}" for i in range(1, 169)] + ["F172", "F173", "F174", "F175"],
+            [f"F{i:03d}" for i in range(1, 169)] + ["F172", "F173", "F174", "F175", "F176"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):
