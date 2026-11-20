@@ -148,6 +148,10 @@ FEATURE_MODULES = (
     "feature_142_ap_topology_relationships",
     "feature_143_site_network_segment_correlation",
     "feature_144_floor_plan_anchor_validation",
+    "feature_145_site_inventory_snapshot_diff",
+    "feature_146_site_network_segment_capacity",
+    "feature_147_site_gateway_redundancy_audit",
+    "feature_148_floorplan_zone_assignment",
 )
 
 @lru_cache(maxsize=1)
