@@ -101,7 +101,7 @@ class RouterScheduledReportPlannerTests(unittest.TestCase):
 
     def test_dst_ambiguous_fall_time_selects_earlier_or_later_fold(self):
         result = run({
-            "now": "2026-10-31T00:00:00Z",
+            "now": "2026-10-31T12:00:00Z",
             "schedules": [
                 {
                     "schedule_id": "fold-earlier", "report_id": "dst",
@@ -169,7 +169,7 @@ class RouterScheduledReportPlannerTests(unittest.TestCase):
                 "frequency": "daily", "local_time": "09:00"}
         with self.assertRaisesRegex(ValueError, "timezone offset"):
             run({"now": "2026-11-20T00:00:00", "schedules": [base]})
-        with self.assertRaisesRegex(ValueError, "weekday integers"):
+        with self.assertRaisesRegex(ValueError, "entries must be integers from 0"):
             run({"now": "2026-11-20T00:00:00Z", "schedules": [
                 {**base, "frequency": "weekly", "weekdays": ["Monday"]},
             ]})
