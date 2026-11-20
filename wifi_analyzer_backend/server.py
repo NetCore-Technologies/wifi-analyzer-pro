@@ -993,8 +993,8 @@ class Handler(BaseHTTPRequestHandler):
                     response = AUTH.update_user(
                         username,
                         role=role,
-                        site_ids=payload.get("site_ids", []),
-                        update_sites=(role == "viewer"),
+                        site_ids=payload.get("site_ids", ["*"] if role == "admin" else []),
+                        update_sites=True,
                     )
                 elif action == "sites":
                     response = AUTH.update_user(
