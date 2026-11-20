@@ -126,6 +126,29 @@ class RouterReportJobStoreTests(unittest.TestCase):
         self.assertNotIn("secret", str(completed["result"]))
         self.assertIsNone(completed["lease_owner"])
 
+    def test_get_leased_job_requires_matching_unexpired_lease(self):
+        self.store.enqueue(job(), now=NOW)
+        claimed = self.store.claim_due(
+            "worker-a", now=NOW + timedelta(minutes=1), lease_seconds=60,
+        )["jobs"][0]
+        current = self.store.get_leased_job(
+            claimed["id"], claimed["lease_id"],
+            now=NOW + timedelta(minutes=1, seconds=1),
+        )
+        self.assertEqual(current["id"], claimed["id"])
+        self.assertEqual(current["lease_id"], claimed["lease_id"])
+        self.assertEqual(current["report_bundle"]["report_id"], "weekly-home")
+        with self.assertRaises(ReportJobNotFoundError):
+            self.store.get_leased_job(
+                claimed["id"], "00000000-0000-4000-8000-000000000000",
+                now=NOW + timedelta(minutes=1, seconds=1),
+            )
+        with self.assertRaises(ReportJobNotFoundError):
+            self.store.get_leased_job(
+                claimed["id"], claimed["lease_id"],
+                now=NOW + timedelta(minutes=2, seconds=1),
+            )
+
     def test_expired_lease_is_recovered_and_not_completed_by_stale_worker(self):
         self.store.enqueue(job(), now=NOW)
         first = self.store.claim_due("worker-a", now=NOW + timedelta(minutes=1), lease_seconds=15)["jobs"][0]
