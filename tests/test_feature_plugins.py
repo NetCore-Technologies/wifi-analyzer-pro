@@ -251,19 +251,35 @@ PAYLOADS = {
                 }
             }
         ]
+    },
+
+    "consolidated_site_audit_report": {
+        "sites": [{
+            "site_id": "home",
+            "access_points": [
+                {"ap_id":"gw","name":"Gateway","bssid":"00:11:22:33:44:55","band":"5GHz"},
+                {"ap_id":"ap-1","name":"Hall AP","bssid":"00:11:22:33:44:66","band":"2.4GHz"}
+            ],
+            "links": [{"from_ap_id":"gw","to_ap_id":"ap-1","relationship":"wired_uplink"}],
+            "gateway_ap_ids": ["gw"],
+            "radios": [{"radio_id":"ap-1-radio","site_id":"home","band":"5GHz","channel_width_mhz":40,"security":"WPA2","tx_power_dbm":30}],
+            "radio_standards": [{"site_id":"home","band":"5GHz","channel_width_mhz":80,"security":"WPA3","min_tx_power_dbm":5,"max_tx_power_dbm":23}],
+            "gateways": [{"gateway_id":"gw-a","site_id":"home","group_id":"edge","protocol":"vrrp","ip":"192.168.1.1","state":"active"}],
+            "segments": [{"segment_id":"main","site_id":"home","cidr":"192.168.1.0/24","in_use_count":240,"reserved_count":5}]
+        }]
     }
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_fifty_nine_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 159)
-        self.assertEqual(len(set(FEATURE_MODULES)), 159)
-        self.assertEqual(count(), 159)
-        self.assertEqual(len(entries), 159)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 159)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 160)])
+        self.assertEqual(len(FEATURE_MODULES), 160)
+        self.assertEqual(len(set(FEATURE_MODULES)), 160)
+        self.assertEqual(count(), 160)
+        self.assertEqual(len(entries), 160)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 160)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 161)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -800,6 +816,35 @@ class FeatureCatalogTests(unittest.TestCase):
                 "sites": [
                     {"site_id": "home", "current": {"snapshot": {"site_id": "home", "access_points": [], "links": []}}},
                     {"site_id": "home", "current": {"snapshot": {"site_id": "home", "access_points": [], "links": []}}},
+                ]
+            })
+
+    def test_consolidated_site_audit_reuses_site_tools_and_aggregates_findings(self):
+        result = run("consolidated_site_audit_report", PAYLOADS["consolidated_site_audit_report"])["result"]
+        self.assertEqual(result["summary"]["site_count"], 1)
+        self.assertEqual(result["summary"]["access_point_count"], 2)
+        checks = result["sites"][0]["checks"]
+        self.assertEqual(checks["inventory"]["status"], "complete")
+        self.assertEqual(checks["topology_relationships"]["status"], "complete")
+        self.assertEqual(checks["gateway_paths"]["status"], "complete")
+        self.assertEqual(checks["radio_configuration"]["result"]["deviation_count"], 3)
+        self.assertEqual(checks["gateway_redundancy"]["status"], "complete")
+        self.assertEqual(checks["segment_capacity"]["status"], "complete")
+        self.assertGreaterEqual(result["summary"]["warning_count"], 1)
+        self.assertEqual(result["cross_site_inventory"]["status"], "complete")
+
+    def test_consolidated_site_audit_marks_missing_evidence_not_run_and_rejects_duplicate_sites(self):
+        result = run("consolidated_site_audit_report", {
+            "sites": [{"site_id": "home", "access_points": [{"name": "AP without ID"}]}]
+        })["result"]
+        self.assertEqual(result["sites"][0]["checks"]["topology_redundancy"]["status"], "not_run")
+        self.assertEqual(result["sites"][0]["checks"]["gateway_paths"]["status"], "not_run")
+        self.assertGreater(result["summary"]["not_run_check_count"], 0)
+        with self.assertRaisesRegex(ValueError, "site_id values must be unique"):
+            run("consolidated_site_audit_report", {
+                "sites": [
+                    {"site_id": "home", "access_points": []},
+                    {"site_id": "home", "access_points": []},
                 ]
             })
 

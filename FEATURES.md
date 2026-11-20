@@ -1,4 +1,4 @@
-# 159 WiFi Analyzer Pro feature tools
+# 160 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -166,6 +166,7 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 157 | Interactive site topology visualisation (`site_topology_visualisation`) | Site inventory | Create deterministic, per-site AP layers and typed physical/RF/cross-site links for interactive inspection in the Workbench. |
 | 158 | Persistent site discovery history snapshot (`site_discovery_history_snapshot`) | Site inventory | Validate bounded timestamped AP/topology snapshots before saving to a local SQLite history database with per-site retention. |
 | 159 | Site-to-site change report (`site_to_site_change_report`) | Site inventory | Compare each site’s latest two stored snapshots, report AP/topology drift, and flag BSSID reuse across sites. |
+| 160 | Consolidated site audit report (`consolidated_site_audit_report`) | Site inventory | Combine inventory, topology, gateway, radio standards, subnet capacity, cross-site inventory and optional saved-history results into one evidence-based report. |
 
 
 ## Authentication and UI

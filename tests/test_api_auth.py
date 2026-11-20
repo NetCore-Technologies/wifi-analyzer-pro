@@ -72,14 +72,15 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 159)
-        self.assertEqual(len(catalog["features"]), 159)
+        self.assertEqual(catalog["count"], 160)
+        self.assertEqual(len(catalog["features"]), 160)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_visualisation", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_discovery_history_snapshot", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_to_site_change_report", {item["slug"] for item in catalog["features"]})
+        self.assertIn("consolidated_site_audit_report", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -254,6 +255,25 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, response = self.request("GET", f"/api/sites/history/report?site_ids={too_many}", token=token)
         self.assertEqual(status, 400)
         self.assertIn("no more than 20", response["error"])
+
+    def test_consolidated_site_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, report = self.request("POST", "/api/sites/audit", {
+            "sites": [{
+                "site_id": "home",
+                "access_points": [{"ap_id": "gw", "bssid": "00:11:22:33:44:55"}],
+                "links": [],
+            }]
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(report["feature"], "F160")
+        self.assertEqual(report["result"]["summary"]["site_count"], 1)
+
+    def test_consolidated_site_audit_requires_authentication(self):
+        status, response = self.request("POST", "/api/sites/audit", {"sites": []})
+        self.assertEqual(status, 401)
+        self.assertIn("Authentication required", response["error"])
 
 if __name__ == "__main__":
     unittest.main()

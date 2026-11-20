@@ -163,6 +163,7 @@ FEATURE_MODULES = (
     "feature_157_site_topology_visualisation",
     "feature_158_site_discovery_history_snapshot",
     "feature_159_site_to_site_change_report",
+    "feature_160_consolidated_site_audit_report",
 )
 
 @lru_cache(maxsize=1)

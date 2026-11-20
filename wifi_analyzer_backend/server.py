@@ -819,6 +819,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"token": token, "status": AUTH.status(token)})
             return
 
+        if path == "/api/sites/audit":
+            if not self.require_auth():
+                return
+            try:
+                report = run_feature("consolidated_site_audit_report", payload)
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception as error:
+                print(f"[SITE AUDIT ERROR] {error}")
+                self.send_json({"error": "Site audit failed"}, 500)
+                return
+            self.send_json(report)
+            return
+
         if path == "/api/sites/history":
             if not self.require_auth():
                 return

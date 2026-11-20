@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiFetch, apiBase } from '../lib/api.js';
 import SiteTopologyGraph from './SiteTopologyGraph.jsx';
 import SiteChangeReport from './SiteChangeReport.jsx';
+import SiteAuditReport from './SiteAuditReport.jsx';
 import { Play, Search, RefreshCw, Braces, Wifi, AlertCircle } from 'lucide-react';
 
 const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
@@ -100,7 +101,7 @@ export default function FeatureWorkbench() {
           {selected === 'site_to_site_change_report' ? <button onClick={loadStoredHistoryReport} disabled={busy} style={{ marginTop: 10, marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 7, background: '#111827', color: '#a5f3fc', border: '1px solid #256779', borderRadius: 7, padding: '9px 12px', fontSize: 11, cursor: busy ? 'wait' : 'pointer' }}>Build report from saved history</button> : null}
         </div>
         {error ? <div role="alert" style={{ ...panel, borderColor: '#ef4444', color: '#fca5a5', fontSize: 12 }}><AlertCircle size={14} style={{ verticalAlign: 'middle', marginRight: 6 }}/>{error}</div> : null}
-        {result ? <div style={panel}><div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}><Braces size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: '#06d6f0' }}/>Result</div>{selected === 'site_topology_visualisation' ? <SiteTopologyGraph data={result.result} /> : selected === 'site_to_site_change_report' ? <SiteChangeReport data={result.result} /> : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', margin: 0, color: '#cbd5e1', fontSize: 11, lineHeight: 1.55 }}>{JSON.stringify(result, null, 2)}</pre>}</div> : null}
+        {result ? <div style={panel}><div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}><Braces size={14} style={{ verticalAlign: 'middle', marginRight: 6, color: '#06d6f0' }}/>Result</div>{selected === 'site_topology_visualisation' ? <SiteTopologyGraph data={result.result} /> : selected === 'site_to_site_change_report' ? <SiteChangeReport data={result.result} /> : selected === 'consolidated_site_audit_report' ? <SiteAuditReport data={result.result} /> : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 420, overflow: 'auto', margin: 0, color: '#cbd5e1', fontSize: 11, lineHeight: 1.55 }}>{JSON.stringify(result, null, 2)}</pre>}</div> : null}
       </section>
     </div>
   );
