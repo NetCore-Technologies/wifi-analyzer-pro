@@ -145,6 +145,7 @@ FEATURE_MODULES = (
     "feature_139_association_rejection_summary",
     "feature_140_connection_health_evidence",
     "feature_141_site_inventory_snapshot",
+    "feature_142_ap_topology_relationships",
 )
 
 @lru_cache(maxsize=1)
