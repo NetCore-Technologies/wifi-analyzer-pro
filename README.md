@@ -123,7 +123,9 @@ The local HTTP service exposes:
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.
 
-The `unifi_snapshot_normalizer` and `mikrotik_snapshot_normalizer` features accept caller-supplied controller/router exports through their `/api/features/{slug}` endpoints. They validate inventory, radio, client, address and network records and omit unknown and credential-like fields. These are offline imports, not live controller integrations.
+The SYSTEM → Router Agents page provides the authenticated Router Agent Console for enrolment, least-privilege capability selection, heartbeat health, snapshot drift, credential rotation/revocation and negotiation audit. It does not reveal stored credentials.
+
+The `unifi_snapshot_normalizer` (F172) and `mikrotik_snapshot_normalizer` (F173) features accept caller-supplied controller/router exports through their `/api/features/{slug}` endpoints. They validate inventory, radio, client, address and network records and omit unknown and credential-like fields. These are offline imports, not live controller integrations.
 
 For router-side, read-only telemetry collection, see the [OpenWrt agent installation and service guide](agent/README.md). The agent uses an enrolled scoped token, TLS verification, a private on-disk retry spool and the idempotent snapshot-delivery endpoint. Optional uptime, load-average, memory and swap telemetry is collected only when the enrolled credential grants `system.health`.
 

@@ -1,4 +1,4 @@
-# 170 WiFi Analyzer Pro feature tools (F001–F168, F171–F172)
+# 170 WiFi Analyzer Pro feature tools (F001–F168, F172–F173)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -179,7 +179,7 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 
 ## Authentication and UI
 
-The app now has first-run local password setup, login, logout, expiring in-memory bearer sessions, failed-login lockout, a searchable feature workbench, and authenticated local site-history endpoints backed by SQLite. The password verifier is stored under `~/.config/wifi-analyzer-pro/auth.json` with restrictive permissions; it is never written to the repository. The backend API is protected after setup. An expired bearer token clears the browser session and returns the UI to the sign-in screen. For LAN/remote access, continue to use a VPN or authenticated reverse proxy and explicitly configure allowed CORS origins. Site snapshots are stored locally under the platform state directory (or `WIFI_ANALYZER_HISTORY_DB` when set), with restrictive file permissions, a 90-day default retention window and a 1,000-snapshot per-site cap.
+The app now has first-run local password setup, login, logout, expiring in-memory bearer sessions, failed-login lockout, a searchable feature workbench, authenticated local site-history endpoints backed by SQLite, and a Router Agent Console for OpenWrt enrolment, health, credential lifecycle, negotiation audit, inventory and drift. The password verifier is stored under `~/.config/wifi-analyzer-pro/auth.json` with restrictive permissions; it is never written to the repository. The backend API is protected after setup. An expired bearer token clears the browser session and returns the UI to the sign-in screen. The Router Agent Console uses this existing administrator session; it never lists stored agent token hashes, and a newly issued agent token is displayed once in the current page session. For LAN/remote access, continue to use a VPN or authenticated reverse proxy and explicitly configure allowed CORS origins. Site snapshots are stored locally under the platform state directory (or `WIFI_ANALYZER_HISTORY_DB` when set), with restrictive file permissions, a 90-day default retention window and a 1,000-snapshot per-site cap.
 
 ## Important measurement caveats
 
@@ -189,6 +189,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 - Vendor identification uses a small bundled OUI subset and may return Unknown.
 - DNS and TLS probes perform read-only lookups/connections to the host provided in the tool input.
 
-| 171 | UniFi controller snapshot normalizer (`unifi_snapshot_normalizer`) | Router integrations | Import bounded, caller-supplied UniFi Network exports into the common AP, radio, client and network schema; omit secrets and make no controller connection. |
-
-| 172 | MikroTik RouterOS snapshot normalizer (`mikrotik_snapshot_normalizer`) | Router integrations | Import bounded RouterOS exports covering board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; omit secrets and make no router connection. |
+| F172 | UniFi controller snapshot normalizer (`unifi_snapshot_normalizer`) | Router integrations | Import bounded, caller-supplied UniFi Network exports into the common AP, radio, client and network schema; omit secrets and make no controller connection. |
+| F173 | MikroTik RouterOS snapshot normalizer (`mikrotik_snapshot_normalizer`) | Router integrations | Import bounded RouterOS exports covering board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; omit secrets and make no router connection. |

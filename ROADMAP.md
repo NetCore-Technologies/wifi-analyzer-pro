@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 170 distinct built-in feature tools (F001–F168 and F171–F172; F169–F170 are OpenWrt agent integration deliverables), each in its own module with a stable slug and metadata.
+- ✅ 170 distinct callable feature modules (F001–F168 and F172–F173), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
@@ -66,7 +66,7 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 | ✅ | F101–F120 | Shipped: same-SSID band visibility, roaming evidence/timelines, channel-width overlap, DFS/PSC planning, Wi-Fi 7 EHT/MLO and PMF/regulatory audits | 2026-11-20 | Implemented | F001–F100 registry; 20 module-level test payloads |
 | ✅ | F121–F140 | Shipped: client association inventory, airtime/throughput fairness, QoS/DSCP, retry/PHY checks, 802.11k/v/r, TWT, DHCP/DNS/gateway checks and association diagnostics | 2026-11-20 | Implemented | F001–F120; supplied AP/controller and client measurement records |
 | 🚧 | F141–F160 | F141–F160 shipped: site inventory snapshots/comparisons, AP topology relationships and gateway-path audits, subnet correlation/capacity, gateway redundancy, floor-plan anchors/zones, topology redundancy/diffs/history, AP freshness, channel-reuse and radio-configuration standards audits, interactive topology visualisation, persistent site discovery history, stored site-to-site change reports, and consolidated site audit reporting; all deliverables in this wave are shipped | 2027-02-26 | 20 features shipped; 0 remains | SQLite history; consented local discovery |
-| 🚧 | F161–F180 | F161–F172 shipped: versioned OpenWrt read-only agent with scope-gated system-health telemetry and replay-safe snapshots; bounded credential-free UniFi and MikroTik RouterOS export normalizers; remaining: deeper verified controller interoperability and operator workflows | 2027-04-09 | 12 deliverables shipped; 8 remain | Adapter contract tests; common inventory schema |
+| 🚧 | F161–F180 | F161–F173 shipped: versioned OpenWrt read-only agent with scope-gated system-health telemetry and replay-safe snapshots; authenticated Router Agent Console for enrolment, health, credential lifecycle and audit; bounded credential-free UniFi and MikroTik RouterOS export normalizers; remaining: deeper verified controller interoperability and operator workflows | 2027-04-09 | 13 deliverables shipped; 7 remain | Adapter contract tests; common inventory schema |
 | 3 | F181–F200 | Scheduled reports, alert policies, webhook delivery, report comparison and backup/restore | 2027-05-07 | 4–5 weeks | Waves 2–4; encrypted local settings |
 
 ### Longer-range direction (F201–F1100)

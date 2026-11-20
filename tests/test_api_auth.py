@@ -342,7 +342,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             "networks": [{"name": "Office", "vlan_enabled": False, "vlan": 0}],
         }, token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(result["feature"], "F171")
+        self.assertEqual(result["feature"], "F172")
         self.assertEqual(result["result"]["adapter_id"], "unifi")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
@@ -359,7 +359,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             "vlans": [{"name": "vlan20", "interface": "bridge", "vlan_id": "20"}],
         }, token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(result["feature"], "F172")
+        self.assertEqual(result["feature"], "F173")
         self.assertEqual(result["result"]["adapter_id"], "mikrotik")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertEqual(result["result"]["vlans"][0]["vlan_id"], 20)

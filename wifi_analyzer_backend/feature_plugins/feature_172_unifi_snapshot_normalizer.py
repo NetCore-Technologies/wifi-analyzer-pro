@@ -9,7 +9,7 @@ def run(payload: dict) -> dict:
 
 
 FEATURE = {
-    "id": "F171",
+    "id": "F172",
     "slug": "unifi_snapshot_normalizer",
     "name": "UniFi controller snapshot normalizer",
     "category": "Router integrations",

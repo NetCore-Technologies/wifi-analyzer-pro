@@ -9,7 +9,7 @@ def run(payload: dict) -> dict:
 
 
 FEATURE = {
-    "id": "F172",
+    "id": "F173",
     "slug": "mikrotik_snapshot_normalizer",
     "name": "MikroTik RouterOS snapshot normalizer",
     "category": "Router integrations",
