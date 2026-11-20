@@ -746,7 +746,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path.startswith("/api/"):
             permission = "diagnostics.read"
-            if path.startswith("/api/reports/jobs"):
+            if path.startswith("/api/capture/"):
+                permission = "diagnostics.run"
+            elif path.startswith("/api/reports/jobs"):
                 permission = "reports.read"
             elif path in {"/api/agents/credentials", "/api/agents/negotiations"}:
                 permission = "agents.manage"
