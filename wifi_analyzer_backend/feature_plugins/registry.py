@@ -190,6 +190,7 @@ FEATURE_MODULES = (
     "feature_187_router_webhook_egress_policy_verifier",
     "feature_188_router_scheduled_report_job_intake",
     "feature_189_router_scheduled_report_delivery_package",
+    "feature_190_router_webhook_subscription_router",
 )
 
 @lru_cache(maxsize=1)

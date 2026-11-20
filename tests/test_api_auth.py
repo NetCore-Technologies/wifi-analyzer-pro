@@ -95,8 +95,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 186)
-        self.assertEqual(len(catalog["features"]), 186)
+        self.assertEqual(catalog["count"], 187)
+        self.assertEqual(len(catalog["features"]), 187)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -422,6 +422,36 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["summary"]["event_count"], 1)
         self.assertNotIn("signing_secret", str(result))
         self.assertNotIn("api-test-secret", str(result))
+
+    def test_webhook_subscription_router_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_webhook_subscription_router", {
+            "subscriptions": [{
+                "subscription_id": "home-alerts",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "key_id": "webhook-key-01",
+                "event_types": ["router.health"],
+                "minimum_severity": "warning",
+                "site_allowlist": ["home"],
+                "maximum_events_per_batch": 25,
+            }],
+            "events": [{
+                "event_id": "a" * 64,
+                "event_type": "router.health",
+                "severity": "warning",
+                "occurred_at": "2026-11-20T10:00:00Z",
+                "site_id": "home",
+                "router_id": "openwrt-home",
+                "summary": "Router health warning",
+                "attributes": {"observed": 90, "threshold": 85},
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F190")
+        self.assertEqual(result["result"]["summary"]["batch_count"], 1)
+        self.assertEqual(result["result"]["batches"][0]["subscription_id"], "home-alerts")
 
     def test_scheduled_report_delivery_package_uses_active_job_lease_and_approved_egress(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

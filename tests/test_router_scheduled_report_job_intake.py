@@ -1,6 +1,8 @@
 """Tests for scheduled report job intake and payload identity."""
 from __future__ import annotations
 
+import hashlib
+import json
 import unittest
 from datetime import datetime, timezone
 
