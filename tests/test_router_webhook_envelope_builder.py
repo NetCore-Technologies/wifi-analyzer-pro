@@ -205,7 +205,7 @@ class RouterWebhookEnvelopeBuilderTests(unittest.TestCase):
             run({**base, "events": [{**event, "attributes": {"observed": float("nan")}}]})
         with self.assertRaisesRegex(ValueError, "from 1 to 500"):
             run({**base, "events": []})
-        with self.assertRaisesRegex(ValueError, "no more than 500"):
+        with self.assertRaisesRegex(ValueError, "from 1 to 500"):
             run({**base, "events": [dict(event, event_id=f"event-{i}") for i in range(501)]})
 
 
