@@ -111,18 +111,38 @@ PAYLOADS = {
     "validate_settings": {"refresh_interval_seconds": 10, "scan_timeout_seconds": 20, "max_history": 500},
     "health_report": {"networks": SAMPLE},
     "wifi_generation_classify": {"capabilities": {"he": True}, "band": "6GHz"},
+    "same_ssid_band_presence": {"networks":[{"ssid":"Lab","bssid":"00:11:22:33:44:55","band":"2.4GHz"},{"ssid":"Lab","bssid":"00:11:22:33:44:66","band":"5GHz"}]},
+    "band_steering_evidence": {"networks":[{"ssid":"Lab","band":"2.4GHz","rssi":-55},{"ssid":"Lab","band":"5GHz","rssi":-62}]},
+    "roaming_candidate_ranking": {"networks":[{"ssid":"Lab","bssid":"00:11:22:33:44:55","rssi":-75},{"ssid":"Lab","bssid":"00:11:22:33:44:66","rssi":-60}],"current_bssid":"00:11:22:33:44:55","min_improvement_db":8},
+    "association_roam_events": {"previous":[{"client_mac":"AA:BB:CC:DD:EE:01","ssid":"Lab","bssid":"00:11:22:33:44:55"}],"current":[{"client_mac":"AA:BB:CC:DD:EE:01","ssid":"Lab","bssid":"00:11:22:33:44:66"}]},
+    "roaming_timeline_summary": {"events":[{"client_mac":"AA:BB:CC:DD:EE:01","event":"roamed"},{"client_mac":"AA:BB:CC:DD:EE:01","event":"roamed"}]},
+    "sticky_client_candidates": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","ssid":"Lab","connected_bssid":"00:11:22:33:44:55","connected_rssi_dbm":-80,"alternatives":[{"bssid":"00:11:22:33:44:66","rssi_dbm":-55}]}]},
+    "association_dwell_summary": {"sessions":[{"client_mac":"AA:BB:CC:DD:EE:01","bssid":"00:11:22:33:44:55","connected_at":"2026-11-20T10:00:00Z","disconnected_at":"2026-11-20T10:05:00Z"}]},
+    "roam_latency_summary": {"samples":[{"before_ms":55,"after_ms":35},{"before_ms":50,"after_ms":30}]},
+    "roaming_stability_score": {"events":[{"client_mac":"AA:BB:CC:DD:EE:01","event":"roamed"},{"client_mac":"AA:BB:CC:DD:EE:01","event":"roamed"}],"window_hours":24},
+    "band_occupancy_delta": {"previous":[{"band":"2.4GHz"}],"current":[{"band":"5GHz"},{"band":"5GHz"}]},
+    "channel_width_frequency_range": {"center_frequency_mhz":5975,"width_mhz":80},
+    "frequency_overlap_score": {"a":{"center_frequency_mhz":5975,"width_mhz":80},"b":{"center_frequency_mhz":6015,"width_mhz":80}},
+    "channel_separation_rank": {"candidates":[{"id":"c1","center_frequency_mhz":5180,"width_mhz":20},{"id":"c2","center_frequency_mhz":5500,"width_mhz":20}],"observed":[{"center_frequency_mhz":5180,"width_mhz":20}]},
+    "channel_overlap_pairs": {"channels":[{"id":"a","center_frequency_mhz":5180,"width_mhz":80},{"id":"b","center_frequency_mhz":5220,"width_mhz":80},{"id":"c","center_frequency_mhz":5500,"width_mhz":20}]},
+    "dfs_frequency_intersection": {"center_frequency_mhz":5500,"width_mhz":80},
+    "six_ghz_psc_plan": {"observed_channels":[5,21]},
+    "wifi7_eht_summary": {"capabilities":{"eht":True,"mlo":True,"320mhz":True}},
+    "multi_link_operation_summary": {"links":[{"link_id":0,"band":"5GHz","channel":36,"active":True,"rssi_dbm":-55},{"link_id":1,"band":"6GHz","channel":5,"active":True,"rssi_dbm":-60}]},
+    "pmf_security_audit": {"networks":[{"ssid":"Lab","bssid":"00:11:22:33:44:55","pmf":"required"},{"ssid":"Guest","pmf":"unknown"}]},
+    "regulatory_channel_allowlist_check": {"band":"2.4GHz","allowed_channels":[1,6,11],"networks":[{"ssid":"Lab","band":"2.4GHz","channel":1},{"ssid":"Lab","band":"2.4GHz","channel":14}]},
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 100)
-        self.assertEqual(len(set(FEATURE_MODULES)), 100)
-        self.assertEqual(count(), 100)
-        self.assertEqual(len(entries), 100)
+        self.assertEqual(len(FEATURE_MODULES), 120)
+        self.assertEqual(len(set(FEATURE_MODULES)), 120)
+        self.assertEqual(count(), 120)
+        self.assertEqual(len(entries), 120)
         self.assertEqual(len({entry["slug"] for entry in entries}), 100)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 101)])
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 121)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
