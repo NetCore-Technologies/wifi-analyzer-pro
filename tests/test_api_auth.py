@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 171)
-        self.assertEqual(len(catalog["features"]), 171)
+        self.assertEqual(catalog["count"], 172)
+        self.assertEqual(len(catalog["features"]), 172)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -346,6 +346,33 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["adapter_id"], "unifi")
         self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
         self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
+
+    def test_router_fleet_health_audit_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/router_fleet_health_audit", {
+            "now": "2026-11-20T10:00:00Z",
+            "snapshots": [{
+                "router_id": "mikrotik-office",
+                "site_id": "office",
+                "snapshot": {
+                    "adapter_id": "mikrotik",
+                    "captured_at": "2026-11-20T09:59:00Z",
+                    "resource": {
+                        "cpu_load_pct": 20,
+                        "free_memory_bytes": 800,
+                        "total_memory_bytes": 1000,
+                    },
+                    "interfaces": [{"name": "bridge", "state": "up"}],
+                    "wireless_radios": [{"interface": "wifi1", "state": "up"}],
+                    "associations": [],
+                },
+            }],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F175")
+        self.assertEqual(result["result"]["summary"]["healthy_count"], 1)
+        self.assertEqual(result["result"]["routers"][0]["adapter_id"], "mikrotik")
 
     def test_router_snapshot_drift_report_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 171 independently callable feature modules (F001–F168 and F172–F174; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 172 independently callable feature modules (F001–F168 and F172–F175; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -26,6 +26,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Refuse HTTP redirects in the agent API client so its bearer credential cannot be forwarded to a redirected endpoint.
 - Collect optional OpenWrt uptime, fixed-point load averages, memory and swap counters only when the agent credential negotiates `system.health`; validate and whitelist values before snapshot persistence.
 - Add an authenticated Router Agent Console with OpenWrt enrolment, explicit read-only capability selection, health/heartbeat status, latest inventory and drift, one-time credential display, rotation/revocation controls, and persisted negotiation-audit visibility.
+- Add F175: a multi-vendor router fleet health audit for normalized OpenWrt, UniFi and MikroTik snapshots. It evaluates freshness, measured CPU/memory pressure, down interfaces/radios, offline APs and weak client signals while reporting missing telemetry as unknown.
 - Add F174: a bounded multi-vendor router snapshot drift report for OpenWrt, UniFi and MikroTik. It compares stable interface/radio/client/network identities, reports added/removed/changed records, and emits only allow-listed fields.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.

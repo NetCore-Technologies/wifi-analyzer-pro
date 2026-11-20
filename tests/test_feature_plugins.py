@@ -378,6 +378,21 @@ PAYLOADS = {
             "ip_subnet": "192.0.2.0/24"
         }]
     },
+    "router_fleet_health_audit": {
+        "now": "2026-11-20T10:00:00Z",
+        "snapshots": [{
+            "router_id": "office-router",
+            "site_id": "office",
+            "snapshot": {
+                "adapter_id": "unifi",
+                "captured_at": "2026-11-20T09:59:00Z",
+                "controller": {"hostname": "unifi.office.local"},
+                "access_points": [{"mac": "00:11:22:33:44:55", "status": "online"}],
+                "wireless_radios": [{"ap_mac": "00:11:22:33:44:55", "radio": "na", "up": True}],
+                "associations": [{"client_mac": "AA:BB:CC:DD:EE:01", "signal_dbm": -55}]
+            }
+        }]
+    },
     "router_snapshot_drift_report": {
         "previous": {
             "adapter_id": "unifi", "captured_at": "2026-11-20T09:00:00Z",
@@ -434,14 +449,14 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 171)
-        self.assertEqual(len(set(FEATURE_MODULES)), 171)
-        self.assertEqual(count(), 171)
-        self.assertEqual(len(entries), 171)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 171)
+        self.assertEqual(len(FEATURE_MODULES), 172)
+        self.assertEqual(len(set(FEATURE_MODULES)), 172)
+        self.assertEqual(count(), 172)
+        self.assertEqual(len(entries), 172)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 172)
         self.assertEqual(
             [entry["id"] for entry in entries],
-            [f"F{i:03d}" for i in range(1, 169)] + ["F172", "F173", "F174"],
+            [f"F{i:03d}" for i in range(1, 169)] + ["F172", "F173", "F174", "F175"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):

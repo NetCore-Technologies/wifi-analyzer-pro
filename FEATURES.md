@@ -1,4 +1,4 @@
-# 171 WiFi Analyzer Pro feature tools (F001–F168, F172–F174)
+# 172 WiFi Analyzer Pro feature tools (F001–F168, F172–F175)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -193,3 +193,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F173 | MikroTik RouterOS snapshot normalizer (`mikrotik_snapshot_normalizer`) | Router integrations | Import bounded RouterOS exports covering board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; omit secrets and make no router connection. |
 
 | F174 | Multi-vendor router snapshot drift report (`router_snapshot_drift_report`) | Router integrations | Compare OpenWrt, UniFi or MikroTik normalized snapshots using stable record identities and bounded allow-listed changes; reject mixed vendors and omit unknown/secret fields. |
+
+| F175 | Multi-vendor router fleet health audit (`router_fleet_health_audit`) | Router integrations | Audit normalized OpenWrt, UniFi and MikroTik snapshots for stale data, measured CPU/memory pressure, down interfaces/radios, offline APs and weak clients; unknown telemetry remains unknown. |
