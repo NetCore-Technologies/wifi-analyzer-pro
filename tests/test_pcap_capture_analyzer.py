@@ -1,0 +1,128 @@
+"""Regression tests for the bounded offline PCAP analyzer."""
+from __future__ import annotations
+
+import base64
+import struct
+import unittest
+
+from wifi_analyzer_backend.feature_plugins.feature_191_pcap_capture_analyzer import run
+
+
+def make_capture(link_type, frames=(), *, byteorder="<", nano=False, snaplen=65535):
+    magic = {
+        ("<", False): bytes.fromhex("d4c3b2a1"),
+        (">", False): bytes.fromhex("a1b2c3d4"),
+        ("<", True): bytes.fromhex("4d3cb2a1"),
+        (">", True): bytes.fromhex("a1b23c4d"),
+    }[(byteorder, nano)]
+    header = magic + struct.pack(byteorder + "HHIIII", 2, 4, 0, 0, snaplen, link_type)
+    fraction = 123456789 if nano else 500000
+    records = []
+    for packet in frames:
+        records.append(struct.pack(byteorder + "IIII", 1760000000, fraction, len(packet), len(packet)) + packet)
+    return base64.b64encode(header + b"".join(records)).decode("ascii")
+
+
+def ethernet_ipv4_udp():
+    ethernet = bytes.fromhex("00112233445566778899aabb0800")
+    ipv4 = (
+        bytes([0x45, 0xB8, 0, 28, 0, 1, 0x40, 0, 64, 17, 0, 0])
+        + bytes([192, 0, 2, 10, 198, 51, 100, 20])
+    )
+    udp = struct.pack("!HHHH", 12345, 53, 8, 0)
+    return ethernet + ipv4 + udp
+
+
+def beacon_frame():
+    # Management beacon frame control (subtype 8, type 0), plus a 22-byte header tail.
+    return bytes.fromhex("8000") + (b"\x00" * 22)
+
+
+class PcapCaptureAnalyzerTests(unittest.TestCase):
+    def test_analyses_ethernet_ipv4_udp_dscp_and_dns_port_without_exposing_addresses(self):
+        result = run({"capture_base64": make_capture(1, [ethernet_ipv4_udp()])})
+        self.assertEqual(result["status"], "analysed")
+        self.assertEqual(result["capture"]["link_type_name"], "ethernet")
+        self.assertEqual(result["summary"]["packet_count"], 1)
+        self.assertEqual(result["summary"]["ipv4_packet_count"], 1)
+        self.assertEqual(result["ip_protocol_counts"], {"udp": 1})
+        self.assertEqual(result["dscp_counts"], {"46": 1})
+        self.assertEqual(result["top_destination_ports"], [{"port": 53, "count": 1}])
+        self.assertFalse(result["privacy"]["packet_payloads_returned"])
+        self.assertFalse(result["privacy"]["source_and_destination_addresses_returned"])
+        rendered = str(result)
+        for secret in ("192.0.2.10", "198.51.100.20", "001122334455", "001122"):
+            self.assertNotIn(secret, rendered)
+
+    def test_supports_big_endian_and_nanosecond_pcap_headers(self):
+        result = run({
+            "capture_base64": make_capture(
+                1, [ethernet_ipv4_udp()], byteorder=">", nano=True,
+            )
+        })
+        self.assertEqual(result["capture"]["byte_order"], "big")
+        self.assertEqual(result["capture"]["timestamp_resolution"], "nanosecond")
+        self.assertEqual(result["summary"]["packet_count"], 1)
+
+    def test_analyses_raw_80211_management_beacons(self):
+        result = run({"capture_base64": make_capture(105, [beacon_frame()])})
+        self.assertEqual(result["capture"]["link_type_name"], "ieee80211")
+        self.assertEqual(result["wireless_frame_type_counts"], {"management": 1})
+        self.assertEqual(result["wireless_subtype_counts"], {"beacon": 1})
+
+    def test_skips_radiotap_header_and_parses_embedded_80211_frame(self):
+        radiotap = bytes.fromhex("0000080000000000")
+        result = run({"capture_base64": make_capture(127, [radiotap + beacon_frame()])})
+        self.assertEqual(result["capture"]["link_type_name"], "radiotap")
+        self.assertEqual(result["wireless_subtype_counts"], {"beacon": 1})
+
+    def test_counts_truncated_wire_packets_and_malformed_frames(self):
+        result = run({"capture_base64": make_capture(1, [b"short"])})
+        self.assertEqual(result["summary"]["malformed_frame_count"], 1)
+
+        frame = ethernet_ipv4_udp()
+        header = bytes.fromhex("d4c3b2a1") + struct.pack("<HHIIII", 2, 4, 0, 0, 65535, 1)
+        record = struct.pack("<IIII", 1760000000, 500000, len(frame), len(frame) + 12) + frame
+        truncated = run({"capture_base64": base64.b64encode(header + record).decode("ascii")})
+        self.assertEqual(truncated["summary"]["truncated_packet_count"], 1)
+        self.assertEqual(truncated["summary"]["wire_bytes"], len(frame) + 12)
+
+    def test_rejects_invalid_base64_format_link_type_version_and_snap_length(self):
+        for payload, message in (
+            ({"capture_base64": "not base64!"}, "valid standard base64"),
+            ({"capture_base64": base64.b64encode(b"not a pcap header" * 2).decode()}, "classic PCAP"),
+            ({"capture_base64": make_capture(999)}, "unsupported PCAP link type"),
+            ({"capture_base64": base64.b64encode(
+                bytes.fromhex("d4c3b2a1") + struct.pack("<HHIIII", 1, 0, 0, 0, 65535, 1)
+            ).decode()}, "version 2.4"),
+            ({"capture_base64": base64.b64encode(
+                bytes.fromhex("d4c3b2a1") + struct.pack("<HHIIII", 2, 4, 0, 0, 0, 1)
+            ).decode()}, "snap length"),
+        ):
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                run(payload)
+
+    def test_rejects_truncated_records_invalid_timestamp_and_packet_limit(self):
+        header = bytes.fromhex("d4c3b2a1") + struct.pack("<HHIIII", 2, 4, 0, 0, 65535, 1)
+        partial = header + struct.pack("<IIII", 1760000000, 500000, 30, 30) + b"\x00" * 4
+        with self.assertRaisesRegex(ValueError, "truncated packet record"):
+            run({"capture_base64": base64.b64encode(partial).decode()})
+
+        bad_fraction = header + struct.pack("<IIII", 1760000000, 1000000, 0, 0)
+        with self.assertRaisesRegex(ValueError, "timestamp fraction"):
+            run({"capture_base64": base64.b64encode(bad_fraction).decode()})
+
+        two_packets = make_capture(1, [ethernet_ipv4_udp(), ethernet_ipv4_udp()])
+        with self.assertRaisesRegex(ValueError, "packet limit"):
+            run({"capture_base64": two_packets, "maximum_packets": 1})
+
+    def test_rejects_non_object_input_and_invalid_packet_limit(self):
+        with self.assertRaisesRegex(ValueError, "payload must be an object"):
+            run([])
+        for value in (0, 5001, True, "10"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "maximum_packets"):
+                run({"capture_base64": make_capture(1), "maximum_packets": value})
+
+
+if __name__ == "__main__":
+    unittest.main()
