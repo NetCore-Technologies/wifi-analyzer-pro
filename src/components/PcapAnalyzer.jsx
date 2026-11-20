@@ -211,7 +211,7 @@ export default function PcapAnalyzer() {
           </button>
         </div>
         <div style={{ ...MUTED, marginTop: 12, lineHeight: 1.6 }}>
-          Classic PCAP only · 512 KiB maximum · Ethernet, raw 802.11 and radiotap · PCAPNG is not supported
+          Classic PCAP only · 512 KiB maximum · Ethernet, Linux cooked, 802.11 and radiotap · PCAPNG is not supported
         </div>
       </section>
 
