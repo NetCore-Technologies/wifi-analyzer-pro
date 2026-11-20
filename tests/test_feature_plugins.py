@@ -4,6 +4,7 @@ import unittest
 
 from wifi_analyzer_backend.feature_plugins import catalog, run, count
 from wifi_analyzer_backend.feature_plugins.registry import FEATURE_MODULES
+from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
 
 SAMPLE = [
     {"ssid": "Lab", "bssid": "02:11:22:33:44:55", "band": "2.4GHz", "channel": 6, "rssi": -52, "security": "WPA3"},
@@ -386,6 +387,21 @@ PAYLOADS = {
         }],
         "occurrences_per_schedule": 3
     },
+    "router_scheduled_report_job_intake": {
+        "schedule_id": "daily-home",
+        "occurrence_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scheduled_at": "2026-11-20T10:05:00Z",
+        "report_bundle": build_report_bundle({
+            "report_id": "weekly-home",
+            "title": "Weekly router report",
+            "generated_at": "2026-11-20T10:00:00Z",
+            "sources": [{
+                "source_id": "health-home",
+                "source_type": "router_fleet_health_audit",
+                "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []}
+            }]
+        })
+    },
     "router_webhook_egress_policy_verifier": {
         "endpoint": "https://hooks.example.net/router/events",
         "allowed_hosts": ["hooks.example.net"],
@@ -760,15 +776,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 184)
-        self.assertEqual(len(set(FEATURE_MODULES)), 184)
-        self.assertEqual(count(), 184)
-        self.assertEqual(len(entries), 184)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 184)
+        self.assertEqual(len(FEATURE_MODULES), 185)
+        self.assertEqual(len(set(FEATURE_MODULES)), 185)
+        self.assertEqual(count(), 185)
+        self.assertEqual(len(entries), 185)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 185)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):

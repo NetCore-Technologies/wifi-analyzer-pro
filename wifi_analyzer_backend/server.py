@@ -27,6 +27,11 @@ if __package__:
         DuplicateAgentSnapshotError,
         RouterAgentHealthStore,
     )
+    from .router_adapters.report_job_store import (
+        ReportJobConflictError,
+        ReportJobNotFoundError,
+        RouterReportJobStore,
+    )
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from feature_plugins import catalog as feature_catalog, run as run_feature
@@ -37,6 +42,11 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
         AgentCredentialConflictError,
         DuplicateAgentSnapshotError,
         RouterAgentHealthStore,
+    )
+    from router_adapters.report_job_store import (
+        ReportJobConflictError,
+        ReportJobNotFoundError,
+        RouterReportJobStore,
     )
 
 OS = platform.system()
@@ -52,6 +62,7 @@ CORS_ORIGINS = {
 AUTH = AuthManager()
 HISTORY = SiteHistoryStore()
 AGENT_HEALTH = RouterAgentHealthStore()
+REPORT_JOBS = RouterReportJobStore()
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_wifi_iface():
@@ -743,7 +754,37 @@ class Handler(BaseHTTPRequestHandler):
             "/health": lambda: {"status": "ok", "version": APP_VERSION, "os": OS, "mode": "demo" if DEMO_MODE else "live"},
         }
         try:
-            if path != "/api/agents/negotiations" and path.startswith("/api/agents/") and path.endswith("/negotiations"):
+            if path == "/api/reports/jobs":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
+                def single_job_parameter(name):
+                    values = params.get(name, [])
+                    if len(values) > 1:
+                        raise ValueError(f"{name} may be supplied only once")
+                    return values[0] if values else None
+                raw_limit = single_job_parameter("limit")
+                try:
+                    limit = 50 if raw_limit is None else int(raw_limit)
+                except ValueError as error:
+                    raise ValueError("limit must be an integer") from error
+                self.send_json({
+                    "summary": REPORT_JOBS.summary(),
+                    "jobs": REPORT_JOBS.list_jobs(
+                        status=single_job_parameter("status") or None,
+                        schedule_id=single_job_parameter("schedule_id") or None,
+                        limit=limit,
+                    ),
+                })
+            elif path.startswith("/api/reports/jobs/"):
+                identifier = unquote(path[len("/api/reports/jobs/"):])
+                if not identifier.isdigit() or "/" in identifier:
+                    self.send_json({"error": "Report job not found"}, 404)
+                    return
+                job = REPORT_JOBS.get(int(identifier), include_bundle=False)
+                if job is None:
+                    self.send_json({"error": "Report job not found"}, 404)
+                else:
+                    self.send_json({"job": job})
+            elif path != "/api/agents/negotiations" and path.startswith("/api/agents/") and path.endswith("/negotiations"):
                 agent_id = unquote(path[len("/api/agents/"):-len("/negotiations")]).strip("/")
                 if not agent_id or "/" in agent_id:
                     self.send_json({"error": "Agent negotiation history not found"}, 404)
@@ -885,6 +926,69 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 401)
                 return
             self.send_json({"token": token, "status": AUTH.status(token)})
+            return
+
+        if path == "/api/reports/jobs/enqueue":
+            if not self.require_auth():
+                return
+            try:
+                prepared = run_feature("router_scheduled_report_job_intake", payload)["result"]
+                response = REPORT_JOBS.enqueue(prepared)
+            except ReportJobConflictError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json(response, 201 if response["created"] else 200)
+            return
+
+        if path == "/api/reports/jobs/claim":
+            if not self.require_auth():
+                return
+            try:
+                response = REPORT_JOBS.claim_due(
+                    payload.get("worker_id"),
+                    now=payload.get("now"),
+                    lease_seconds=payload.get("lease_seconds", 120),
+                    limit=payload.get("limit", 10),
+                )
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json(response)
+            return
+
+        job_action = re.fullmatch(r"/api/reports/jobs/([1-9][0-9]*)/(complete|fail|cancel)", path)
+        if job_action:
+            if not self.require_auth():
+                return
+            job_id = int(job_action.group(1))
+            action = job_action.group(2)
+            try:
+                if action == "complete":
+                    response = REPORT_JOBS.complete(
+                        job_id,
+                        payload.get("lease_id"),
+                        payload.get("result", {}),
+                        now=payload.get("now"),
+                    )
+                elif action == "fail":
+                    response = REPORT_JOBS.fail(
+                        job_id,
+                        payload.get("lease_id"),
+                        payload.get("error_code"),
+                        now=payload.get("now"),
+                    )
+                else:
+                    response = REPORT_JOBS.cancel(job_id, now=payload.get("now"))
+            except ReportJobNotFoundError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.send_json({"job": response})
             return
 
         if path == "/api/agents/enroll":

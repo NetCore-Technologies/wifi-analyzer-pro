@@ -12,6 +12,8 @@ from http.client import HTTPConnection
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
 from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
+from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
+from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
 
 
 class AuthenticatedApiTests(unittest.TestCase):
@@ -20,9 +22,11 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_auth = server.AUTH
         self.previous_history = server.HISTORY
         self.previous_agent_health = server.AGENT_HEALTH
+        self.previous_report_jobs = server.REPORT_JOBS
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
+        server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
         self.httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.Handler)
         self.httpd.daemon_threads = True
         self.thread = threading.Thread(target=self.httpd.serve_forever, daemon=True)
@@ -36,6 +40,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.AUTH = self.previous_auth
         server.HISTORY = self.previous_history
         server.AGENT_HEALTH = self.previous_agent_health
+        server.REPORT_JOBS = self.previous_report_jobs
         self.temp.cleanup()
 
     def request(self, method, path, payload=None, token=None, origin=None):
@@ -90,8 +95,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 184)
-        self.assertEqual(len(catalog["features"]), 184)
+        self.assertEqual(catalog["count"], 185)
+        self.assertEqual(len(catalog["features"]), 185)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -417,6 +422,109 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["summary"]["event_count"], 1)
         self.assertNotIn("signing_secret", str(result))
         self.assertNotIn("api-test-secret", str(result))
+
+    def test_scheduled_report_job_queue_is_authenticated_idempotent_and_lease_guarded(self):
+        status, denied = self.request("GET", "/api/reports/jobs")
+        self.assertEqual(status, 401)
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        bundle = build_report_bundle({
+            "report_id": "weekly-home",
+            "title": "Weekly home router report",
+            "generated_at": "2026-11-20T10:00:00Z",
+            "sources": [{
+                "source_id": "health-home",
+                "source_type": "router_fleet_health_audit",
+                "result": {"status": "audited", "summary": {"router_count": 1}, "routers": []},
+            }],
+        })
+        prepared = {
+            "schedule_id": "daily-home",
+            "occurrence_id": "a" * 64,
+            "scheduled_at": "2026-11-20T10:01:00Z",
+            "report_bundle": bundle,
+            "max_attempts": 2,
+        }
+        status, first = self.request("POST", "/api/reports/jobs/enqueue", prepared, token=token)
+        self.assertEqual(status, 201)
+        self.assertTrue(first["created"])
+        status, retry = self.request("POST", "/api/reports/jobs/enqueue", prepared, token=token)
+        self.assertEqual(status, 200)
+        self.assertTrue(retry["replayed"])
+        self.assertEqual(first["job"]["id"], retry["job"]["id"])
+
+        changed_bundle = {**bundle, "title": "Altered title"}
+        import hashlib
+        body = {key: value for key, value in changed_bundle.items() if key != "content_hash"}
+        changed_bundle["content_hash"] = hashlib.sha256(
+            json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        status, conflict = self.request("POST", "/api/reports/jobs/enqueue", {
+            **prepared, "report_bundle": changed_bundle,
+        }, token=token)
+        self.assertEqual(status, 409)
+        self.assertIn("different report content", conflict["error"])
+
+        status, early = self.request("POST", "/api/reports/jobs/claim", {
+            "worker_id": "report-worker",
+            "now": "2026-11-20T10:00:30Z",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(early["jobs"], [])
+        status, claimed = self.request("POST", "/api/reports/jobs/claim", {
+            "worker_id": "report-worker",
+            "now": "2026-11-20T10:01:00Z",
+            "lease_seconds": 60,
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(claimed["jobs"]), 1)
+        lease = claimed["jobs"][0]
+        self.assertEqual(lease["status"], "leased")
+        self.assertEqual(lease["report_bundle"]["report_id"], "weekly-home")
+
+        status, stale = self.request("POST", f"/api/reports/jobs/{lease['id']}/complete", {
+            "lease_id": "00000000-0000-4000-8000-000000000000",
+            "result": {"delivery_status": "delivered"},
+            "now": "2026-11-20T10:01:01Z",
+        }, token=token)
+        self.assertEqual(status, 409)
+
+        status, failed = self.request("POST", f"/api/reports/jobs/{lease['id']}/fail", {
+            "lease_id": lease["lease_id"],
+            "error_code": "delivery_timeout",
+            "now": "2026-11-20T10:01:01Z",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(failed["job"]["status"], "retry_wait")
+        self.assertEqual(failed["job"]["error_code"], "delivery_timeout")
+
+        status, second_claim = self.request("POST", "/api/reports/jobs/claim", {
+            "worker_id": "report-worker-2",
+            "now": "2026-11-20T10:01:31Z",
+            "lease_seconds": 60,
+        }, token=token)
+        self.assertEqual(status, 200)
+        second = second_claim["jobs"][0]
+        self.assertEqual(second["attempts"], 2)
+
+        status, completed = self.request("POST", f"/api/reports/jobs/{second['id']}/complete", {
+            "lease_id": second["lease_id"],
+            "result": {
+                "report_id": "weekly-home",
+                "content_hash": bundle["content_hash"],
+                "delivery_status": "prepared",
+                "api_token": "must-not-be-stored",
+            },
+            "now": "2026-11-20T10:01:32Z",
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(completed["job"]["status"], "completed")
+        self.assertNotIn("api_token", str(completed))
+
+        status, listing = self.request("GET", "/api/reports/jobs?status=completed", token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(listing["jobs"]), 1)
+        self.assertEqual(listing["summary"]["counts_by_status"]["completed"], 1)
 
     def test_router_scheduled_report_planner_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
