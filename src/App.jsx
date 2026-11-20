@@ -835,16 +835,17 @@ function FeatureGrid({ title, features, col=C.cyan, badge="" }) {
   return (
     <div style={{...s.col,gap:14}}>
       <div className="anim-fade" style={{...s.card,border:`1px solid ${col}33`,background:col+"08"}}>
+        <p style={{fontSize:11,color:C.muted,lineHeight:1.6,margin:"0 0 12px"}}>These are planned capability labels only. They are not active controls or completed integrations; use the Feature Workbench for the callable tools available in this build.</p>
         <div style={{...s.row,gap:10,marginBottom:14}}>
           <span style={{fontSize:15,fontWeight:700,color:col}}>{title}</span>
-          {badge&&<Tag text={badge} col={col}/>}
+          <Tag text="CAPABILITY PREVIEW · NOT WIRED" col={C.muted}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
           {features.map((f,i)=>(
             <div key={i} className="hover-card"
               style={{...s.row,gap:8,padding:"8px 10px",background:C.card,borderRadius:7,
                 border:`1px solid ${C.border}`,animation:`fadeSlideIn 0.3s ${i*0.025}s ease both`}}>
-              <CheckCircle size={11} color={col}/>
+              <Info size={11} color={C.muted}/>
               <span style={{fontSize:11,color:C.textSec}}>{f}</span>
             </div>
           ))}
