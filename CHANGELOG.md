@@ -3,6 +3,7 @@
 All notable changes to WiFi Analyzer Pro are documented here.
 
 ## [1.0.7] — Unreleased
+- Expose authenticated worker lease renewal and database-verified scheduled-report delivery packaging; the server now loads the current unexpired SQLite lease rather than trusting a caller-supplied claimed-job object.
 
 ### Feature library and local account
 - Add 187 independently callable feature modules (F001–F168 and F172–F190; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
