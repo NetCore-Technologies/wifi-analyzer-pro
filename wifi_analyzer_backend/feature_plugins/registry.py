@@ -147,6 +147,7 @@ FEATURE_MODULES = (
     "feature_141_site_inventory_snapshot",
     "feature_142_ap_topology_relationships",
     "feature_143_site_network_segment_correlation",
+    "feature_144_floor_plan_anchor_validation",
 )
 
 @lru_cache(maxsize=1)
