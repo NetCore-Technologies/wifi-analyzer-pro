@@ -1022,7 +1022,7 @@ class FeatureCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "load_average.1m"):
             run("openwrt_snapshot_normalizer", {
                 **base,
-                "system_health":{**base["system_health"],"load_average":{"1m":float("nan"),"5m":0.4,"15m":0.3}},
+                "system_health":{**base["system_health"],"load_average":{"1m":-0.1,"5m":0.4,"15m":0.3}},
             })
         with self.assertRaisesRegex(ValueError, "free cannot exceed total"):
             run("openwrt_snapshot_normalizer", {
