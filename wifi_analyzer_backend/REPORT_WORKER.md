@@ -26,6 +26,16 @@ Configure the process through protected service-manager environment injection or
 
 The API must enqueue a due report first. The worker does not create schedules or invent report data; it claims only jobs already present in the durable queue.
 
+## Container sidecar
+
+The Docker image includes the worker and runs as an unprivileged UID. Start the API container normally, then start a second container using the same image, the same persistent volumes and the protected worker configuration. For example, after naming the API container wifi-analyzer-pro:
+
+    docker run --rm --volumes-from wifi-analyzer-pro \
+      --env-file /secure/path/report-worker.env \
+      --entrypoint python wifi-analyzer-pro:local report_worker.py
+
+The API and worker must share the same HOME configuration and XDG state volumes so they use the same local account files and SQLite report-job queue. Restrict the environment file to the service account, or use your orchestrator's secret facility. The worker has no listening port.
+
 ## Delivery and security guarantees
 
 - The endpoint must be HTTPS on port 443 and its hostname must match an exact allowlist entry. IP literals, embedded credentials, URL queries and fragments are rejected.

@@ -14,9 +14,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
-from .feature_plugins.feature_187_router_webhook_egress_policy_verifier import run as verify_egress
-from .feature_plugins.feature_189_router_scheduled_report_delivery_package import run as prepare_delivery
-from .router_adapters.report_job_store import ReportJobNotFoundError, RouterReportJobStore
+if __package__:
+    from .feature_plugins.feature_187_router_webhook_egress_policy_verifier import run as verify_egress
+    from .feature_plugins.feature_189_router_scheduled_report_delivery_package import run as prepare_delivery
+    from .router_adapters.report_job_store import ReportJobNotFoundError, RouterReportJobStore
+else:  # Direct execution in the minimal runtime image.
+    from feature_plugins.feature_187_router_webhook_egress_policy_verifier import run as verify_egress
+    from feature_plugins.feature_189_router_scheduled_report_delivery_package import run as prepare_delivery
+    from router_adapters.report_job_store import ReportJobNotFoundError, RouterReportJobStore
 
 MAX_DNS_ADDRESSES = 32
 MAX_RESPONSE_BYTES = 16 * 1024

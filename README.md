@@ -85,6 +85,21 @@ The app can be explored with sample data. To run the backend in explicit demo mo
 WIFI_ANALYZER_DEMO=1 python3 wifi_analyzer_backend/server.py
 ```
 
+## Docker deployment
+
+The image runs the API as an unprivileged UID and includes the router adapters, site-history store and optional report worker. The image declares persistent volumes for the local account and report/site state.
+
+Build with:
+
+    docker build -t wifi-analyzer-pro:local .
+
+Run the API using the default command. To run the optional worker as a sidecar, share the API container volumes and inject its webhook configuration through a protected service-manager secret facility:
+
+    docker run --rm --volumes-from wifi-analyzer-pro \
+      --entrypoint python wifi-analyzer-pro:local report_worker.py
+
+The worker container must share both the API container's HOME configuration volume and XDG state volume so it reads the same credentials and report-job database. Configure its environment securely; see the worker guide. Do not expose the worker container's ports.
+
 ## API
 
 The local HTTP service exposes:
@@ -104,6 +119,7 @@ The local HTTP service exposes:
 | `POST /api/reports/jobs/{id}/renew` | Extend an active worker lease without reviving expired leases |
 | `POST /api/reports/jobs/{id}/delivery-package` | Verify the current SQLite lease and prepare an approved, signed delivery package without sending it |
 | `POST /api/reports/jobs/{id}/complete`, `/fail`, `/cancel` | Complete a lease, schedule a bounded retry/dead-letter, or cancel a pending job |
+| [Scheduled report worker](wifi_analyzer_backend/REPORT_WORKER.md) | Opt-in, pinned-TLS HTTPS delivery of due report jobs; run separately from the API server |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
