@@ -69,8 +69,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 120)
-        self.assertEqual(len(catalog["features"]), 120)
+        self.assertEqual(catalog["count"], 140)
+        self.assertEqual(len(catalog["features"]), 140)
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
