@@ -153,18 +153,20 @@ PAYLOADS = {
     "connection_health_evidence": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","rssi_dbm":-81,"retry_rate_pct":25,"tx_rate_mbps":54,"rx_rate_mbps":48}],"diagnostics":{"packet_loss_pct":7,"latency_ms":120}},
     "site_inventory_snapshot": {"site_id":"home","access_points":[{"name":"Hall AP","bssid":"00:11:22:33:44:55","ssid":"Home","model":"AX AP","vendor":"Example","band":"5GHz","channel":36,"channel_width_mhz":80,"location":"hall"}]},
 
+    "ap_topology_relationships": {"access_points":[{"ap_id":"ap-a","site_id":"home"},{"ap_id":"ap-b","site_id":"home"},{"ap_id":"ap-c","site_id":"branch"}],"links":[{"from_ap_id":"ap-a","to_ap_id":"ap-b","relationship":"wired_uplink","source":"lldp"},{"from_ap_id":"ap-b","to_ap_id":"ap-c","relationship":"mesh_backhaul","source":"controller"},{"from_ap_id":"ap-a","to_ap_id":"ap-c","relationship":"rf_neighbor","source":"beacon_observation"}]},
+
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 141)
-        self.assertEqual(len(set(FEATURE_MODULES)), 141)
-        self.assertEqual(count(), 141)
-        self.assertEqual(len(entries), 141)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 141)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 142)])
+        self.assertEqual(len(FEATURE_MODULES), 142)
+        self.assertEqual(len(set(FEATURE_MODULES)), 142)
+        self.assertEqual(count(), 142)
+        self.assertEqual(len(entries), 142)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 142)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 143)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -242,6 +244,42 @@ class FeatureCatalogTests(unittest.TestCase):
         result = run("site_inventory_snapshot", {"access_points": []})["result"]
         self.assertEqual(result["access_point_count"], 0)
         self.assertIsNone(result["inventory_field_coverage_pct"])
+
+
+    def test_ap_topology_relationships_separates_physical_and_rf_edges(self):
+        result = run("ap_topology_relationships", {
+            "access_points": [{"ap_id": "a"}, {"ap_id": "b"}, {"ap_id": "c"}],
+            "links": [
+                {"from_ap_id": "a", "to_ap_id": "b", "relationship": "wired_uplink"},
+                {"from_ap_id": "b", "to_ap_id": "c", "relationship": "mesh_backhaul"},
+                {"from_ap_id": "a", "to_ap_id": "c", "relationship": "rf_neighbor"}
+            ]
+        })["result"]
+        self.assertEqual(result["resolved_link_count"], 3)
+        self.assertEqual(result["links_by_relationship"]["rf_neighbor"], 1)
+        degrees = {item["ap_id"]: item["physical_degree"] for item in result["access_point_degrees"]}
+        self.assertEqual(degrees, {"a": 1, "b": 2, "c": 1})
+
+    def test_ap_topology_relationships_flags_duplicates_orphans_and_uplink_cycles(self):
+        result = run("ap_topology_relationships", {
+            "access_points": [{"ap_id": "a"}, {"ap_id": "b"}],
+            "links": [
+                {"from_ap_id": "a", "to_ap_id": "b", "relationship": "wired_uplink"},
+                {"from_ap_id": "a", "to_ap_id": "b", "relationship": "wired_uplink"},
+                {"from_ap_id": "b", "to_ap_id": "a", "relationship": "wired_uplink"},
+                {"from_ap_id": "a", "to_ap_id": "missing", "relationship": "mesh_backhaul"}
+            ]
+        })["result"]
+        self.assertEqual(result["duplicate_link_count"], 1)
+        self.assertEqual(result["unresolved_link_count"], 1)
+        self.assertEqual(len(result["wired_uplink_cycles"]), 1)
+
+    def test_ap_topology_relationships_rejects_unknown_relationships(self):
+        with self.assertRaisesRegex(ValueError, "relationship"):
+            run("ap_topology_relationships", {
+                "access_points": [{"ap_id": "a"}, {"ap_id": "b"}],
+                "links": [{"from_ap_id": "a", "to_ap_id": "b", "relationship": "guessed"}]
+            })
 
 
 if __name__ == "__main__":
