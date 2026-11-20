@@ -141,7 +141,7 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(len(set(FEATURE_MODULES)), 120)
         self.assertEqual(count(), 120)
         self.assertEqual(len(entries), 120)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 100)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 120)
         self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 121)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
