@@ -378,6 +378,21 @@ PAYLOADS = {
             "ip_subnet": "192.0.2.0/24"
         }]
     },
+    "router_snapshot_drift_report": {
+        "previous": {
+            "adapter_id": "unifi", "captured_at": "2026-11-20T09:00:00Z",
+            "access_points": [{"mac": "00:11:22:33:44:55", "name": "Office AP", "ip_address": "192.0.2.10"}],
+            "wireless_radios": [{"ap_mac": "00:11:22:33:44:55", "radio": "ng", "channel": 1}],
+            "associations": [], "networks": [{"id": "office", "name": "Office", "vlan_id": 10}]
+        },
+        "current": {
+            "adapter_id": "unifi", "captured_at": "2026-11-20T10:00:00Z",
+            "access_points": [{"mac": "00:11:22:33:44:55", "name": "Office AP", "ip_address": "192.0.2.11"}],
+            "wireless_radios": [{"ap_mac": "00:11:22:33:44:55", "radio": "ng", "channel": 6}],
+            "associations": [{"client_mac": "AA:BB:CC:DD:EE:01", "ap_mac": "00:11:22:33:44:55"}],
+            "networks": [{"id": "office", "name": "Office", "vlan_id": 20}]
+        }
+    },
     "mikrotik_snapshot_normalizer": {
         "captured_at": "2026-11-20T06:00:00Z",
         "router": {"board_name": "MikroTik hAP ax3", "version": "7.17.2"},
@@ -419,14 +434,14 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 170)
-        self.assertEqual(len(set(FEATURE_MODULES)), 170)
-        self.assertEqual(count(), 170)
-        self.assertEqual(len(entries), 170)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 170)
+        self.assertEqual(len(FEATURE_MODULES), 171)
+        self.assertEqual(len(set(FEATURE_MODULES)), 171)
+        self.assertEqual(count(), 171)
+        self.assertEqual(len(entries), 171)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 171)
         self.assertEqual(
             [entry["id"] for entry in entries],
-            [f"F{i:03d}" for i in range(1, 169)] + ["F172", "F173"],
+            [f"F{i:03d}" for i in range(1, 169)] + ["F172", "F173", "F174"],
         )
 
     def test_each_feature_executes_with_its_sample_payload(self):
