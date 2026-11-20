@@ -27,7 +27,7 @@ BAND_ALIASES = {
     "5ghz-ac": "5GHz", "5ghz-ax": "5GHz",
     "6ghz": "6GHz", "6ghz-ax": "6GHz",
 }
-INTERFACE_NAME = re.compile(r"^[^\x00-\x20\x7f]{1,64}$")
+INTERFACE_NAME = re.compile(r"^[^\x00-\x1f\x7f]{1,64}$")
 
 
 def _object(value: object, field: str) -> dict:
@@ -180,9 +180,14 @@ def _width(value: object, field: str) -> tuple[int | None, str | None]:
         return int(match.group(1)), token
     # RouterOS may report a permitted set such as 20/40/80mhz. Preserve it as
     # a setting hint, but do not mistake it for the currently negotiated width.
-    if re.fullmatch(r"(?:20|40|80|160|320)(?:/(?:20|40|80|160|320))+mhz?", token, re.IGNORECASE):
+    if re.fullmatch(r"(?:20|40|80|160|320)(?:/(?:20|40|80|160|320))+(?:mhz)?", token, re.IGNORECASE):
         return None, token
     raise ValueError(f"{field} must be a supported channel width or width setting")
+
+
+def _channel(value: object, band: str | None, field: str) -> int | None:
+    maximum = {"2.4GHz": 14, "5GHz": 196, "6GHz": 233}.get(band, 233)
+    return _integer(value, field, 1, maximum)
 
 
 def _state(running: bool | None, disabled: bool | None) -> str:
@@ -279,7 +284,7 @@ def normalize_snapshot(payload: dict) -> dict:
             record.get("channel_width", record.get("channel_width_mhz", record.get("channel-width"))),
             f"{field}.channel_width",
         )
-        channel = _integer(record.get("channel"), f"{field}.channel", 1, 233)
+        channel = _channel(record.get("channel"), band, f"{field}.channel")
         frequency = _number(
             record.get("frequency", record.get("frequency_mhz")),
             f"{field}.frequency_mhz",

@@ -162,7 +162,7 @@ class MikroTikSnapshotTests(unittest.TestCase):
         self.assertEqual(result["wireless_radios"][0]["state"], "down")
 
     def test_rejects_invalid_timestamps_mac_addresses_ip_prefixes_and_channels(self):
-        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
             normalize_snapshot({"captured_at": "2026-11-20T10:00:00"})
         with self.assertRaisesRegex(ValueError, "valid MAC"):
             normalize_snapshot({
@@ -184,6 +184,30 @@ class MikroTikSnapshotTests(unittest.TestCase):
                 "captured_at": "2026-11-20T10:00:00Z",
                 "wireless": [{"name": "wifi1", "band": "unknown"}],
             })
+
+    def test_supports_spaced_interface_names_and_enforces_band_channel_limits(self):
+        result = normalize_snapshot({
+            "captured_at": "2026-11-20T10:00:00Z",
+            "interfaces": [{"name": "Office Bridge", "running": True}],
+            "wireless": [
+                {"name": "wifi24", "band": "2ghz-n", "channel": 14},
+                {"name": "wifi5", "band": "5ghz-ax", "channel": 196},
+                {"name": "wifi6", "band": "6ghz-ax", "channel": 233},
+            ],
+            "addresses": [{"interface": "Office Bridge", "address": "192.0.2.1/24"}],
+        })
+        self.assertEqual(result["interfaces"][0]["name"], "Office Bridge")
+        self.assertTrue(result["addresses"][0]["interface_known"])
+        self.assertEqual(
+            [radio["channel"] for radio in result["wireless_radios"]],
+            [14, 196, 233],
+        )
+        for band, channel in (("2ghz-n", 15), ("5ghz-ax", 197), ("6ghz-ax", 234)):
+            with self.subTest(band=band, channel=channel), self.assertRaisesRegex(ValueError, "channel"):
+                normalize_snapshot({
+                    "captured_at": "2026-11-20T10:00:00Z",
+                    "wireless": [{"name": "wifi1", "band": band, "channel": channel}],
+                })
 
     def test_rejects_invalid_resource_vlan_mtu_and_registration_values(self):
         base = {"captured_at": "2026-11-20T10:00:00Z"}
