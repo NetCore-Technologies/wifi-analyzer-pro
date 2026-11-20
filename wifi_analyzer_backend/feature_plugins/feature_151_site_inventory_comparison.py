@@ -55,7 +55,8 @@ def run(payload: dict) -> dict:
         {"bssid": bssid, "site_ids": sorted(site_ids)}
         for bssid, site_ids in sorted(seen.items()) if len(site_ids) > 1
     ]
-    all_bands = sorted({band for site in sites.values() for band in site["bands"]})
+    observed_bands = sorted({band for site in sites.values() for band in site["bands"]})
+    all_bands = ["2.4GHz", "5GHz", "6GHz"]
     all_vendors = sorted({vendor for site in sites.values() for vendor in site["vendors"]})
     all_models = sorted({model for site in sites.values() for model in site["models"]})
     return {
@@ -63,7 +64,7 @@ def run(payload: dict) -> dict:
         "access_point_count": len(access_points),
         "sites": summaries,
         "cross_site_comparison": {
-            "bands_observed": all_bands,
+            "bands_observed": observed_bands,
             "vendors_observed": all_vendors,
             "models_observed": all_models,
             "sites_missing_each_band": {
