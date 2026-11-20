@@ -343,6 +343,264 @@ def _sorted_counts(counter: Counter, *, numeric=False) -> dict:
     return {key: counter[key] for key in sorted(counter)}
 
 
+PCAPNG_MAGIC = b"\x0a\x0d\x0d\x0a"
+PCAPNG_BOM_LITTLE = b"\x4d\x3c\x2b\x1a"
+PCAPNG_BOM_BIG = b"\x1a\x2b\x3c\x4d"
+
+
+def _pcapng_options(data: bytes, start: int, end: int, byteorder: str) -> list:
+    options = []
+    cursor = start
+    while cursor < end:
+        if end - cursor < 4:
+            raise ValueError("PCAPNG options end with an incomplete option header")
+        code = _integer(data, cursor, 2, byteorder)
+        length = _integer(data, cursor + 2, 2, byteorder)
+        if code == 0:
+            if length != 0:
+                raise ValueError("PCAPNG end-of-options marker has an invalid length")
+            if any(data[cursor + 4:end]):
+                raise ValueError("PCAPNG contains non-zero bytes after an end-of-options marker")
+            break
+        value_start = cursor + 4
+        value_end = value_start + length
+        padded_end = value_start + ((length + 3) & ~3)
+        if value_end > end or padded_end > end:
+            raise ValueError("PCAPNG option exceeds its enclosing block")
+        options.append((code, data[value_start:value_end]))
+        cursor = padded_end
+    return options
+
+
+def _pcapng_interface_options(options: list) -> tuple:
+    denominator = 1_000_000
+    resolution_name = "microsecond"
+    offset_seconds = 0
+    seen = set()
+    for code, value in options:
+        if code in {9, 14}:
+            if code in seen:
+                raise ValueError("PCAPNG interface contains a duplicate timestamp option")
+            seen.add(code)
+        if code == 9:
+            if len(value) != 1:
+                raise ValueError("PCAPNG if_tsresol option must contain one byte")
+            exponent = value[0] & 0x7F
+            if value[0] & 0x80:
+                if exponent > 63:
+                    raise ValueError("PCAPNG binary timestamp resolution is out of range")
+                denominator = 1 << exponent
+                resolution_name = f"2^-{exponent} seconds"
+            else:
+                if exponent > 18:
+                    raise ValueError("PCAPNG decimal timestamp resolution is out of range")
+                denominator = 10 ** exponent
+                resolution_name = f"10^-{exponent} seconds"
+        elif code == 14:
+            if len(value) != 8:
+                raise ValueError("PCAPNG if_tsoffset option must contain eight bytes")
+            offset_seconds = int.from_bytes(value, "little", signed=True)
+    return denominator, resolution_name, offset_seconds
+
+
+def _pcapng_timestamp(units: int, interface: dict) -> str:
+    seconds, remainder = divmod(units, interface["timestamp_denominator"])
+    try:
+        moment = datetime.fromtimestamp(seconds + interface["timestamp_offset"], timezone.utc)
+        micros = (remainder * 1_000_000) // interface["timestamp_denominator"]
+        return moment.replace(microsecond=micros).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    except (OverflowError, OSError, ValueError) as error:
+        raise ValueError("PCAPNG contains an out-of-range packet timestamp") from error
+
+
+def _analyse_pcapng(capture: bytes, maximum_packets: int, state: dict) -> tuple:
+    cursor = 0
+    byteorder = None
+    interfaces = []
+    interface_metadata = []
+    section_orders = []
+    section_count = 0
+    packets_read = 0
+    captured_bytes = 0
+    wire_bytes = 0
+    first_packet_at = None
+    last_packet_at = None
+
+    while cursor < len(capture):
+        remaining = len(capture) - cursor
+        if remaining < 12:
+            raise ValueError("PCAPNG capture ends with an incomplete block header")
+
+        if capture[cursor:cursor + 4] == PCAPNG_MAGIC:
+            if remaining < 28:
+                raise ValueError("PCAPNG section header block is truncated")
+            byte_order_magic = capture[cursor + 8:cursor + 12]
+            if byte_order_magic == PCAPNG_BOM_LITTLE:
+                byteorder = "little"
+            elif byte_order_magic == PCAPNG_BOM_BIG:
+                byteorder = "big"
+            else:
+                raise ValueError("PCAPNG section header has an invalid byte-order magic")
+            block_length = _integer(capture, cursor + 4, 4, byteorder)
+            if block_length < 28 or block_length % 4 or block_length > remaining:
+                raise ValueError("PCAPNG section header block has an invalid total length")
+            block_end = cursor + block_length
+            if _integer(capture, block_end - 4, 4, byteorder) != block_length:
+                raise ValueError("PCAPNG section header block length trailer does not match")
+            major = _integer(capture, cursor + 12, 2, byteorder)
+            minor = _integer(capture, cursor + 14, 2, byteorder)
+            if major != 1 or minor != 0:
+                raise ValueError("PCAPNG section version 1.0 is required")
+            _pcapng_options(capture, cursor + 24, block_end - 4, byteorder)
+            section_count += 1
+            section_orders.append(byteorder)
+            interfaces = []
+            cursor = block_end
+            continue
+
+        if byteorder is None:
+            raise ValueError("PCAPNG capture must start with a section header block")
+        block_type = _integer(capture, cursor, 4, byteorder)
+        block_length = _integer(capture, cursor + 4, 4, byteorder)
+        if block_length < 12 or block_length % 4 or block_length > remaining:
+            raise ValueError("PCAPNG block has an invalid total length")
+        block_end = cursor + block_length
+        if _integer(capture, block_end - 4, 4, byteorder) != block_length:
+            raise ValueError("PCAPNG block length trailer does not match")
+
+        if block_type == 1:  # Interface Description Block
+            if block_length < 20:
+                raise ValueError("PCAPNG interface description block is too short")
+            link_type = _integer(capture, cursor + 8, 2, byteorder)
+            snaplen = _integer(capture, cursor + 12, 4, byteorder)
+            if link_type not in SUPPORTED_LINK_TYPES:
+                raise ValueError(
+                    "unsupported PCAPNG interface link type; supported types are Ethernet, "
+                    "Linux cooked v1/v2, IEEE 802.11 and radiotap"
+                )
+            if not 1 <= snaplen <= MAX_SNAPLEN:
+                raise ValueError(f"PCAPNG interface snap length must be from 1 to {MAX_SNAPLEN} bytes")
+            options = _pcapng_options(capture, cursor + 16, block_end - 4, byteorder)
+            denominator, resolution_name, offset_seconds = _pcapng_interface_options(options)
+            interface_id = len(interfaces)
+            interface = {
+                "interface_id": interface_id,
+                "link_type": link_type,
+                "link_type_name": SUPPORTED_LINK_TYPES[link_type],
+                "snap_length_bytes": snaplen,
+                "timestamp_denominator": denominator,
+                "timestamp_resolution": resolution_name,
+                "timestamp_offset": offset_seconds,
+            }
+            interfaces.append(interface)
+            interface_metadata.append({
+                "section": section_count - 1,
+                "interface_id": interface_id,
+                "link_type": link_type,
+                "link_type_name": interface["link_type_name"],
+                "snap_length_bytes": snaplen,
+                "timestamp_resolution": resolution_name,
+                "timestamp_offset_seconds": offset_seconds,
+            })
+
+        elif block_type == 6:  # Enhanced Packet Block
+            if block_length < 32:
+                raise ValueError("PCAPNG enhanced packet block is too short")
+            interface_id = _integer(capture, cursor + 8, 4, byteorder)
+            if interface_id >= len(interfaces):
+                raise ValueError("PCAPNG packet references an unknown interface")
+            interface = interfaces[interface_id]
+            timestamp_units = (
+                (_integer(capture, cursor + 12, 4, byteorder) << 32)
+                | _integer(capture, cursor + 16, 4, byteorder)
+            )
+            included_length = _integer(capture, cursor + 20, 4, byteorder)
+            original_length = _integer(capture, cursor + 24, 4, byteorder)
+            packet_start = cursor + 28
+            packet_end = packet_start + included_length
+            padded_packet_end = packet_start + ((included_length + 3) & ~3)
+            if included_length > interface["snap_length_bytes"] or included_length > MAX_FRAME_BYTES:
+                raise ValueError("PCAPNG packet exceeds its interface snap length or frame limit")
+            if original_length < included_length:
+                raise ValueError("PCAPNG packet original length is smaller than its captured length")
+            if padded_packet_end > block_end - 4:
+                raise ValueError("PCAPNG enhanced packet data exceeds its block")
+            _pcapng_options(capture, padded_packet_end, block_end - 4, byteorder)
+            if packets_read >= maximum_packets:
+                raise ValueError(f"capture exceeds the {maximum_packets}-packet analysis limit")
+            packet_time = _pcapng_timestamp(timestamp_units, interface)
+            if first_packet_at is None:
+                first_packet_at = packet_time
+            last_packet_at = packet_time
+            frame = capture[packet_start:packet_end]
+            packets_read += 1
+            captured_bytes += included_length
+            wire_bytes += original_length
+            if included_length < original_length:
+                state["truncated"] += 1
+            _parse_packet(frame, interface["link_type"], state)
+
+        elif block_type == 3:  # Simple Packet Block (interface zero; no timestamp)
+            if block_length < 16 or not interfaces:
+                raise ValueError("PCAPNG simple packet block has no interface description")
+            interface = interfaces[0]
+            original_length = _integer(capture, cursor + 8, 4, byteorder)
+            included_length = min(original_length, interface["snap_length_bytes"])
+            if included_length > MAX_FRAME_BYTES:
+                raise ValueError("PCAPNG simple packet exceeds the frame limit")
+            packet_start = cursor + 12
+            padded_packet_end = packet_start + ((included_length + 3) & ~3)
+            if padded_packet_end > block_end - 4:
+                raise ValueError("PCAPNG simple packet data exceeds its block")
+            if packets_read >= maximum_packets:
+                raise ValueError(f"capture exceeds the {maximum_packets}-packet analysis limit")
+            frame = capture[packet_start:packet_start + included_length]
+            packets_read += 1
+            captured_bytes += included_length
+            wire_bytes += original_length
+            if included_length < original_length:
+                state["truncated"] += 1
+            _parse_packet(frame, interface["link_type"], state)
+
+        cursor = block_end
+
+    if section_count == 0:
+        raise ValueError("PCAPNG capture does not contain a section header block")
+    unique_link_types = {item["link_type"] for item in interface_metadata}
+    link_type = next(iter(unique_link_types)) if len(unique_link_types) == 1 else None
+    link_type_name = (
+        SUPPORTED_LINK_TYPES[link_type] if link_type is not None
+        else "multiple" if unique_link_types else "unknown"
+    )
+    byte_order = section_orders[0] if len(set(section_orders)) == 1 else "mixed"
+    capture_metadata = {
+        "format": "pcapng",
+        "version": "1.0",
+        "byte_order": byte_order,
+        "timestamp_resolution": "per-interface",
+        "link_type": link_type,
+        "link_type_name": link_type_name,
+        "snap_length_bytes": max((item["snap_length_bytes"] for item in interface_metadata), default=0),
+        "interface_count": len(interface_metadata),
+        "section_count": section_count,
+        "interfaces": interface_metadata,
+        "capture_sha256": hashlib.sha256(capture).hexdigest(),
+    }
+    summary = {
+        "packet_count": packets_read,
+        "captured_bytes": captured_bytes,
+        "wire_bytes": wire_bytes,
+        "truncated_packet_count": state["truncated"],
+        "malformed_frame_count": state["malformed"],
+        "ipv4_packet_count": state["ipv4"],
+        "ipv6_packet_count": state["ipv6"],
+        "arp_packet_count": state["arp"],
+        "first_packet_at": first_packet_at,
+        "last_packet_at": last_packet_at,
+    }
+    return capture_metadata, summary
+
+
 def run(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("payload must be an object")
