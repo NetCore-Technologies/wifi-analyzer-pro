@@ -165,6 +165,7 @@ FEATURE_MODULES = (
     "feature_159_site_to_site_change_report",
     "feature_160_consolidated_site_audit_report",
     "feature_161_router_agent_capability_negotiation",
+    "feature_162_openwrt_snapshot_normalizer",
 )
 
 @lru_cache(maxsize=1)

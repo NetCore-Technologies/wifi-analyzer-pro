@@ -28,6 +28,7 @@ _ADAPTERS = {
             "wireless.scan_results",
             "wireless.associations",
             "wireless.statistics",
+            "inventory.snapshot",
         ],
         "notes": (
             "Capability negotiation only. It does not connect to a router, execute shell commands, "

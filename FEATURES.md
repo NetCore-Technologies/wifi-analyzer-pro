@@ -1,4 +1,4 @@
-# 161 WiFi Analyzer Pro feature tools
+# 162 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -168,6 +168,7 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 159 | Site-to-site change report (`site_to_site_change_report`) | Site inventory | Compare each site’s latest two stored snapshots, report AP/topology drift, and flag BSSID reuse across sites. |
 | 160 | Consolidated site audit report (`consolidated_site_audit_report`) | Site inventory | Combine inventory, topology, gateway, radio standards, subnet capacity, cross-site inventory and optional saved-history results into one evidence-based report. |
 | 161 | Router agent capability negotiation (`router_agent_capability_negotiation`) | Router integrations | Negotiate versioned, advertised read-only capabilities against the OpenWrt adapter manifest and reject unsupported operations or write permissions. |
+| 162 | OpenWrt snapshot normalizer (`openwrt_snapshot_normalizer`) | Router integrations | Normalise bounded board, interface, radio, station and route snapshots into a credential-free common schema. |
 
 
 ## Authentication and UI

@@ -825,6 +825,21 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"token": token, "status": AUTH.status(token)})
             return
 
+        if path == "/api/adapters/openwrt/normalise":
+            if not self.require_auth():
+                return
+            try:
+                result = run_feature("openwrt_snapshot_normalizer", payload)
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception as error:
+                print(f"[OPENWRT ADAPTER ERROR] {error}")
+                self.send_json({"error": "OpenWrt snapshot normalisation failed"}, 500)
+                return
+            self.send_json(result)
+            return
+
         if path == "/api/adapters/negotiate":
             if not self.require_auth():
                 return

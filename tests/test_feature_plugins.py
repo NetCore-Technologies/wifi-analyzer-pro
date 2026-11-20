@@ -274,17 +274,27 @@ PAYLOADS = {
         "advertised_capabilities": ["system.board", "system.health", "network.interfaces", "wireless.radios", "wireless.scan_results"],
         "requested_capabilities": ["system.board", "wireless.radios", "wireless.config.write"],
         "requested_permissions": ["read", "config.write"]
+    },
+    "openwrt_snapshot_normalizer": {
+        "captured_at": "2026-11-20T10:00:00+11:00",
+        "board": {"model":"Example OpenWrt Router","hostname":"router","kernel":"6.6.1","release":{"distribution":"OpenWrt","version":"24.10.0","target":"qualcommax/ipq807x"}},
+        "interfaces": [{"interface":"lan","device":"br-lan","proto":"static","up":true,"ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
+        "wireless": [{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":2437,"channel":6,"channel_width_mhz":20,"signal":-52,"noise":-95,"txpower":20,"security":"WPA3","up":true,"password":"must-never-be-copied"}],
+        "associations": [{"interface":"phy0-ap0","stations":[{"mac":"AA:BB:CC:DD:EE:01","signal":-61,"tx":{"rate":600},"rx":{"rate":433}}]}],
+        "routes": [{"target":"0.0.0.0/0","nexthop":"192.168.1.254","device":"eth1","metric":10}]
     }
 }
+
+
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_sixty_one_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_sixty_two_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 161)
-        self.assertEqual(len(set(FEATURE_MODULES)), 161)
-        self.assertEqual(count(), 161)
-        self.assertEqual(len(entries), 161)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 161)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 162)])
+        self.assertEqual(len(FEATURE_MODULES), 162)
+        self.assertEqual(len(set(FEATURE_MODULES)), 162)
+        self.assertEqual(count(), 162)
+        self.assertEqual(len(entries), 162)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 162)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 163)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -885,6 +895,25 @@ class FeatureCatalogTests(unittest.TestCase):
                 "adapter_id": "openwrt", "agent_version": "1.0.0",
                 "advertised_capabilities": ["system.board", "system.board"],
             })
+
+    def test_openwrt_snapshot_normalizer_maps_common_fields_and_drops_unrecognised_data(self):
+        result = run("openwrt_snapshot_normalizer", PAYLOADS["openwrt_snapshot_normalizer"])["result"]
+        self.assertEqual(result["captured_at"], "2026-11-19T23:00:00+00:00")
+        self.assertEqual(result["board"]["distribution"], "OpenWrt")
+        self.assertEqual(result["interfaces"][0]["ipv4_addresses"], ["192.168.1.1/24"])
+        self.assertEqual(result["wireless_radios"][0]["band"], "2.4GHz")
+        self.assertEqual(result["associations"][0]["rx_rate_mbps"], 433)
+        self.assertEqual(result["routes"][0]["gateway"], "192.168.1.254")
+        self.assertNotIn("password", result["wireless_radios"][0])
+        self.assertEqual(result["summary"]["association_count"], 1)
+
+    def test_openwrt_snapshot_normalizer_rejects_invalid_addresses_timestamps_and_bounds(self):
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
+            run("openwrt_snapshot_normalizer", {"captured_at":"2026-11-20T10:00:00","board":{}})
+        with self.assertRaisesRegex(ValueError, "valid BSSID"):
+            run("openwrt_snapshot_normalizer", {"captured_at":"2026-11-20T10:00:00Z","wireless":[{"interface":"wlan0","bssid":"invalid"}]})
+        with self.assertRaisesRegex(ValueError, "IPv4 interface address"):
+            run("openwrt_snapshot_normalizer", {"captured_at":"2026-11-20T10:00:00Z","interfaces":[{"interface":"lan","ipv4-address":[{"address":"999.1.1.1","mask":24}]}]})
 
 if __name__ == "__main__":
     unittest.main()

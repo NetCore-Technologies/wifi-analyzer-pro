@@ -72,8 +72,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 161)
-        self.assertEqual(len(catalog["features"]), 161)
+        self.assertEqual(catalog["count"], 162)
+        self.assertEqual(len(catalog["features"]), 162)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -82,6 +82,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("site_to_site_change_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("consolidated_site_audit_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_capability_negotiation", {item["slug"] for item in catalog["features"]})
+        self.assertIn("openwrt_snapshot_normalizer", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
@@ -298,6 +299,16 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(negotiated["result"]["status"], "partial")
         self.assertEqual(negotiated["result"]["negotiated_permissions"], ["read"])
+
+    def test_openwrt_snapshot_normalizer_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/adapters/openwrt/normalise", {
+            "captured_at":"2026-11-20T10:00:00Z","board":{"model":"OpenWrt test router"},"interfaces":[],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F162")
+        self.assertEqual(result["result"]["adapter_id"], "openwrt")
 
 if __name__ == "__main__":
     unittest.main()
