@@ -57,3 +57,11 @@ jobs:
       - run: python -m pip install -r wifi_analyzer_backend/requirements.txt
       - run: python -m compileall -q wifi_analyzer_backend tests
       - run: python -m unittest discover -s tests -v
+
+  container:
+    name: Docker image build (non-root runtime)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the production container image
+        run: docker build --pull --tag wifi-analyzer-pro:ci .

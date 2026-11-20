@@ -41,17 +41,26 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ### Shipped in the current main branch
 - ✅ 188 distinct callable feature modules (F001–F168 and F172–F191), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
-- ✅ Local first-run password setup, salted scrypt verifier, bearer sessions, expiry, logout and failed-login lockout.
+- ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
+- ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
+- ✅ Team Access UI for creating users, changing assigned roles and disabling/enabling accounts.
+- ✅ Local append-only SQLite security audit ledger with SHA-256 event chaining, row update/delete triggers, bounded event filtering/pagination, chain verification and an owner/administrator audit viewer.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
 - ✅ Docker and standalone Linux packaging include the auth and feature modules.
 - ✅ Unit and HTTP integration tests cover the account gate, feature catalogue, tool execution, logout and rejected browser origins.
+
+- ✅ Durable report queue with transactional claims, lease renewal, retries and dead-letter handling.
+- ✅ Offline PCAP/PCAPNG analysis with bounded packet/frame parsing and radiotap signal/noise evidence.
+- ✅ Opt-in scheduled-report worker with pinned public-IP HTTPS delivery, exact host allowlists, TLS hostname verification, redirect refusal, bounded responses and lease-guarded completion.
 
 ### Remaining v1.1.0 scope
 - 📋 External plugin SDK with a stable manifest, version checks, permissions and lifecycle hooks.
 - 📋 Enable/disable and safe reload for third-party plugins.
 - 📋 Example plugin and developer guide.
 - 📋 Packet capture with explicit interface selection, bounded file size, capture filters and PCAP export.
-- 📋 Multi-user roles (admin/viewer) and per-site dashboards for multiple local agents.
+- 📋 Per-site and per-tenant authorization scopes across sites, agents, reports and feature inputs.
+- 📋 Enterprise identity: OIDC/SAML SSO, MFA/WebAuthn, SCIM provisioning, external immutable audit export/checkpoints and centralised retention.
+- 📋 Multi-site dashboards for distributed local agents.
 - 📋 Authenticated WebSocket streaming and API rate limits for expensive diagnostics.
 - 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
 
@@ -67,7 +76,7 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 | ✅ | F121–F140 | Shipped: client association inventory, airtime/throughput fairness, QoS/DSCP, retry/PHY checks, 802.11k/v/r, TWT, DHCP/DNS/gateway checks and association diagnostics | 2026-11-20 | Implemented | F001–F120; supplied AP/controller and client measurement records |
 | 🚧 | F141–F160 | F141–F160 shipped: site inventory snapshots/comparisons, AP topology relationships and gateway-path audits, subnet correlation/capacity, gateway redundancy, floor-plan anchors/zones, topology redundancy/diffs/history, AP freshness, channel-reuse and radio-configuration standards audits, interactive topology visualisation, persistent site discovery history, stored site-to-site change reports, and consolidated site audit reporting; all deliverables in this wave are shipped | 2027-02-26 | 20 features shipped; 0 remains | SQLite history; consented local discovery |
 | 🚧 | F161–F180 | F161–F180 implementation committed: versioned OpenWrt read-only agent and scope-gated health telemetry; authenticated Router Agent Console; credential-free UniFi/MikroTik imports; cross-vendor snapshot drift, fleet health, subnet overlap, client roaming, VLAN consistency, route-table and cross-router gateway redundancy audits | 2026-11-20 | 20 implemented; final Python matrix and frontend verification pending | Authenticated API; offline adapter contracts; bounded schema validation |
-| 🚧 | F181–F200 | F181–F191 shipped: local incident policy evaluation; hashed report bundles/comparison; timezone-aware schedule preview; signed webhook envelopes; encrypted backups; DNS/TLS egress evidence; durable SQLite report outbox; lease-verified delivery packages; bounded subscription routing; offline PCAP/PCAPNG analysis with radiotap RF metrics; remaining: autonomous worker orchestration, notification delivery and live capture interface controls | 2027-05-07 | 11 deliverables shipped; 9 remain | F182 report schema; F184 occurrence IDs; F188 job queue; F185 signing; F187 egress verification |
+| 🚧 | F181–F200 | F181–F191 shipped: local incident policy evaluation; hashed report bundles/comparison; timezone-aware schedule preview; signed webhook envelopes; encrypted backups; DNS/TLS egress evidence; durable SQLite report outbox; lease-verified delivery packages; bounded subscription routing; offline PCAP/PCAPNG analysis with radiotap RF metrics. Separate opt-in pinned-TLS report-worker infrastructure is delivered but is not counted as a feature tool. Remaining: multi-subscription orchestration, live capture interface controls and F192–F200 | 2027-05-07 | 11 numbered feature tools shipped; 9 remain | F182 report schema; F184 occurrence IDs; F188 job queue; F185 signing; F187 egress verification |
 
 ### Longer-range direction (F201–F1100)
 

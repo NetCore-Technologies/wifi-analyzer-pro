@@ -85,6 +85,21 @@ The app can be explored with sample data. To run the backend in explicit demo mo
 WIFI_ANALYZER_DEMO=1 python3 wifi_analyzer_backend/server.py
 ```
 
+## Docker deployment
+
+The image runs the API as an unprivileged UID and includes the router adapters, site-history store and optional report worker. The image declares persistent volumes for the local account and report/site state.
+
+Build with:
+
+    docker build -t wifi-analyzer-pro:local .
+
+Run the API using the default command. To run the optional worker as a sidecar, share the API container volumes and inject its webhook configuration through a protected service-manager secret facility:
+
+    docker run --rm --volumes-from wifi-analyzer-pro \
+      --entrypoint python wifi-analyzer-pro:local report_worker.py
+
+The worker container must share both the API container's HOME configuration volume and XDG state volume so it reads the same credentials and report-job database. Configure its environment securely; see the worker guide. Do not expose the worker container's ports.
+
 ## API
 
 The local HTTP service exposes:
@@ -93,10 +108,13 @@ The local HTTP service exposes:
 |---|---|
 | `GET /health` | Basic server health (public) |
 | `GET /api/auth/status` | First-run account and session status |
-| `POST /api/auth/setup` | Create the one local password during first-run setup |
+| `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
 | `GET /api/features` | Authenticated catalogue of the 188 built-in tools |
+| `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates and disable/enable controls |
+| `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
+| `GET /api/security/audit/verify` | Verify the local append-only hash chain and report the verified event count |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `GET /api/reports/jobs` | List authenticated scheduled-report jobs and state counts |
 | `POST /api/reports/jobs/enqueue` | Queue a hash-validated report occurrence idempotently |
@@ -104,6 +122,7 @@ The local HTTP service exposes:
 | `POST /api/reports/jobs/{id}/renew` | Extend an active worker lease without reviving expired leases |
 | `POST /api/reports/jobs/{id}/delivery-package` | Verify the current SQLite lease and prepare an approved, signed delivery package without sending it |
 | `POST /api/reports/jobs/{id}/complete`, `/fail`, `/cancel` | Complete a lease, schedule a bounded retry/dead-letter, or cancel a pending job |
+| [Scheduled report worker](wifi_analyzer_backend/REPORT_WORKER.md) | Opt-in, pinned-TLS HTTPS delivery of due report jobs; run separately from the API server |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
@@ -141,9 +160,9 @@ For a Vite development server accessed from another device, add its exact origin
 
 ## Security and privacy
 
-WiFi Analyzer Pro is intended to run close to the network being diagnosed. Network scans and system diagnostics are performed by the local host. No cloud account is required for local use. First-run setup stores a salted scrypt password verifier outside the repository with owner-only file permissions; session tokens are process-local and expire after a fixed lifetime. Five consecutive failed logins trigger a temporary lockout.
+WiFi Analyzer Pro is intended to run close to the network being diagnosed. Network scans and system diagnostics are performed by the local host. No cloud account is required for local use. First-run setup creates a local workspace owner and stores individual salted scrypt password verifiers outside the repository with owner-only file permissions. Existing version-1 single-password files migrate to an `admin` owner identity without resetting the credential. Sessions are process-local, expire after a fixed lifetime and are revoked when an account is disabled or its password is reset. Five consecutive failed logins trigger a temporary lockout.
 
-The built-in local account gate protects API endpoints, but this is not enterprise SSO or multi-user role-based access. Do not expose port `199` directly to the public internet. For team or remote access, place it behind a VPN or an authenticated reverse proxy, restrict network access, and explicitly configure allowed CORS origins. Review [SECURITY.md](SECURITY.md) before deployment.
+The local directory supports named accounts and role-based API permissions: owner, administrator, network administrator, analyst and read-only viewer. Sensitive agent, report, site-history and diagnostic operations enforce explicit permissions server-side; the Team Access screen manages users and roles. This is an initial single-workspace RBAC implementation, not site-isolated multi-tenancy, enterprise SSO, MFA/WebAuthn or centralised identity federation. The owner/administrator Security Audit screen records successful authentication, permission denials, user changes and router-agent credential lifecycle events in a local hash-chained SQLite ledger. Ordinary row updates/deletes are blocked and a verification endpoint detects local edits or chain gaps; this is tamper-evident, not externally immutable, and failed-login attempts are not all retained individually. Do not expose port `199` directly to the public internet. For team or remote access, place it behind a VPN or an authenticated reverse proxy, restrict network access, and explicitly configure allowed CORS origins. Review [SECURITY.md](SECURITY.md) before deployment.
 
 Only scan networks and devices you own or are authorised to assess. A Wi-Fi adapter may require OS-specific permissions for full scan details.
 
@@ -181,10 +200,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports should include the OS, Pytho
 MIT — see [LICENSE](LICENSE).
 
 
-Scheduled report execution is coordinated through the authenticated `/api/reports/jobs` endpoints. Jobs are queued with an idempotency key, claimed by workers using expiring leases, and transitioned to completion, retry or dead-letter state; delivery remains the responsibility of an external worker that follows the signed webhook and egress policy contracts. Workers can renew a lease before expiry. The delivery-package endpoint reads the claimed job and lease from the local SQLite store, rejects mismatched or expired leases, and only then prepares F189 output using supplied fresh DNS/TLS evidence. This endpoint does not transmit the webhook; an external worker remains responsible for network delivery and should complete or fail the job using the same lease ID.
+## Scheduled report delivery
 
+Scheduled-report jobs are stored in the local SQLite outbox and claimed using exclusive, expiring leases. The opt-in report worker can now send due jobs: run the worker from the repository root with python -m wifi_analyzer_backend.report_worker, or use report_worker.py in the Docker sidecar. It sends signed notifications over direct HTTPS connections pinned to a freshly resolved public IP, verifies the original hostname and trusted TLS certificate, refuses redirects, applies bounded request/response limits and only completes a job after a 2xx response. Configure an exact destination allowlist and a protected signing secret as documented in the [report-worker guide](wifi_analyzer_backend/REPORT_WORKER.md).
 
-Workers can prepare a report webhook package through `router_scheduled_report_delivery_package` only while holding the active report-job lease and supplying fresh DNS/TLS evidence that passes the egress policy. The feature creates a signed request envelope; outbound transmission remains an explicit worker responsibility.
+The authenticated delivery-package endpoint remains available for external integrations. It verifies the active lease and prepares the signed envelope using supplied DNS/TLS evidence; it does not transmit network traffic. The built-in worker and external dispatchers must not share the same claimed lease.
 
-
-The `router_webhook_subscription_router` (F190) maps normalized events to bounded, deterministic subscription batches. Each batch can be signed by F185 and checked by F187 before the leased worker sends it; the router itself never transmits events or accepts signing secrets. The `pcap_capture_analyzer` (F191) accepts standard-base64 classic PCAP and PCAPNG files through the authenticated feature API, with a 512 KiB file bound and 5,000-packet limit. It supports multi-interface PCAPNG sections with declared section-length validation, per-interface timestamp precision/offset, and zero-snaplen interfaces under the analyzer’s hard frame-size cap. It supports Ethernet, Linux cooked v1/v2, raw 802.11 and radiotap link types, and summarizes IPv4/IPv6, TCP/UDP, DSCP and wireless frame types. Radiotap fields provide measured signal/noise and channel-frequency metadata when present. Analysis results can be downloaded locally as JSON or CSV; exports include summary, protocol, DSCP, port, wireless and radiotap measurements but never raw packet payloads or endpoint identities. Payloads, source/destination addresses, SSIDs and BSSIDs are not returned. It is an offline file analyzer, not a live interface capture.
+F190 maps normalized events into bounded, deterministic subscription batches. The current worker supports one configured destination per process; autonomous multi-subscription fan-out is still on the roadmap. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.

@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import {
   Wifi, Activity, Globe, Zap, Monitor, Radio, Layers,
-  Smartphone, BarChart2, Download, Bell, Bot, Map, Wrench, Code,
+  Smartphone, BarChart2, Download, Bell, Bot, Map, Wrench, Code, Users, ClipboardList,
   RefreshCw, Shield, AlertTriangle, CheckCircle, XCircle, Info,
   Lock, Server, LayoutDashboard, ArrowDown, ArrowUp,
   Cpu, HardDrive, Thermometer, Database, Signal, Search,
@@ -16,7 +16,12 @@ import { apiFetch } from "./lib/api.js";
 import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
 import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
 import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
+<<<<<<< HEAD
 import UserManagement from "./components/UserManagement.jsx";
+=======
+import TeamAccessPanel from "./components/TeamAccessPanel.jsx";
+import SecurityAuditPanel from "./components/SecurityAuditPanel.jsx";
+>>>>>>> origin/main
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -876,6 +881,8 @@ const NAV=[
     {id:"system",label:"System",           Icon:Monitor},
     {id:"router",label:"Router Support",   Icon:Server},
     {id:"agents",label:"Router Agents",    Icon:Shield},
+    {id:"teamAccess",label:"Team Access",   Icon:Users},
+    {id:"securityAudit",label:"Security Audit",Icon:ClipboardList},
   ]},
   {g:"INSIGHTS", items:[
     {id:"viz",    label:"Visualisation",   Icon:BarChart2},
@@ -1016,7 +1023,7 @@ function SettingsOverlay({ preferences, onChange, onClose }) {
 }
 
 export default function App() {
-  const { logout } = useAuth();
+  const { logout, identity } = useAuth();
   const [tab,setTab]=useState("dashboard");
   const [scanning,setScanning]=useState(false);
   const [preferences,setPreferences]=useState(loadPreferences);
@@ -1121,6 +1128,8 @@ export default function App() {
     featureTools: <FeatureWorkbench/>,
     pcap:         <PcapAnalyzer/>,
     agents:       <RouterAgentConsole/>,
+    teamAccess:   <TeamAccessPanel/>,
+    securityAudit:<SecurityAuditPanel/>,
     dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
@@ -1191,7 +1200,12 @@ export default function App() {
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
-          {NAV.map(group=>(
+          {NAV
+            .map(group => ({ ...group, items: group.items.filter(item =>
+              !["teamAccess", "securityAudit"].includes(item.id) || ["owner", "admin"].includes(identity?.role)
+            ) }))
+            .filter(group => group.items.length > 0)
+            .map(group=>(
             <div key={group.g}>
               {!collapsed&&(
                 <div style={{fontSize:8,color:C.muted,letterSpacing:1.2,padding:"8px 12px 3px",
