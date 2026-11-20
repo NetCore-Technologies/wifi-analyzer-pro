@@ -351,6 +351,26 @@ PAYLOADS = {
         }
     }
 ,
+    "mikrotik_snapshot_normalizer": {
+        "captured_at": "2026-11-20T06:00:00Z",
+        "router": {"board_name": "MikroTik hAP ax3", "version": "7.17.2"},
+        "resource": {"cpu_load": "12", "free_memory": "100", "total_memory": "200"},
+        "interfaces": [{"name": "bridge", "type": "bridge", "running": True}],
+        "wireless": [{
+            "name": "wifi1", "ssid": "Lab", "band": "5ghz-ax",
+            "channel": "36", "channel_width": "80mhz", "running": True
+        }],
+        "registrations": [{
+            "mac_address": "AA:BB:CC:DD:EE:01",
+            "interface": "wifi1", "signal_strength": "-61"
+        }],
+        "addresses": [{"interface": "bridge", "address": "192.0.2.1/24"}],
+        "vlans": [{"name": "vlan20", "interface": "bridge", "vlan_id": "20"}],
+        "dhcp_leases": [{
+            "address": "192.0.2.25", "mac_address": "AA:BB:CC:DD:EE:01",
+            "status": "bound"
+        }]
+    },
     "unifi_snapshot_normalizer": {
         "captured_at": "2026-11-20T10:00:00Z",
         "controller": {"model": "Cloud Gateway", "version": "9.0.1"},
@@ -392,12 +412,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 169)
-        self.assertEqual(len(set(FEATURE_MODULES)), 169)
-        self.assertEqual(count(), 169)
-        self.assertEqual(len(entries), 169)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 169)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 169)] + ["F170"])
+        self.assertEqual(len(FEATURE_MODULES), 170)
+        self.assertEqual(len(set(FEATURE_MODULES)), 170)
+        self.assertEqual(count(), 170)
+        self.assertEqual(len(entries), 170)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 170)
+        self.assertEqual(
+            [entry["id"] for entry in entries],
+            [f"F{i:03d}" for i in range(1, 169)] + ["F170", "F171"],
+        )
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():

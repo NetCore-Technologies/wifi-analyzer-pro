@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 169 independently callable feature modules (F001–F168 and F170; F169 identifies the OpenWrt agent deliverable), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 170 independently callable feature modules (F001–F168 and F170–F171; F169 identifies the OpenWrt agent deliverable), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -25,6 +25,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Ship a standard-library OpenWrt read-only agent with fixed ubus/ip/iw command allowlists, no shell or configuration writes, HTTPS verification, procd service packaging and a mode-0600 single-delivery outbox for restart-safe retries.
 - Refuse HTTP redirects in the agent API client so its bearer credential cannot be forwarded to a redirected endpoint.
 - Add F170: a bounded UniFi Network export normalizer for APs, radios, client associations and network profiles; import is offline, schema-validated and allow-lists fields so passphrases and tokens never enter the common inventory schema.
+- Add F171: a bounded MikroTik RouterOS export normalizer for board/resource health, interfaces, wireless registrations, IP addresses, VLANs and DHCP leases; imports are offline, allow-listed and credential-free.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
 - Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.

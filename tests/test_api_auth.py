@@ -90,7 +90,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 169)
+        self.assertEqual(catalog["count"], 170)
         self.assertEqual(len(catalog["features"]), 169)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
@@ -309,11 +309,13 @@ class AuthenticatedApiTests(unittest.TestCase):
         token = setup["token"]
         status, catalogue = self.request("GET", "/api/adapters", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalogue["count"], 2)
+        self.assertEqual(catalogue["count"], 3)
         adapters = {item["adapter_id"]: item for item in catalogue["adapters"]}
         self.assertTrue(adapters["openwrt"]["read_only"])
         self.assertTrue(adapters["unifi"]["read_only"])
         self.assertEqual(adapters["unifi"]["transport"], "controller_export")
+        self.assertTrue(adapters["mikrotik"]["read_only"])
+        self.assertEqual(adapters["mikrotik"]["transport"], "controller_export")
 
         status, negotiated = self.request("POST", "/api/adapters/negotiate", {
             "adapter_id": "openwrt",
@@ -335,6 +337,23 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["feature"], "F162")
         self.assertEqual(result["result"]["adapter_id"], "openwrt")
+
+    def test_mikrotik_snapshot_normalizer_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/mikrotik_snapshot_normalizer", {
+            "captured_at": "2026-11-20T10:00:00Z",
+            "router": {"board_name": "MikroTik sample", "version": "7.17.2"},
+            "interfaces": [{"name": "bridge", "running": True}],
+            "wireless": [{"name": "wifi1", "band": "5ghz-ax", "channel": 36, "channel_width": "80mhz"}],
+            "addresses": [{"interface": "bridge", "address": "192.0.2.1/24"}],
+            "vlans": [{"name": "vlan20", "interface": "bridge", "vlan_id": "20"}],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F171")
+        self.assertEqual(result["result"]["adapter_id"], "mikrotik")
+        self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
+        self.assertEqual(result["result"]["vlans"][0]["vlan_id"], 20)
 
     def test_unifi_snapshot_normalizer_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

@@ -57,6 +57,32 @@ _ADAPTERS = {
             "session, request credentials, or change network configuration."
         ),
     },
+    "mikrotik": {
+        "adapter_id": "mikrotik",
+        "display_name": "MikroTik RouterOS export",
+        "platform_family": "MikroTik RouterOS",
+        "adapter_version": "0.1.0",
+        "minimum_agent_version": "1.0.0",
+        "capability_schema_version": "1.0",
+        "transport": "controller_export",
+        "read_only": True,
+        "supported_permissions": ["read"],
+        "capabilities": [
+            "system.board",
+            "system.health",
+            "network.interfaces",
+            "network.addresses",
+            "network.vlans",
+            "network.dhcp_leases",
+            "wireless.radios",
+            "wireless.associations",
+            "inventory.snapshot",
+        ],
+        "notes": (
+            "Offline import of caller-supplied RouterOS export data. This manifest does not establish "
+            "a RouterOS session, execute scripts, request credentials, or permit configuration writes."
+        ),
+    },
 }
 
 

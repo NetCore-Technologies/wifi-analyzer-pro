@@ -96,7 +96,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 169 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 170 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
@@ -123,7 +123,7 @@ The local HTTP service exposes:
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.
 
-The `unifi_snapshot_normalizer` feature accepts caller-supplied UniFi Network exports through `POST /api/features/unifi_snapshot_normalizer`. It validates AP, radio, client and network records and omits unknown and credential-like fields. This is an offline import, not a live controller integration.
+The `unifi_snapshot_normalizer` and `mikrotik_snapshot_normalizer` features accept caller-supplied controller/router exports through their `/api/features/{slug}` endpoints. They validate inventory, radio, client, address and network records and omit unknown and credential-like fields. These are offline imports, not live controller integrations.
 
 For router-side, read-only telemetry collection, see the [OpenWrt agent installation and service guide](agent/README.md). The agent uses an enrolled scoped token, TLS verification, a private on-disk retry spool and the idempotent snapshot-delivery endpoint.
 
