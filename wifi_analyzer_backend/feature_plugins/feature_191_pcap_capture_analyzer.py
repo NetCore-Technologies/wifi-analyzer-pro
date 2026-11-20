@@ -373,7 +373,7 @@ def run(payload: dict) -> dict:
     if not 1 <= snaplen <= MAX_SNAPLEN:
         raise ValueError(f"PCAP snap length must be from 1 to {MAX_SNAPLEN} bytes")
     if link_type not in SUPPORTED_LINK_TYPES:
-        raise ValueError("unsupported PCAP link type; supported types are Ethernet, IEEE 802.11 and radiotap")
+        raise ValueError("unsupported PCAP link type; supported types are Ethernet, Linux cooked v1/v2, IEEE 802.11 and radiotap")
 
     maximum_packets = payload.get("maximum_packets", MAX_PACKETS)
     if isinstance(maximum_packets, bool) or not isinstance(maximum_packets, int) or not 1 <= maximum_packets <= MAX_PACKETS:
