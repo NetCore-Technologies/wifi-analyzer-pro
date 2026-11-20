@@ -987,6 +987,9 @@ class Handler(BaseHTTPRequestHandler):
             if action in {"delete", "disable"} and username == actor["username"]:
                 self.send_json({"error": "You cannot disable or delete your own administrator account"}, 409)
                 return
+            if action == "role" and username == actor["username"] and payload.get("role") != "admin":
+                self.send_json({"error": "You cannot demote your own active administrator account"}, 409)
+                return
             try:
                 if action == "role":
                     role = payload.get("role")
