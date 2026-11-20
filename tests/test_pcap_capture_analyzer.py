@@ -81,6 +81,23 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         self.assertEqual(result["wireless_frame_type_counts"], {"management": 1})
         self.assertEqual(result["wireless_subtype_counts"], {"beacon": 1})
 
+    def test_extracts_radiotap_signal_noise_and_channel_frequency(self):
+        present = (1 << 3) | (1 << 5) | (1 << 6)
+        radiotap = bytes((0, 0)) + struct.pack("<HIHHbb", 18, present, 2412, 0x00A0, -48, -95)
+        result = run({"capture_base64": make_capture(127, [radiotap + beacon_frame()])})
+        observations = result["radiotap_observations"]
+        self.assertEqual(observations["signal"], {"sample_count": 1, "average_dbm": -48.0})
+        self.assertEqual(observations["noise"], {"sample_count": 1, "average_dbm": -95.0})
+        self.assertEqual(observations["channel_frequency_mhz_counts"], {"2412": 1})
+        self.assertEqual(result["wireless_subtype_counts"], {"beacon": 1})
+
+    def test_truncated_radiotap_field_metadata_is_rejected_as_malformed(self):
+        present = (1 << 3) | (1 << 5) | (1 << 6)
+        malformed = bytes((0, 0)) + struct.pack("<HI", 13, present) + b"\\x00" * 5
+        result = run({"capture_base64": make_capture(127, [malformed])})
+        self.assertEqual(result["summary"]["malformed_frame_count"], 1)
+        self.assertEqual(result["summary"]["packet_count"], 1)
+
     def test_skips_radiotap_header_and_parses_embedded_80211_frame(self):
         radiotap = bytes.fromhex("0000080000000000")
         result = run({"capture_base64": make_capture(127, [radiotap + beacon_frame()])})
