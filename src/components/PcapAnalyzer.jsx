@@ -24,7 +24,7 @@ const bytes = value => {
 };
 
 function safeCaptureName(name) {
-  const stem = String(name || "capture").replace(/\\.[^.]*$/, "");
+  const stem = String(name || "capture").replace(/\.[^.]*$/, "");
   return stem.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "capture";
 }
 
@@ -86,9 +86,9 @@ function captureReportCsv(analysis) {
   }
   const escape = value => {
     const text = String(value ?? "");
-    return /[",\\r\\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
-  return rows.map(row => row.map(escape).join(",")).join("\\r\\n") + "\\r\\n";
+  return rows.map(row => row.map(escape).join(",")).join("\r\n") + "\r\n";
 }
 
 function Metric({ label, value, detail }) {
