@@ -16,7 +16,7 @@ const styles = {
 };
 async function readResponse(response) {
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || \`Request failed (HTTP \${response.status})\`);
+  if (!response.ok) throw new Error(data.error || `Request failed (HTTP ${response.status})`);
   return data;
 }
 function formatTime(value) {
@@ -46,7 +46,7 @@ export default function SecurityAuditPanel() {
       if (action.trim()) params.set("action", action.trim());
       const cursor = older ? nextBeforeId : null;
       if (cursor) params.set("before_id", String(cursor));
-      const response = await apiFetch(\`\${API_BASE}/api/security/audit?\${params.toString()}\`, {
+      const response = await apiFetch(`${API_BASE}/api/security/audit?${params.toString()}`, {
         signal: AbortSignal.timeout(10000),
       });
       const data = await readResponse(response);
@@ -64,7 +64,7 @@ export default function SecurityAuditPanel() {
     setVerifying(true);
     setError("");
     try {
-      const response = await apiFetch(\`\${API_BASE}/api/security/audit/verify\`, {
+      const response = await apiFetch(`${API_BASE}/api/security/audit/verify`, {
         signal: AbortSignal.timeout(15000),
       });
       const data = await readResponse(response);
@@ -115,7 +115,7 @@ export default function SecurityAuditPanel() {
           </div>
         </div>
         {verification ? (
-          <div role="status" style={{ marginTop: 12, padding: 10, borderRadius: 8, border: \`1px solid \${verification.valid ? "rgba(74,222,128,.35)" : "rgba(248,113,113,.35)"}\`, background: verification.valid ? "rgba(74,222,128,.07)" : "rgba(248,113,113,.07)", color: verification.valid ? "#4ade80" : "#f87171", fontSize: 11 }}>
+          <div role="status" style={{ marginTop: 12, padding: 10, borderRadius: 8, border: `1px solid ${verification.valid ? "rgba(74,222,128,.35)" : "rgba(248,113,113,.35)"}`, background: verification.valid ? "rgba(74,222,128,.07)" : "rgba(248,113,113,.07)", color: verification.valid ? "#4ade80" : "#f87171", fontSize: 11 }}>
             {verification.valid ? "Hash chain verified" : "Hash-chain verification failed"} · {verification.verified_count}/{verification.event_count} records checked
           </div>
         ) : null}
@@ -146,15 +146,15 @@ export default function SecurityAuditPanel() {
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, overflowWrap: "anywhere" }}>{event.action}</div>
                 <div style={{ ...styles.muted, marginTop: 4 }}>{formatTime(event.occurred_at)}</div>
-                <div style={{ ...styles.muted, marginTop: 4 }}>{event.actor?.username || "System / unauthenticated"}{event.actor?.role ? \` · \${event.actor.role}\` : ""}</div>
+                <div style={{ ...styles.muted, marginTop: 4 }}>{event.actor?.username || "System / unauthenticated"}{event.actor?.role ? ` · ${event.actor.role}` : ""}</div>
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 11, color: "#cbd5e1", overflowWrap: "anywhere" }}>
-                  {event.target_type ? \`\${event.target_type}\${event.target_id ? \` · \${event.target_id}\` : ""}\` : "Workspace"}
+                  {event.target_type ? `${event.target_type}${event.target_id ? ` · ${event.target_id}` : ""}` : "Workspace"}
                 </div>
                 <div style={{ ...styles.muted, overflowWrap: "anywhere", marginTop: 4 }}>{Object.keys(event.metadata || {}).length ? JSON.stringify(event.metadata) : "No additional metadata"}</div>
               </div>
-              <span style={{ ...outcomeStyle(event.outcome), border: \`1px solid \${outcomeStyle(event.outcome).border}\`, background: outcomeStyle(event.outcome).background, color: outcomeStyle(event.outcome).color, borderRadius: 999, padding: "4px 8px", fontSize: 10, fontWeight: 750, whiteSpace: "nowrap" }}>{event.outcome}</span>
+              <span style={{ ...outcomeStyle(event.outcome), border: `1px solid ${outcomeStyle(event.outcome).border}`, background: outcomeStyle(event.outcome).background, color: outcomeStyle(event.outcome).color, borderRadius: 999, padding: "4px 8px", fontSize: 10, fontWeight: 750, whiteSpace: "nowrap" }}>{event.outcome}</span>
             </article>
           ))}
           {!loading && events.length === 0 ? <div style={{ ...styles.muted, padding: 15, textAlign: "center" }}>No matching audit events.</div> : null}
