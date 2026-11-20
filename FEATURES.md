@@ -1,4 +1,4 @@
-# 140 WiFi Analyzer Pro feature tools
+# 154 WiFi Analyzer Pro feature tools
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -146,6 +146,22 @@ The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. 
 | 138 | Disconnect reason summary (`disconnect_reason_summary`) | Client operations | Classify and count IEEE 802.11 disassociation/deauthentication reason codes in supplied logs. |
 | 139 | Association rejection summary (`association_rejection_summary`) | Client operations | Classify IEEE 802.11 association response status codes from supplied AP/controller logs. |
 | 140 | Connection health evidence (`connection_health_evidence`) | Client QoS | Flag measured per-client link quality concerns using explicit and configurable signal, retry, rate, loss and latency evidence. |
+
+| 141 | Multi-site access-point inventory snapshot (`site_inventory_snapshot`) | Site inventory | Normalise AP inventories across sites, detect duplicate BSSIDs and report metadata coverage. |
+| 142 | Access-point topology relationships (`ap_topology_relationships`) | Site inventory | Separate physical/backhaul and RF-neighbour relationships while flagging unresolved or cyclic links. |
+| 143 | Site subnet and gateway correlation (`site_network_segment_correlation`) | Site inventory | Match AP management addresses to explicit site CIDRs and report ambiguous or invalid gateway relationships. |
+| 144 | Floor-plan AP anchor validation (`floor_plan_anchor_validation`) | Site inventory | Validate AP floor-plan coordinates and surface missing references or collocated anchors. |
+| 145 | Site inventory snapshot diff (`site_inventory_snapshot_diff`) | Site inventory | Compare AP snapshots for additions, removals, metadata changes and site moves. |
+| 146 | Site network segment capacity (`site_network_segment_capacity`) | Site inventory | Calculate subnet capacity and utilisation from explicitly supplied allocation counts. |
+| 147 | Site gateway redundancy audit (`site_gateway_redundancy_audit`) | Site inventory | Review gateway failover groups, duplicate addresses and reported active/standby state. |
+| 148 | Floor-plan zone assignment (`floorplan_zone_assignment`) | Site inventory | Assign AP anchors to explicit room polygons and surface out-of-zone or overlapping placements. |
+| 149 | Site topology redundancy audit (`site_topology_redundancy_audit`) | Site inventory | Identify physical-backhaul cut links, articulation APs and disconnected components. |
+| 150 | Site topology snapshot diff (`site_topology_snapshot_diff`) | Site inventory | Compare AP inventory and explicit physical/RF topology edges between two snapshots. |
+| 151 | Multi-site AP inventory comparison (`site_inventory_comparison`) | Site inventory | Compare AP counts, bands, vendors, models and firmware distributions and flag cross-site BSSID reuse. |
+| 152 | AP observation freshness audit (`ap_observation_freshness_audit`) | Site inventory | Detect stale and future-dated AP observations while treating missing timestamps as unknown. |
+| 153 | Site AP channel reuse audit (`site_ap_channel_reuse_audit`) | Site inventory | Identify co-channel reuse and adjacent-channel overlap from supplied same-site radio widths and centres. |
+| 154 | Site topology history timeline (`site_topology_history_timeline`) | Site inventory | Summarise AP and link changes across up to 256 timestamped, caller-supplied topology snapshots. |
+
 
 ## Authentication and UI
 
