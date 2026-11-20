@@ -144,6 +144,7 @@ FEATURE_MODULES = (
     "feature_138_disconnect_reason_summary",
     "feature_139_association_rejection_summary",
     "feature_140_connection_health_evidence",
+    "feature_141_site_inventory_snapshot",
 )
 
 @lru_cache(maxsize=1)
