@@ -69,8 +69,9 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 140)
-        self.assertEqual(len(catalog["features"]), 140)
+        self.assertEqual(catalog["count"], 154)
+        self.assertEqual(len(catalog["features"]), 154)
+        self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
 
     def test_feature_execution_returns_the_selected_tool_result(self):
         _, setup = self.request(
