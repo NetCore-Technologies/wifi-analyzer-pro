@@ -2,30 +2,25 @@
 
 All notable changes to WiFi Analyzer Pro are documented here.
 
-## [1.0.7] — Release foundation
+## [1.0.7] — Unreleased
 
-### Build, test and delivery
-- Add repeatable frontend build and lint checks plus Python regression tests across Python 3.10–3.13. CI, releases and source installers use npm ci against the committed lockfile.
-- Add Dependabot update groups for npm production/development packages, pip dependencies and GitHub Actions.
-- Add dependency review for pull requests.
-- Build standalone Linux x64 and ARM64, macOS ARM64, macOS Intel x64 and Windows x64 binaries.
-- Package macOS app bundles as DMG and tar.gz, Linux as AppImage/DEB/ELF/installer/tar.gz, and Windows as EXE/MSI/PowerShell/batch launchers.
-- Generate platform-specific SHA-256 manifests and a combined release checksum file.
-- Publish multi-architecture Linux container images to GHCR.
-- Add a WiFi Analyzer Pro product website with release-aware download links and GitHub Pages deployment.
-- Upgrade the React/Vite integration to `@vitejs/plugin-react` 6 for the Oxc-based Vite 8 build path.
-- Add GitHub release artifact provenance attestations, container SBOM/build provenance and keyless Cosign signing.
-- Support optional Developer ID signing and Apple notarisation when repository secrets are configured.
+### Feature library and local account
+- Add 100 independently callable feature modules (F001–F100), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
+- Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.
+- Add HTTP integration tests for setup, authenticated catalogue access, feature execution, logout and rejected origins.
+- Include the auth manager and all feature plugins in Docker and standalone Linux builds.
 
-### Dashboard fixes
-- Remove the duplicate `tips` declaration that prevented the React dashboard from compiling.
-- Connect the primary Scan action to the local scan API instead of returning a hard-coded network count.
-- Fix the live refresh closure so polling continues after the backend is detected.
-- Use the current host for local API requests rather than assuming `localhost` from a remote browser.
+### Build, packaging and quality
+- Align the npm manifest with the checked-in lockfile so clean CI installs are reproducible.
+- Fix Vite source alias resolution for native ES modules.
+- Use `npm ci` for the ARM64 standalone build.
+- Add feature-plugin collection to the PyInstaller build.
 
-### Notes
-- The backend now avoids fabricated live observations and defaults to loopback, but it still has no built-in user authentication. Remote access must use a VPN or authenticated reverse proxy.
-- macOS builds are not Apple-notarised unless signing credentials are configured in a future release.
+### Verification
+- GitHub Quality gates pass on Python 3.10, 3.11, 3.12 and 3.13.
+- Frontend dependency installation, ESLint and Vite production build pass.
+- This changelog entry does not mean a v1.0.7 GitHub Release has been published.
 
 ## [1.0.6] — 2026-07-16
 - Full live-data dashboard API integration for scans, system data, PHY, link statistics, diagnostics, devices and speed tests.
