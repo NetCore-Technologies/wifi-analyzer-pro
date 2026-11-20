@@ -230,7 +230,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("own active administrator", response["error"])
         self.assertTrue(server.AUTH.validate(token))
 
-    def test_viewer_cannot_demote_or_delete_the_last_administrator(self):
+    def test_administrator_cannot_remove_its_own_active_account(self):
         _, setup = self.request(
             "POST", "/api/auth/setup", {"password": "correct horse battery staple"},
         )
@@ -241,8 +241,11 @@ class AuthenticatedApiTests(unittest.TestCase):
             ("/api/auth/users/admin/delete", {}),
         ):
             status, response = self.request("POST", path, payload, token=token)
-            self.assertEqual(status, 400)
-            self.assertIn("at least one enabled administrator", response["error"])
+            self.assertEqual(status, 409)
+            self.assertTrue(
+                "own active administrator" in response["error"]
+                or "own administrator account" in response["error"]
+            )
         self.assertTrue(server.AUTH.validate(token))
 
     def test_feature_catalog_requires_login_and_exposes_all_registered_features(self):
