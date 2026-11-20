@@ -14,6 +14,7 @@ from unittest.mock import Mock
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
 from wifi_analyzer_backend.audit_checkpoint import verify_signed_checkpoint
+from wifi_analyzer_backend.rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
 from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
 from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
@@ -28,6 +29,10 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
         self.previous_live_capture = server.LIVE_CAPTURE
+        self.previous_rate_limiter = server.RATE_LIMITER
+        self.previous_rate_policies = server.RATE_LIMIT_POLICIES
+        server.RATE_LIMITER = TokenBucketRateLimiter()
+        server.RATE_LIMIT_POLICIES = dict(DEFAULT_POLICIES)
         server.LIVE_CAPTURE = Mock()
         server.LIVE_CAPTURE.list_interfaces.return_value = {
             "available": True,
@@ -60,6 +65,8 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
         server.LIVE_CAPTURE = self.previous_live_capture
+        server.RATE_LIMITER = self.previous_rate_limiter
+        server.RATE_LIMIT_POLICIES = self.previous_rate_policies
         self.temp.cleanup()
 
     def request(self, method, path, payload=None, token=None, origin=None):
@@ -94,6 +101,44 @@ class AuthenticatedApiTests(unittest.TestCase):
         }, token=admin_token)
         self.assertEqual(status, 201, response)
         return response["credential"]["token"]
+
+    def test_expensive_api_rate_limits_return_429_and_standard_retry_headers(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "rate limit owner password",
+        })
+        token = setup["token"]
+        server.RATE_LIMIT_POLICIES["api.feature.execution"] = (2, 60)
+
+        status, first = self.request("POST", "/api/features/frequency_to_channel", {
+            "frequency_mhz": 5975,
+        }, token=token)
+        self.assertEqual(status, 200)
+        status, second = self.request("POST", "/api/features/frequency_to_channel", {
+            "frequency_mhz": 2412,
+        }, token=token)
+        self.assertEqual(status, 200)
+
+        connection = HTTPConnection("127.0.0.1", self.port, timeout=3)
+        try:
+            connection.request(
+                "POST",
+                "/api/features/frequency_to_channel",
+                body=json.dumps({"frequency_mhz": 5180}),
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
+            )
+            response = connection.getresponse()
+            payload = json.loads(response.read())
+            self.assertEqual(response.status, 429)
+            self.assertEqual(response.getheader("Retry-After"), "30")
+            self.assertEqual(response.getheader("X-RateLimit-Limit"), "2")
+            self.assertEqual(response.getheader("X-RateLimit-Remaining"), "0")
+            self.assertEqual(payload["error"], "Rate limit exceeded")
+            self.assertEqual(payload["retry_after_seconds"], 30)
+        finally:
+            connection.close()
 
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")

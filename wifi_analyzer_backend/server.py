@@ -20,6 +20,7 @@ if __package__:
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
     from .live_capture import LiveCaptureManager
+    from .rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
@@ -40,6 +41,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
     from live_capture import LiveCaptureManager
+    from rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
@@ -71,6 +73,8 @@ AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
 AUDIT = SecurityAuditStore()
 LIVE_CAPTURE = LiveCaptureManager()
+RATE_LIMITER = TokenBucketRateLimiter()
+RATE_LIMIT_POLICIES = dict(DEFAULT_POLICIES)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def get_wifi_iface():
@@ -662,11 +666,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
 
-    def send_json(self, data, status=200):
+    def send_json(self, data, status=200, headers=None):
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        for header_name, header_value in (headers or {}).items():
+            self.send_header(header_name, str(header_value))
         self.add_common_headers()
         self.end_headers()
         self.wfile.write(body)
@@ -712,6 +718,38 @@ class Handler(BaseHTTPRequestHandler):
             # Audit failures are visible without printing request bodies or secrets.
             print(f"[AUDIT ERROR] Could not persist event: {action}")
             return None
+
+    def enforce_rate_limit(self, policy_name, *, client_only=False):
+        policy = RATE_LIMIT_POLICIES.get(policy_name)
+        if policy is None:
+            return True
+        capacity, period_seconds = policy
+        peer_ip = str(self.client_address[0]) if self.client_address else "unknown"
+        identity = None if client_only else AUTH.identity(self.bearer_token())
+        principal = f"user:{identity['id']}" if identity else f"ip:{peer_ip}"
+        decision = RATE_LIMITER.consume(
+            f"{policy_name}:{principal}",
+            capacity=capacity,
+            period_seconds=period_seconds,
+        )
+        if decision["allowed"]:
+            return True
+        retry_after = decision["retry_after_seconds"]
+        self.send_json(
+            {
+                "error": "Rate limit exceeded",
+                "retry_after_seconds": retry_after,
+                "limit": decision["limit"],
+            },
+            429,
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(decision["limit"]),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(decision["reset_after_seconds"]),
+            },
+        )
+        return False
 
     def require_auth(self, permission=None):
         token = self.bearer_token()
@@ -851,6 +889,11 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "users.manage"
             if not self.require_auth(permission):
                 return
+
+        if path == "/api/scan" and not self.enforce_rate_limit("api.scan"):
+            return
+        if path == "/api/speedtest" and not self.enforce_rate_limit("api.speedtest"):
+            return
 
         if path == "/api/capture/interfaces":
             self.send_json(LIVE_CAPTURE.list_interfaces())
@@ -1144,7 +1187,20 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "Origin is not allowed"}, 403)
             return
 
+        # Authenticate diagnostic controls before rate limiting them, but rate
+        # limit login/setup before parsing or deriving expensive credentials.
         if path.startswith("/api/capture/") and not self.require_auth("diagnostics.run"):
+            return
+        rate_policy = {
+            "/api/auth/setup": ("auth.setup", True),
+            "/api/auth/login": ("auth.login", True),
+            "/api/sites/audit": ("api.site.audit", False),
+            "/api/capture/start": ("api.capture.start", False),
+            "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
+        }.get(path)
+        if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
+            return
+        if path.startswith("/api/features/") and not self.enforce_rate_limit("api.feature.execution"):
             return
 
         if path == "/api/auth/logout":

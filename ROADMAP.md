@@ -43,6 +43,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
+- ✅ Bounded per-process token-bucket API throttling for setup/login, wireless scans, speed tests, feature execution, site audits, capture starts and report enqueue, including standard 429 retry headers and concurrency tests.
 - ✅ Team Access UI for creating users, changing assigned roles, disabling/enabling accounts and assigning per-user site scopes with least-privilege defaults. Existing accounts retain pre-upgrade all-site access.
 - ✅ Site-scope enforcement filters saved site history, site-audit/feature inputs, router-agent inventory/health/credential actions and scheduled-report jobs, summaries and worker claims.
 - ✅ Local append-only SQLite security audit ledger with SHA-256 event chaining, row update/delete triggers, bounded event filtering/pagination, chain verification, an owner/administrator audit viewer and Ed25519-signed offline checkpoints with public-key fingerprint verification.
@@ -62,7 +63,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - 🚧 Per-site authorization is enforced across sites, agents, reports and feature inputs. Full tenant isolation (separate tenant identities, storage boundaries, billing and cross-tenant operational controls) remains planned.
 - 📋 Enterprise identity: OIDC/SAML SSO, MFA/WebAuthn, SCIM provisioning, external SIEM forwarding and centralised retention.
 - 📋 Multi-site dashboards for distributed local agents.
-- 📋 Authenticated WebSocket streaming and API rate limits for expensive diagnostics.
+- 📋 Authenticated WebSocket streaming for live multi-site updates.
 - 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
 
 ---

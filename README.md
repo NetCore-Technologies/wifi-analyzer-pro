@@ -208,3 +208,16 @@ Scheduled-report jobs are stored in the local SQLite outbox and claimed using ex
 The authenticated delivery-package endpoint remains available for external integrations. It verifies the active lease and prepares the signed envelope using supplied DNS/TLS evidence; it does not transmit network traffic. The built-in worker and external dispatchers must not share the same claimed lease.
 
 F190 maps normalized events into bounded, deterministic subscription batches. The current worker supports one configured destination per process; autonomous multi-subscription fan-out is still on the roadmap. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.
+
+
+### API request limits
+
+The local API applies process-local token-bucket limits to first-run setup,
+password login, wireless scan, speed test, feature execution, site audits,
+live packet-capture starts and scheduled-report enqueue. Authentication limits
+are keyed by the direct peer IP; authenticated operation limits are keyed by
+the account identity. Rate-limit responses use HTTP 429 with Retry-After,
+X-RateLimit-Limit, X-RateLimit-Remaining and X-RateLimit-Reset headers. The
+limiter has a bounded in-memory bucket table and does not persist client
+identifiers. These controls protect a single API process; they are not a
+distributed gateway quota or a substitute for reverse-proxy/WAF controls.

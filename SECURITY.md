@@ -19,3 +19,20 @@ The endpoints and dashboard page require the \`users.manage\` permission, which 
 Rows are append-only through SQLite triggers. Each SHA-256 digest links a canonical JSON representation of the event to the previous event digest. Verification detects altered rows and deleted middle records. This is tamper-evident local storage, not a remote immutable archive: a privileged host administrator can replace the database, remove triggers or rewrite the full chain. For stronger evidence, export and sign periodic head-hash checkpoints or forward events to an independently administered SIEM.
 
 Failed login attempts are not all written individually, to avoid turning unauthenticated traffic into unbounded disk writes. Account lockout events and authenticated permission denials are recorded. Audit writes are best-effort; monitor service logs and host storage. See [the audit trail operator guide](wifi_analyzer_backend/SECURITY_AUDIT.md) for details.
+
+
+## API abuse controls
+
+The API uses bounded in-memory token buckets for account setup and login,
+wireless scans, speed tests, feature execution, site audits, capture starts
+and report enqueue. Authentication endpoints are keyed by the socket peer IP;
+authenticated operations use the local account identifier. The server does
+not trust X-Forwarded-For or other client-supplied forwarding headers.
+
+A throttled request receives HTTP 429, a Retry-After value and rate-limit
+metadata headers. Bucket state is process-local, bounded and intentionally
+not persisted; restarting the API resets the buckets. When deploying behind
+a reverse proxy, configure an additional per-client-IP login/setup limit at
+the proxy because the API sees the proxy address for unauthenticated requests.
+For multi-worker or horizontally scaled deployments, enforce aggregate limits
+at the gateway as well; these local buckets do not coordinate between processes.
