@@ -15,7 +15,7 @@ NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
 (( NODE_MAJOR >= 22 )) || { echo "[!] Node.js 22+ is required"; exit 1; }
 
 cd "$ROOT_DIR"
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run build
 cd "$SCRIPT_DIR"
 rm -rf dist build
