@@ -152,6 +152,8 @@ FEATURE_MODULES = (
     "feature_146_site_network_segment_capacity",
     "feature_147_site_gateway_redundancy_audit",
     "feature_148_floorplan_zone_assignment",
+    "feature_149_site_topology_redundancy_audit",
+    "feature_150_site_topology_snapshot_diff",
 )
 
 @lru_cache(maxsize=1)
