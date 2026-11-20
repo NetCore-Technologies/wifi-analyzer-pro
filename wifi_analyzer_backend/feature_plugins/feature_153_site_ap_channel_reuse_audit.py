@@ -24,6 +24,8 @@ def _center_frequency(band: str, channel: int) -> float:
         return 2484.0 if channel == 14 else 2407.0 + 5.0 * channel
     if band == "5GHz" and 32 <= channel <= 177:
         return 5000.0 + 5.0 * channel
+    if band == "6GHz" and channel == 2:
+        return 5935.0
     if band == "6GHz" and 1 <= channel <= 233:
         return 5950.0 + 5.0 * channel
     raise ValueError(f"channel {channel} is outside the supported {band} range")
