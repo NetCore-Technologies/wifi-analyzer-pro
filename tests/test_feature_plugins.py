@@ -205,7 +205,6 @@ PAYLOADS = {
             {"from_ap_id":"missing","to_ap_id":"ap-a","relationship":"wired_uplink"}
         ]
     },
-,
     "site_discovery_history_snapshot": {
         "site_id": "home",
         "captured_at": "2026-11-20T10:00:00+11:00",
