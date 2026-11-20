@@ -93,7 +93,7 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
 
     def test_truncated_radiotap_field_metadata_is_rejected_as_malformed(self):
         present = (1 << 3) | (1 << 5) | (1 << 6)
-        malformed = bytes((0, 0)) + struct.pack("<HI", 13, present) + b"\\x00" * 5
+        malformed = bytes((0, 0)) + struct.pack("<HI", 13, present) + b"\x00" * 5
         result = run({"capture_base64": make_capture(127, [malformed])})
         self.assertEqual(result["summary"]["malformed_frame_count"], 1)
         self.assertEqual(result["summary"]["packet_count"], 1)
