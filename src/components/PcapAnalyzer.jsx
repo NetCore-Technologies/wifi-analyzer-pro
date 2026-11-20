@@ -157,7 +157,7 @@ export default function PcapAnalyzer() {
           <input
             ref={inputRef}
             type="file"
-            accept=".pcap,.cap,application/vnd.tcpdump.pcap,application/octet-stream"
+            accept=".pcap,.pcapng,.cap,application/vnd.tcpdump.pcap,application/octet-stream"
             onChange={chooseFile}
             aria-label="Choose a classic PCAP capture file"
             style={{ display: "none" }}
@@ -212,7 +212,7 @@ export default function PcapAnalyzer() {
           </button>
         </div>
         <div style={{ ...MUTED, marginTop: 12, lineHeight: 1.6 }}>
-          Classic PCAP only · 512 KiB maximum · Ethernet, Linux cooked, 802.11 and radiotap · PCAPNG is not supported
+          PCAP / PCAPNG · 512 KiB maximum · Multi-interface captures · Ethernet, Linux cooked, 802.11 and radiotap
         </div>
       </section>
 
