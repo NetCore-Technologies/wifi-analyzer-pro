@@ -1,4 +1,4 @@
-import json, os, sqlite3, stat, tempfile, unittest
+import json, os, sqlite3, stat, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 from wifi_analyzer_backend.audit_checkpoint import create_signed_checkpoint, verify_signed_checkpoint
@@ -27,6 +27,28 @@ class SignedAuditCheckpointTests(unittest.TestCase):
         self.assertTrue(result["valid"], result)
         self.assertEqual(result["event_count"], 1)
         self.assertEqual(result["latest_event_hash"], self.store.verify_chain()["latest_hash"])
+
+    def test_standalone_cli_verifies_a_pinned_checkpoint_and_rejects_wrong_key(self):
+        bundle = create_signed_checkpoint(self.store)
+        checkpoint_path = self.root / "checkpoint.json"
+        checkpoint_path.write_text(json.dumps(bundle), encoding="utf-8")
+        module_root = Path(__file__).resolve().parents[1]
+        command = [
+            sys.executable,
+            "-m",
+            "wifi_analyzer_backend.audit_checkpoint",
+            str(checkpoint_path),
+            "--expected-public-key-fingerprint",
+            bundle["public_key_fingerprint"],
+        ]
+        verified = subprocess.run(command, cwd=module_root, capture_output=True, text=True, check=False)
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        self.assertIn('"valid": true', verified.stdout)
+
+        command[-1] = "0" * 64
+        rejected = subprocess.run(command, cwd=module_root, capture_output=True, text=True, check=False)
+        self.assertEqual(rejected.returncode, 1, rejected.stdout + rejected.stderr)
+        self.assertIn('"valid": false', rejected.stdout)
 
     def test_signing_identity_is_stable_across_exports(self):
         first = create_signed_checkpoint(self.store)
