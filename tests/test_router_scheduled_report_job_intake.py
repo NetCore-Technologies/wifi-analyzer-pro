@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import hashlib
+import json
 import unittest
-from datetime import datetime, timezone
 
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report
 from wifi_analyzer_backend.feature_plugins.feature_188_router_scheduled_report_job_intake import run
@@ -89,10 +90,6 @@ class RouterScheduledReportJobIntakeTests(unittest.TestCase):
     def test_rejects_non_finite_or_oversized_report_bundle(self):
         payload = valid_payload()
         bad = {**payload["report_bundle"], "summary": {"load": float("nan")}}
-        import hashlib, json
-        body = {key: value for key, value in bad.items() if key != "content_hash"}
-        canonical = json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        bad["content_hash"] = hashlib.sha256(canonical.encode()).hexdigest()
         with self.assertRaisesRegex(ValueError, "JSON-compatible finite values"):
             run({**payload, "report_bundle": bad})
         huge = {**payload["report_bundle"], "note": "x" * (512 * 1024)}
