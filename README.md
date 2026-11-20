@@ -41,7 +41,7 @@ Get the latest version from [GitHub Releases](https://github.com/NetCore-Technol
 | Linux x64 / ARM64 (Raspberry Pi) | AppImage, DEB, standalone ELF, installer script and tar.gz |
 | Windows x64 | EXE, MSI, PowerShell launcher and batch launcher |
 
-The app bundles include the Python runtime and built web interface. Python and Node.js are not required to run a published standalone binary. macOS bundles are ad-hoc signed by default and will not be accepted by Gatekeeper as notarised software. Configure the five Apple Developer ID / notarisation repository secrets used by the release workflow to produce signed and notarised macOS downloads.
+The app bundles include the Python runtime and built web interface. Python and Node.js are not required to run a published standalone binary. On first launch, create a local password; the verifier is stored in your user configuration directory and bearer sessions expire automatically. macOS bundles are ad-hoc signed by default and will not be accepted by Gatekeeper as notarised software. Configure the five Apple Developer ID / notarisation repository secrets used by the release workflow to produce signed and notarised macOS downloads.
 
 Verify a download against `SHA256SUMS` or the platform-specific `SHA256SUMS-*.txt` attached to the same release.
 
@@ -87,25 +87,28 @@ WIFI_ANALYZER_DEMO=1 python3 wifi_analyzer_backend/server.py
 
 ## API
 
-The local HTTP service currently exposes:
+The local HTTP service exposes:
 
 | Route | Purpose |
 |---|---|
-| `GET /health` | Basic server health |
-| `GET /api/has_wifi` | Wi-Fi adapter availability |
-| `GET /api/scan` | Nearby access point scan and channel counts |
-| `GET /api/system` | Host system information |
-| `GET /api/phy` | Available PHY/link details |
-| `GET /api/link` | Interface counters |
-| `GET /api/diagnostics` | Gateway, latency, DNS and packet-loss checks |
-| `GET /api/devices` | Locally visible neighbour/ARP entries |
-| `GET /api/speedtest` | Explicit throughput test |
+| `GET /health` | Basic server health (public) |
+| `GET /api/auth/status` | First-run account and session status |
+| `POST /api/auth/setup` | Create the one local password during first-run setup |
+| `POST /api/auth/login` | Create a short-lived bearer session |
+| `POST /api/auth/logout` | Revoke the current bearer session |
+| `GET /api/features` | Authenticated catalogue of the 100 built-in tools |
+| `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
+| `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
+
+After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.
+
+For a Vite development server accessed from another device, add its exact origin to `WIFI_ANALYZER_CORS_ORIGINS` (comma-separated). Keep the default backend bind address on loopback unless LAN access is intentionally configured.
 
 ## Security and privacy
 
-WiFi Analyzer Pro is intended to run close to the network being diagnosed. Network scans and system diagnostics are performed by the local host. No cloud account is required for local use.
+WiFi Analyzer Pro is intended to run close to the network being diagnosed. Network scans and system diagnostics are performed by the local host. No cloud account is required for local use. First-run setup stores a salted scrypt password verifier outside the repository with owner-only file permissions; session tokens are process-local and expire after a fixed lifetime. Five consecutive failed logins trigger a temporary lockout.
 
-**Important:** the current HTTP API does not provide user authentication or enterprise SSO/RBAC. Keep it on a trusted machine/network. Do not expose port `199` directly to the public internet. For team or remote access, place it behind a VPN or an authenticated reverse proxy and restrict network access. Review [SECURITY.md](SECURITY.md) before deployment.
+The built-in local account gate protects API endpoints, but this is not enterprise SSO or multi-user role-based access. Do not expose port `199` directly to the public internet. For team or remote access, place it behind a VPN or an authenticated reverse proxy, restrict network access, and explicitly configure allowed CORS origins. Review [SECURITY.md](SECURITY.md) before deployment.
 
 Only scan networks and devices you own or are authorised to assess. A Wi-Fi adapter may require OS-specific permissions for full scan details.
 
