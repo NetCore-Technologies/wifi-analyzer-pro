@@ -381,7 +381,7 @@ def run(payload: dict) -> dict:
             "critical_count": severity_counts["critical"],
             "warning_count": severity_counts["warning"],
             "info_count": severity_counts["info"],
-            "detail_count": min(len(all_findings), max_findings),
+            "detail_count": min(len(all_findings), max_findings) if include_details else 0,
             "details_truncated": len(all_findings) > max_findings,
         },
         "sites": sites,
