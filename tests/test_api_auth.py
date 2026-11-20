@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import hashlib
 import json
 import tempfile
 import threading
@@ -561,7 +562,6 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(first["job"]["id"], retry["job"]["id"])
 
         changed_bundle = {**bundle, "title": "Altered title"}
-        import hashlib
         body = {key: value for key, value in changed_bundle.items() if key != "content_hash"}
         changed_bundle["content_hash"] = hashlib.sha256(
             json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
@@ -673,10 +673,9 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["schedules"][0]["status"], "scheduled")
 
     def test_router_audit_report_comparator_is_available_through_authenticated_api(self):
-        from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
         token = setup["token"]
-        previous = build_report({
+        previous = build_report_bundle({
             "report_id": "api-before",
             "generated_at": "2026-11-20T09:00:00Z",
             "sources": [{
@@ -700,7 +699,7 @@ class AuthenticatedApiTests(unittest.TestCase):
                 },
             }],
         })
-        current = build_report({
+        current = build_report_bundle({
             "report_id": "api-after",
             "generated_at": "2026-11-20T10:00:00Z",
             "sources": [{
