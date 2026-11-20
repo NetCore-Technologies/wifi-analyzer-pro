@@ -242,6 +242,7 @@ def _audit_one(entry: dict, now: datetime, max_age_seconds: int,
                         name if isinstance(name, str) and len(name) <= 64 else None,
                         "A wireless interface is reported down.")
     else:
+        interfaces = []
         access_points = _record_list(snapshot, "access_points", MAX_ACCESS_POINTS, adapter)
         radios = _record_list(snapshot, "wireless_radios", MAX_RADIOS, adapter)
         associations = _record_list(snapshot, "associations", MAX_ASSOCIATIONS, adapter)

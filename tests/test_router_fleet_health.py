@@ -114,7 +114,7 @@ class RouterFleetHealthAuditTests(unittest.TestCase):
                 "router_id": "old-router",
                 "snapshot": {
                     "adapter_id": "mikrotik",
-                    "captured_at": "2026-11-20T09:00:00Z",
+                    "captured_at": "2026-11-20T09:45:00Z",
                     "interfaces": [],
                     "wireless_radios": [],
                     "associations": [],
@@ -235,7 +235,7 @@ class RouterFleetHealthAuditTests(unittest.TestCase):
             }]})
 
     def test_requires_timezone_aware_now_and_capture_times(self):
-        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
             run({"now": "2026-11-20T10:00:00", "snapshots": [{
                 "router_id": "r1",
                 "snapshot": {"adapter_id": "unifi", "captured_at": NOW},
