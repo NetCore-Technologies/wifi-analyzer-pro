@@ -1,6 +1,7 @@
 """HTTP integration tests for the local account gate and feature API."""
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import tempfile
 import threading
@@ -584,6 +585,38 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, denied = self.request("POST", "/api/agents/snapshots/batch", payload)
         self.assertEqual(status, 401)
 
+
+
+    def test_concurrent_snapshot_delivery_retries_share_one_acknowledgement(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        agent_token = self.enroll_agent(admin_token, "parallel-delivery", ["system.board", "inventory.snapshot"])
+        self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"parallel-delivery","adapter_id":"openwrt","agent_version":"1.2.0",
+            "status":"healthy","capabilities":["system.board","inventory.snapshot"],
+        }, token=agent_token)
+        payload = {
+            "agent_id":"parallel-delivery",
+            "delivery_id":"b8a29c1f-6af2-4f37-92d2-2db31ce890c1",
+            "snapshot":{
+                "captured_at":"2026-11-20T10:00:00Z",
+                "board":{"model":"Parallel retry router"},
+                "interfaces":[{"interface":"lan"}],
+                "wireless":[],
+                "associations":[],
+                "routes":[],
+            },
+        }
+        barrier = threading.Barrier(2)
+        def send():
+            barrier.wait(timeout=2)
+            return self.request("POST", "/api/agents/snapshots/batch", payload, token=agent_token)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            results = [future.result(timeout=8) for future in (pool.submit(send), pool.submit(send))]
+        self.assertEqual(sorted(status for status, _ in results), [200, 201])
+        snapshot_ids = {body["delivery"]["id"] for _, body in results}
+        self.assertEqual(len(snapshot_ids), 1)
+        self.assertEqual(sum(body["delivery"]["replayed"] for _, body in results), 1)
 
 if __name__ == "__main__":
     unittest.main()

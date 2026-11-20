@@ -447,6 +447,8 @@ class RouterAgentHealthStore:
 
         try:
             with self._connection() as connection:
+                # Serialize delivery-ID lookup and insertion so concurrent retries share one acknowledgement.
+                connection.execute("BEGIN IMMEDIATE")
                 credential = self._require_agent_credential(connection, agent_id, token)
                 agent = connection.execute(
                     "SELECT adapter_id, capabilities FROM router_agent_heartbeats WHERE agent_id = ?",
