@@ -79,6 +79,7 @@ jobs:
           cp -R ../dist ./dist
           mkdir -p build/binary release-out
           pyinstaller --clean --noconfirm --onefile \
+            --collect-submodules feature_plugins \
             --name wifi-analyzer-pro \
             --distpath build/binary \
             --workpath build/work \
