@@ -105,6 +105,42 @@ const DEVICES = [
   { name:"Unknown Device",    mac:"DE:AD:BE:EF:CA:FE", ip:"192.168.1.99",  vendor:"???",          type:"Unknown",  rssi:-81, online:false, bw:0,    gw:false },
 ];
 
+function toUiNetwork(network) {
+  const rssi = network?.rssi == null ? null : Number(network.rssi);
+  const snr = network?.snr == null ? null : Number(network.snr);
+  const width = network?.width_mhz ?? network?.width ?? null;
+  return {
+    ...network,
+    ssid: typeof network?.ssid === "string" ? network.ssid : "",
+    bssid: typeof network?.bssid === "string" ? network.bssid : "",
+    band: network?.band || "Unknown",
+    ch: network?.channel ?? network?.ch ?? null,
+    sec: network?.security ?? network?.sec ?? "Unknown",
+    width: width == null ? "—" : (typeof width === "number" ? `${width}MHz` : String(width)),
+    wifi: network?.wifi_generation ?? network?.wifi ?? "Unknown",
+    clients: network?.clients ?? "—",
+    vendor: network?.vendor || "Unknown",
+    rssi: Number.isFinite(rssi) ? rssi : null,
+    snr: Number.isFinite(snr) ? snr : null,
+    rogue: network?.rogue === true,
+  };
+}
+
+function toUiDevice(device) {
+  return {
+    ...device,
+    name: device?.hostname || device?.name || device?.ip || "Unknown host",
+    ip: device?.ip || "—",
+    mac: device?.mac || "—",
+    vendor: device?.vendor || "Unknown vendor",
+    type: device?.type || "Unknown",
+    online: typeof device?.online === "boolean" ? device.online : null,
+    bw: device?.bw == null ? null : Number(device.bw),
+    rssi: device?.rssi == null ? null : Number(device.rssi),
+    gw: typeof device?.gw === "boolean" ? device.gw : false,
+  };
+}
+
 const sin = (i, o = 0) => Math.sin(i * 0.4 + o) * 0.5 + 0.5;
 const rand = () => (Math.random() - 0.5);
 const genRSSI  = () => Array.from({length:40},(_,i)=>({ t:i, rssi:-(42+sin(i)*10+rand()*4), snr:38+sin(i,1)*10+rand()*3 }));
@@ -305,24 +341,29 @@ function DashboardPanel({ rssiData, speedData, networks: netsProp, devices: devs
   );
 }
 
-function WirelessPanel({ networks: netsProp }) {
+function WirelessPanel({ networks: netsProp, isLive = false }) {
   const [filter,setFilter]=useState("");
   const [sort,setSort]=useState("rssi");
-  const NETS = netsProp || NETWORKS;
+  const NETS = Array.isArray(netsProp) ? netsProp : NETWORKS;
   const nets=[...NETS]
-    .filter(n=>n.ssid.toLowerCase().includes(filter.toLowerCase())||n.bssid.toLowerCase().includes(filter.toLowerCase()))
-    .sort((a,b)=>sort==="rssi"?a.rssi-b.rssi:sort==="snr"?b.snr-a.snr:a.ch-b.ch);
+    .filter(n=>(n.ssid||"").toLowerCase().includes(filter.toLowerCase())||(n.bssid||"").toLowerCase().includes(filter.toLowerCase()))
+    .sort((a,b)=>sort==="rssi"?(Number(b.rssi??-Infinity)-Number(a.rssi??-Infinity)):sort==="snr"?(Number(b.snr??-Infinity)-Number(a.snr??-Infinity)):Number(a.ch??0)-Number(b.ch??0));
+  const observedChannels=[...new Set(NETS.filter(n=>n.band&&Number(n.ch)>0).map(n=>`${n.band}:${Number(n.ch)}`))]
+    .map(value=>{const [band,channel]=value.split(":");return {band,channel:Number(channel),count:NETS.filter(n=>n.band===band&&Number(n.ch)===Number(channel)).length};})
+    .sort((a,b)=>a.count-b.count||a.band.localeCompare(b.band)||a.channel-b.channel);
+  const leastObserved=observedChannels[0]||null;
+  const measuredRssi=NETS.filter(n=>n.rssi!=null&&Number.isFinite(Number(n.rssi)));
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label="APs Found" value={NETS.length} sub={`${NETS.filter(n=>n.band==="5GHz").length}×5GHz · ${NETS.filter(n=>n.band==="2.4GHz").length}×2.4GHz`} col={C.cyan} Icon={Wifi} delay={1}/>
-        <Stat label="Rogue APs" value={NETS.filter(n=>n.rogue).length} sub={NETS.filter(n=>n.rogue).length>0?"Evil Twin active — investigate":"None detected"} col={NETS.filter(n=>n.rogue).length>0?C.red:C.green} Icon={Shield} delay={2}/>
-        <Stat label="Best Channel" value={`Ch ${NETS.length?[...NETS].sort((a,b)=>a.rssi-b.rssi)[0]?.ch||36:36}`} sub="Least congested" col={C.green} Icon={ScanLine} delay={3}/>
-        <Stat label="Strongest" value={`${NETS.length?Math.max(...NETS.map(n=>n.rssi)):-42} dBm`} sub={NETS.length?[...NETS].sort((a,b)=>b.rssi-a.rssi)[0]?.ssid||"":"No scan"} col={C.purple} Icon={Rss} delay={4}/>
+        <Stat label="BSS records" value={NETS.length} sub={`${NETS.filter(n=>n.band==="2.4GHz").length}×2.4 · ${NETS.filter(n=>n.band==="5GHz").length}×5 · ${NETS.filter(n=>n.band==="6GHz").length}×6 GHz`} col={C.cyan} Icon={Wifi} delay={1}/>
+        <Stat label="Scanner flags" value={NETS.filter(n=>n.rogue===true).length} sub="Candidate metadata only; verify BSSIDs manually" col={C.yellow} Icon={Shield} delay={2}/>
+        <Stat label="Least observed" value={leastObserved?`Ch ${leastObserved.channel} · ${leastObserved.band}`:"—"} sub={leastObserved?`${leastObserved.count} BSS observations; not airtime utilisation`:"No channel observations"} col={C.green} Icon={ScanLine} delay={3}/>
+        <Stat label="Strongest" value={measuredRssi.length?`${Math.max(...measuredRssi.map(n=>Number(n.rssi)))} dBm`:"—"} sub={measuredRssi.length?([...measuredRssi].sort((a,b)=>Number(b.rssi)-Number(a.rssi))[0]?.ssid||"Observed BSS"):"No signal measurement"} col={C.purple} Icon={Rss} delay={4}/>
       </div>
       <div className="anim-fade-d2" style={s.card}>
         <div style={{...s.bet,marginBottom:12}}>
-          <SHdr title="Live WiFi Scan" sub={`Auto-refresh every 10s · ${nets.length} networks`}/>
+          <SHdr title={isLive?"Observed Wi-Fi scan":"Wi-Fi scan demo preview"} sub={isLive?`${nets.length} observed BSS records · local scanner`:`${nets.length} illustrative records · not live RF observations`}/>
           <div style={{...s.row,gap:8}}>
             <div style={{...s.row,gap:6,background:C.card2,border:`1px solid ${C.border}`,borderRadius:7,padding:"5px 10px"}}>
               <Search size={12} color={C.muted}/>
@@ -362,8 +403,8 @@ function WirelessPanel({ networks: netsProp }) {
                   <td style={{padding:"9px 10px",...s.mono,color:C.textSec}}>{n.ch} / {n.width}</td>
                   <td style={{padding:"9px 10px"}}><Tag text={n.sec} col={n.sec==="WPA3"?C.green:n.sec==="WPA2"?C.cyan:C.red}/></td>
                   <td style={{padding:"9px 10px"}}><Tag text={`Wi-Fi ${n.wifi}`} col={n.wifi==="6E"||n.wifi==="7"?C.purple:n.wifi==="6"?C.cyan:C.muted}/></td>
-                  <td style={{padding:"9px 10px"}}><AnimatedBars rssi={n.rssi}/></td>
-                  <td style={{padding:"9px 10px",...s.mono,color:n.snr>30?C.green:n.snr>20?C.yellow:C.red}}>{n.snr} dB</td>
+                  <td style={{padding:"9px 10px"}}>{n.rssi==null?<span style={{color:C.muted}}>—</span>:<AnimatedBars rssi={n.rssi}/>}</td>
+                  <td style={{padding:"9px 10px",...s.mono,color:n.snr==null?C.muted:n.snr>30?C.green:n.snr>20?C.yellow:C.red}}>{n.snr==null?"—":`${n.snr} dB`}</td>
                   <td style={{padding:"9px 10px",color:C.textSec}}>{n.clients}</td>
                   <td style={{padding:"9px 10px",color:C.textSec}}>{n.vendor}</td>
                   <td style={{padding:"9px 10px"}}>
@@ -907,8 +948,8 @@ export default function App() {
     return()=>{disposed=true;clearInterval(intervalId);};
   },[]);
 
-  const networks=liveNets||NETWORKS;
-  const devices=liveDevs||DEVICES;
+  const networks=Array.isArray(liveNets)?liveNets.map(toUiNetwork):NETWORKS;
+  const devices=Array.isArray(liveDevs)?liveDevs.map(toUiDevice):DEVICES;
   const observedAlerts=liveMode?buildObservedAlerts(networks,liveDiag):[];
 
   const addToast=(msg,type="info")=>{
@@ -947,7 +988,7 @@ export default function App() {
   const panels={
     featureTools: <FeatureWorkbench/>,
     dashboard:   <DashboardPanel rssiData={rssiData} speedData={speedData} networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
-    wireless:    <WirelessPanel networks={networks}/>,
+    wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
     speed:       <SpeedPanel speedData={speedData}/>,
     devices:     <DevicesPanel devices={devices}/>,
