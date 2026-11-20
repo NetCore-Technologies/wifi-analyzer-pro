@@ -131,18 +131,38 @@ PAYLOADS = {
     "multi_link_operation_summary": {"links":[{"link_id":0,"band":"5GHz","channel":36,"active":True,"rssi_dbm":-55},{"link_id":1,"band":"6GHz","channel":5,"active":True,"rssi_dbm":-60}]},
     "pmf_security_audit": {"networks":[{"ssid":"Lab","bssid":"00:11:22:33:44:55","pmf":"required"},{"ssid":"Guest","pmf":"unknown"}]},
     "regulatory_channel_allowlist_check": {"band":"2.4GHz","allowed_channels":[1,6,11],"networks":[{"ssid":"Lab","band":"2.4GHz","channel":1},{"ssid":"Lab","band":"2.4GHz","channel":14}]},
+    "client_association_inventory": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","bssid":"00:11:22:33:44:55","ssid":"Lab"}],"access_points":[{"bssid":"00:11:22:33:44:55","ssid":"Lab","band":"5GHz","name":"AP-1"}]},
+    "stale_client_detector": {"now":"2026-11-20T10:00:00Z","stale_after_seconds":300,"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","last_seen":"2026-11-20T09:00:00Z"},{"client_mac":"AA:BB:CC:DD:EE:02","last_seen":"2026-11-20T09:59:00Z"}]},
+    "airtime_fairness_summary": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","tx_airtime_ms":40,"rx_airtime_ms":60},{"client_mac":"AA:BB:CC:DD:EE:02","tx_airtime_ms":40,"rx_airtime_ms":60}]},
+    "client_throughput_fairness": {"interval_seconds":10,"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","tx_bytes":1000000,"rx_bytes":2000000},{"client_mac":"AA:BB:CC:DD:EE:02","tx_bytes":2000000,"rx_bytes":1000000}]},
+    "dscp_traffic_distribution": {"samples":[{"dscp":46,"packets":120},{"dscp":0,"packets":80},{"dscp":46,"packets":20}]},
+    "application_qos_policy_audit": {"policy":[{"application":"voice","dscp":46},{"application":"video","dscp":34}],"observations":[{"application":"voice","dscp":46},{"application":"video","dscp":0}]},
+    "client_retry_rate": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","tx_packets":900,"tx_retries":100}]},
+    "phy_rate_asymmetry": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","tx_rate_mbps":600,"rx_rate_mbps":300}]},
+    "client_ap_capability_match": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","bssid":"00:11:22:33:44:55","supported_bands":["5GHz","6GHz"],"required_features":["MLO"]}],"access_points":[{"bssid":"00:11:22:33:44:55","supported_bands":["5GHz"],"supported_features":["OFDMA"]}]},
+    "ofdma_mu_mimo_evidence": {"observations":[{"ofdma_supported":True,"ofdma_active":True,"mu_mimo_supported":True,"mu_mimo_active":False,"ofdma_ppdu_count":25,"mu_mimo_ppdu_count":4},{"ofdma_supported":True,"ofdma_active":False}]},
+    "twt_power_save_summary": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","twt_supported":True,"twt_active":True,"twt_interval_ms":100,"twt_duration_ms":10}]},
+    "bss_transition_capability_audit": {"access_points":[{"bssid":"00:11:22:33:44:55","dot11k_neighbor_report":True,"dot11v_bss_transition":True,"dot11r_fast_transition":False}]},
+    "mobility_domain_consistency": {"access_points":[{"ssid":"Lab","bssid":"00:11:22:33:44:55","mobility_domain":"A1B2","dot11r_fast_transition":True},{"ssid":"Lab","bssid":"00:11:22:33:44:66","mobility_domain":"A1B3","dot11r_fast_transition":True}]},
+    "dhcp_lease_audit": {"now":"2026-11-20T10:00:00Z","leases":[{"ip":"192.168.1.10","mac":"AA:BB:CC:DD:EE:01","expires_at":"2026-11-20T09:00:00Z"},{"ip":"192.168.1.10","mac":"AA:BB:CC:DD:EE:02","expires_at":"2026-11-20T11:00:00Z"}]},
+    "dns_resolver_latency_compare": {"samples":[{"resolver":"1.1.1.1","success":True,"latency_ms":20},{"resolver":"1.1.1.1","success":True,"latency_ms":25},{"resolver":"9.9.9.9","success":False}]},
+    "gateway_reachability_matrix": {"probes":[{"target":"192.168.1.1","reachable":True,"rtt_ms":1.5},{"target":"192.168.1.1","reachable":False},{"target":"1.1.1.1","reachable":True,"rtt_ms":18}]},
+    "roaming_interruption_analysis": {"events":[{"client_mac":"AA:BB:CC:DD:EE:01","disconnected_at":"2026-11-20T09:00:00Z","reconnected_at":"2026-11-20T09:00:00.250Z","from_bssid":"00:11:22:33:44:55","to_bssid":"00:11:22:33:44:66"}]},
+    "disconnect_reason_summary": {"events":[{"reason_code":4,"client_mac":"AA:BB:CC:DD:EE:01"},{"reason_code":15,"client_mac":"AA:BB:CC:DD:EE:02"}]},
+    "association_rejection_summary": {"events":[{"status_code":17,"client_mac":"AA:BB:CC:DD:EE:01"},{"status_code":0,"client_mac":"AA:BB:CC:DD:EE:02"}]},
+    "connection_health_evidence": {"clients":[{"client_mac":"AA:BB:CC:DD:EE:01","rssi_dbm":-81,"retry_rate_pct":25,"tx_rate_mbps":54,"rx_rate_mbps":48}],"diagnostics":{"packet_loss_pct":7,"latency_ms":120}},
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_exactly_one_hundred_twenty_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 120)
-        self.assertEqual(len(set(FEATURE_MODULES)), 120)
-        self.assertEqual(count(), 120)
-        self.assertEqual(len(entries), 120)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 120)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 121)])
+        self.assertEqual(len(FEATURE_MODULES), 140)
+        self.assertEqual(len(set(FEATURE_MODULES)), 140)
+        self.assertEqual(count(), 140)
+        self.assertEqual(len(entries), 140)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 140)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 141)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
