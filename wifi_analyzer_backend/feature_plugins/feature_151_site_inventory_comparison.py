@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import re
 
 
 def run(payload: dict) -> dict:
@@ -17,6 +18,8 @@ def run(payload: dict) -> dict:
         if not isinstance(ap, dict) or not ap.get("bssid") or not ap.get("site_id"):
             raise ValueError("Each AP needs bssid and site_id")
         bssid = str(ap["bssid"]).replace("-", ":").upper()
+        if not re.fullmatch(r"[0-9A-F]{2}(?::[0-9A-F]{2}){5}", bssid):
+            raise ValueError("Each AP needs a valid BSSID")
         site_id = str(ap["site_id"]).strip()
         if not site_id:
             raise ValueError("site_id must not be empty")
