@@ -33,7 +33,7 @@ class RouterRouteTableAuditTests(unittest.TestCase):
         self.assertEqual(result["status"], "audited")
         self.assertEqual(result["summary"]["router_count"], 1)
         self.assertEqual(result["summary"]["route_count"], 4)
-        self.assertEqual(result["summary"]["default_route_count"], 2)
+        self.assertEqual(result["summary"]["default_route_count"], 3)
         router = result["routers"][0]
         codes = [finding["code"] for finding in router["findings"]]
         self.assertIn("route.duplicate", codes)
@@ -112,9 +112,9 @@ class RouterRouteTableAuditTests(unittest.TestCase):
                 "adapter_id": "mikrotik",
                 "captured_at": NOW,
                 "routes": [
-                    {"target": "0.0.0.0/0", "gateway": "192.0.2.1", "table": "main", "distance": 1},
+                    {"target": "0.0.0.0/0", "gateway": "192.0.2.1", "routing_table": "main", "distance": 1},
                     {"target": "0.0.0.0/0", "gateway": "192.0.2.2", "table": "main", "distance": 1},
-                    {"target": "0.0.0.0/0", "gateway": "198.51.100.1", "table": "backup", "distance": 1},
+                    {"target": "0.0.0.0/0", "gateway": "198.51.100.1", "routing_table": "backup", "distance": 1},
                 ],
             },
         }]})
@@ -188,7 +188,7 @@ class RouterRouteTableAuditTests(unittest.TestCase):
                 "snapshot": {
                     "adapter_id": "mikrotik",
                     "captured_at": NOW,
-                    "routes": [{"target": "0.0.0.0/0", "table": f"table-{i}"} for i in range(2049)],
+                    "routes": [{"target": "0.0.0.0/0", "routing_table": f"table-{i}"} for i in range(2049)],
                 },
             }]})
 

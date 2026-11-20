@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
 MAX_INPUT_BYTES = 4 * 1024 * 1024

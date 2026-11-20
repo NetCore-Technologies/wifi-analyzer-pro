@@ -154,7 +154,7 @@ class MikroTikSnapshotTests(unittest.TestCase):
             ({"dst-address": "192.0.2.1/99"}, "valid IP network"),
             ({"dst-address": "0.0.0.0/0", "distance": 0}, "distance"),
             ({"dst-address": "0.0.0.0/0", "active": "maybe"}, "active must be a boolean"),
-            ({"dst-address": "0.0.0.0/0", "gateway": "192.0.2.1%invalid iface"}, "invalid interface"),
+            ({"dst-address": "0.0.0.0/0", "gateway": "192.0.2.1%"}, "required"),
         ):
             with self.subTest(route=route), self.assertRaisesRegex(ValueError, message):
                 normalize_snapshot({**base, "routes": [route]})

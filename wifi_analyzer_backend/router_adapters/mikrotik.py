@@ -18,6 +18,7 @@ MAX_REGISTRATIONS = 8192
 MAX_ADDRESSES = 2048
 MAX_VLANS = 1024
 MAX_DHCP_LEASES = 8192
+MAX_ROUTES = 2048
 MAC_PATTERN = re.compile(r"^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$")
 WIDTH_PATTERN = re.compile(r"^(20|40|80|160|320)(?:MHZ)?$", re.IGNORECASE)
 BAND_ALIASES = {
@@ -27,7 +28,7 @@ BAND_ALIASES = {
     "5ghz-ac": "5GHz", "5ghz-ax": "5GHz",
     "6ghz": "6GHz", "6ghz-ax": "6GHz",
 }
-INTERFACE_NAME = re.compile(r"^[^\x00-\x20\x7f]{1,64}$")
+INTERFACE_NAME = re.compile(r"^[^\x00-\x1f\x7f]{1,64}$")
 
 
 def _object(value: object, field: str) -> dict:
@@ -351,6 +352,62 @@ def normalize_snapshot(payload: dict) -> dict:
         address_ids.add(identity)
         addresses.append({**address, "interface": interface, "interface_known": interface in interface_names})
 
+    raw_routes = _records(payload.get("routes", payload.get("ip_routes", [])), "routes", MAX_ROUTES)
+    routes = []
+    for index, item in enumerate(raw_routes):
+        field = f"routes[{index}]"
+        record = _object(item, field)
+        destination = record.get(
+            "dst_address",
+            record.get("dst-address", record.get("target", record.get("destination"))),
+        )
+        if not isinstance(destination, str):
+            raise ValueError(f"{field}.target must be an IP network")
+        try:
+            target_network = ipaddress.ip_network(destination.strip(), strict=False)
+        except ValueError as error:
+            raise ValueError(f"{field}.target must be a valid IP network") from error
+
+        gateway = None
+        gateway_interface = None
+        raw_gateway = record.get("gateway", record.get("nexthop", record.get("next_hop")))
+        if raw_gateway not in (None, ""):
+            token = _text(raw_gateway, f"{field}.gateway", 128, required=True)
+            address_token, separator, suffix = token.partition("%")
+            try:
+                gateway = str(ipaddress.ip_address(address_token.strip()))
+                if separator:
+                    gateway_interface = _interface_name(
+                        suffix.strip(), f"{field}.gateway_interface", required=True
+                    )
+            except ValueError:
+                if separator:
+                    raise ValueError(
+                        f"{field}.gateway must contain a valid IP address before the interface suffix"
+                    )
+                gateway_interface = _interface_name(
+                    token, f"{field}.gateway_interface", required=True
+                )
+
+        distance = _integer(record.get("distance"), f"{field}.distance", 1, 255)
+        table = _text(
+            record.get("routing_table", record.get("routing-table", record.get("table", "main"))),
+            f"{field}.routing_table",
+            64,
+            required=True,
+        )
+        routes.append({
+            "target": str(target_network),
+            "gateway": gateway,
+            "gateway_interface": gateway_interface,
+            "routing_table": table,
+            "distance": distance,
+            "active": _boolean(record.get("active"), f"{field}.active"),
+            "disabled": _boolean(record.get("disabled"), f"{field}.disabled"),
+            "blackhole": _boolean(record.get("blackhole"), f"{field}.blackhole"),
+            "dynamic": _boolean(record.get("dynamic"), f"{field}.dynamic"),
+        })
+
     raw_vlans = _records(payload.get("vlans", []), "vlans", MAX_VLANS)
     vlans = []
     vlan_ids = set()
@@ -406,6 +463,7 @@ def normalize_snapshot(payload: dict) -> dict:
         "wireless_radios": wireless_radios,
         "associations": associations,
         "addresses": addresses,
+        "routes": routes,
         "vlans": vlans,
         "dhcp_leases": dhcp_leases,
         "summary": {
@@ -414,6 +472,11 @@ def normalize_snapshot(payload: dict) -> dict:
             "wireless_radio_count": len(wireless_radios),
             "association_count": len(associations),
             "address_count": len(addresses),
+            "route_count": len(routes),
+            "active_route_count": sum(item["active"] is True and item["disabled"] is not True for item in routes),
+            "default_route_count": sum(
+                ipaddress.ip_network(item["target"]).prefixlen == 0 for item in routes
+            ),
             "vlan_count": len(vlans),
             "dhcp_lease_count": len(dhcp_leases),
         },
