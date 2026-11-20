@@ -96,8 +96,14 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 187 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 186 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
+| `GET /api/reports/jobs` | List authenticated scheduled-report jobs and state counts |
+| `POST /api/reports/jobs/enqueue` | Queue a hash-validated report occurrence idempotently |
+| `POST /api/reports/jobs/claim` | Claim due jobs using exclusive, expiring worker leases |
+| `POST /api/reports/jobs/{id}/renew` | Extend an active worker lease without reviving expired leases |
+| `POST /api/reports/jobs/{id}/delivery-package` | Verify the current SQLite lease and prepare an approved, signed delivery package without sending it |
+| `POST /api/reports/jobs/{id}/complete`, `/fail`, `/cancel` | Complete a lease, schedule a bounded retry/dead-letter, or cancel a pending job |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
