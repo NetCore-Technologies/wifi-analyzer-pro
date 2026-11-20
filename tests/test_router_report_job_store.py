@@ -225,7 +225,31 @@ class RouterReportJobStoreTests(unittest.TestCase):
         home = self.store.enqueue(job(occurrence="a" * 64, site_allowlist=["home"]), now=NOW)["job"]
         branch = self.store.enqueue(job(occurrence="b" * 64, site_allowlist=["branch"]), now=NOW)["job"]
         mixed = self.store.enqueue(job(occurrence="c" * 64, site_allowlist=["home", "branch"]), now=NOW)["job"]
-        unassigned = self.store.enqueue(job(occurrence="d" * 64), now=NOW)["job"]
+        unassigned_prepared = job(occurrence="d" * 64)
+        unassigned_bundle = {
+            **unassigned_prepared["report_bundle"],
+            "sites": [],
+            "findings": [],
+            "summary": {
+                **unassigned_prepared["report_bundle"]["summary"],
+                "site_count": 0,
+                "finding_count": 0,
+                "critical_count": 0,
+                "warning_count": 0,
+                "info_count": 0,
+                "detail_count": 0,
+            },
+            "sections": [
+                {**section, "finding_count": 0, "findings_truncated": False}
+                for section in unassigned_prepared["report_bundle"]["sections"]
+            ],
+        }
+        unassigned_body = {key: value for key, value in unassigned_bundle.items() if key != "content_hash"}
+        unassigned_bundle["content_hash"] = hashlib.sha256(
+            json.dumps(unassigned_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        unassigned_prepared["report_bundle"] = unassigned_bundle
+        unassigned = self.store.enqueue(unassigned_prepared, now=NOW)["job"]
         self.assertEqual(home["site_ids"], ["home"])
         self.assertEqual(branch["site_ids"], ["branch"])
         self.assertEqual(mixed["site_ids"], ["branch", "home"])
