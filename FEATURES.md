@@ -1,4 +1,4 @@
-# 187 WiFi Analyzer Pro feature tools (F001–F168, F172–F190)
+# 188 WiFi Analyzer Pro feature tools (F001–F168, F172–F191)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
