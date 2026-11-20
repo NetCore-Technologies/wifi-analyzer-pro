@@ -51,7 +51,7 @@ class AuthManagerTests(unittest.TestCase):
         token = migrated.login("correct horse battery staple")
         self.assertEqual(migrated.identity(token)["role"], "owner")
         saved = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
-        self.assertEqual(saved["version"], 3)
+        self.assertEqual(saved["version"], 4)
         self.assertTrue(saved["users"][0]["all_sites"])
         self.assertEqual(saved["users"][0]["username"], "admin")
         self.assertEqual(saved["users"][0]["created_at"], 123)
@@ -251,8 +251,96 @@ class AuthManagerTests(unittest.TestCase):
         login = migrated.login("legacy user password", "legacy.user")
         self.assertTrue(migrated.site_access(login)["all_sites"])
         migrated_state = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
-        self.assertEqual(migrated_state["version"], 3)
+        self.assertEqual(migrated_state["version"], 4)
         self.assertTrue(all(user["all_sites"] for user in migrated_state["users"]))
+
+    def test_totp_enrolment_is_encrypted_confirmed_and_required_at_login(self):
+        token = self.auth.setup("correct horse battery staple")
+        pending = self.auth.begin_mfa_setup(token, "correct horse battery staple", now=1_800_000_000)
+        saved_pending = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
+        owner = saved_pending["users"][0]
+        self.assertIsNone(owner["mfa_secret_encrypted"])
+        self.assertIsNotNone(owner["mfa_pending_secret_encrypted"])
+        self.assertNotIn(pending["secret"], Path(self.auth_path).read_text(encoding="utf-8"))
+        self.assertTrue(pending["otpauth_uri"].startswith("otpauth://totp/"))
+
+        with self.assertRaisesRegex(PermissionError, "authenticator code is invalid"):
+            self.auth.confirm_mfa_setup(token, "correct horse battery staple", "000000", now=1_800_000_000)
+        code = AuthManager._totp_code(pending["secret"], at=1_800_000_000)
+        confirmed = self.auth.confirm_mfa_setup(token, "correct horse battery staple", code, now=1_800_000_000)
+        self.assertTrue(confirmed["mfa_enabled"])
+        self.assertEqual(len(confirmed["recovery_codes"]), 10)
+        identity = self.auth.identity(token)
+        self.assertTrue(identity["mfa_enabled"])
+        self.assertEqual(identity["recovery_codes_remaining"], 10)
+
+        stored = Path(self.auth_path).read_text(encoding="utf-8")
+        self.assertNotIn(pending["secret"], stored)
+        with self.assertRaisesRegex(PermissionError, "two-factor"):
+            self.auth.login("correct horse battery staple")
+        with self.assertRaisesRegex(PermissionError, "two-factor code"):
+            self.auth.login("correct horse battery staple", code="123456", now=1_800_000_000)
+        session = self.auth.login("correct horse battery staple", code=code, now=1_800_000_000)
+        self.assertTrue(self.auth.validate(session))
+
+    def test_recovery_codes_are_single_use_and_password_reset_requires_mfa_reenrolment(self):
+        token = self.auth.setup("correct horse battery staple")
+        pending = self.auth.begin_mfa_setup(token, "correct horse battery staple", now=1_800_000_000)
+        code = AuthManager._totp_code(pending["secret"], at=1_800_000_000)
+        result = self.auth.confirm_mfa_setup(token, "correct horse battery staple", code, now=1_800_000_000)
+        recovery = result["recovery_codes"][0]
+
+        recovered = self.auth.login("correct horse battery staple", code=recovery, now=1_800_000_001)
+        self.assertTrue(self.auth.validate(recovered))
+        self.assertEqual(self.auth.identity(recovered)["recovery_codes_remaining"], 9)
+        with self.assertRaisesRegex(PermissionError, "two-factor code"):
+            self.auth.login("correct horse battery staple", code=recovery, now=1_800_000_002)
+
+        owner = self.auth.identity(token)
+        self.auth.update_user(token, owner["id"], password="replacement owner passphrase")
+        self.assertFalse(self.auth.identity(token)["mfa_enabled"])
+        new_session = self.auth.login("replacement owner passphrase")
+        self.assertTrue(self.auth.validate(new_session))
+
+    def test_mfa_setup_requires_password_expires_and_can_be_disabled(self):
+        token = self.auth.setup("correct horse battery staple")
+        with self.assertRaisesRegex(PermissionError, "Password verification"):
+            self.auth.begin_mfa_setup(token, "wrong password here", now=1_800_000_000)
+        pending = self.auth.begin_mfa_setup(token, "correct horse battery staple", now=1_800_000_000)
+        with self.assertRaisesRegex(ValueError, "expired"):
+            self.auth.confirm_mfa_setup(
+                token, "correct horse battery staple",
+                AuthManager._totp_code(pending["secret"], at=1_800_000_000),
+                now=1_800_000_901,
+            )
+        pending = self.auth.begin_mfa_setup(token, "correct horse battery staple", now=1_800_000_000)
+        code = AuthManager._totp_code(pending["secret"], at=1_800_000_000)
+        self.auth.confirm_mfa_setup(token, "correct horse battery staple", code, now=1_800_000_000)
+        with self.assertRaisesRegex(PermissionError, "Password verification"):
+            self.auth.disable_mfa(token, "incorrect password", code, now=1_800_000_000)
+        self.assertFalse(self.auth.disable_mfa(
+            token, "correct horse battery staple", code, now=1_800_000_000,
+        )["mfa_enabled"])
+        self.assertFalse(self.auth.identity(token)["mfa_enabled"])
+
+    def test_password_file_v3_migrates_to_mfa_capable_v4_without_enabling_mfa(self):
+        token = self.auth.setup("correct horse battery staple")
+        self.auth.create_user(token, "legacy.user", "legacy user password", "viewer")
+        saved = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
+        saved["version"] = 3
+        for user in saved["users"]:
+            for field in (
+                "mfa_secret_encrypted", "mfa_pending_secret_encrypted",
+                "mfa_pending_created_at", "mfa_recovery_hashes",
+            ):
+                user.pop(field, None)
+        Path(self.auth_path).write_text(json.dumps(saved), encoding="utf-8")
+        migrated = AuthManager(path=self.auth_path)
+        user_token = migrated.login("legacy user password", "legacy.user")
+        self.assertFalse(migrated.identity(user_token)["mfa_enabled"])
+        migrated_state = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
+        self.assertEqual(migrated_state["version"], 4)
+        self.assertTrue(all(user["mfa_secret_encrypted"] is None for user in migrated_state["users"]))
 
     def test_role_assignment_and_user_directory_are_bounded_and_secret_free(self):
         owner = self.auth.setup("owner passphrase is secure")
@@ -264,6 +352,8 @@ class AuthManagerTests(unittest.TestCase):
         self.assertNotIn("salt", rendered)
         self.assertNotIn("password", rendered)
         self.assertNotIn("token", rendered)
+        self.assertNotIn("mfa_secret", rendered)
+        self.assertNotIn("recovery_hash", rendered)
         with self.assertRaises(ValueError):
             self.auth.create_user(owner, "bad", "short", "viewer")
         with self.assertRaises(ValueError):

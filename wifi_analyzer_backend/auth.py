@@ -6,6 +6,7 @@ account metadata are stored atomically with owner-only filesystem permissions.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -18,12 +19,21 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 ROLES = {"owner", "admin", "network_admin", "analyst", "viewer"}
 MAX_USERS = 100
 MAX_SITE_SCOPE_IDS = 100
+MFA_SETUP_TTL_SECONDS = 900
+MFA_RECOVERY_CODE_COUNT = 10
 SITE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+
+class MFARequiredError(PermissionError):
+    """Raised when a password is valid but a second factor is still required."""
+
 
 ROLE_PERMISSIONS = {
     "owner": frozenset({
@@ -102,6 +112,8 @@ class AuthManager:
             "created_at": user["created_at"],
             "all_sites": user["all_sites"],
             "site_ids": list(user["site_ids"]),
+            "mfa_enabled": bool(user.get("mfa_secret_encrypted")),
+            "recovery_codes_remaining": len(user.get("mfa_recovery_hashes", [])),
         }
 
     @staticmethod
@@ -120,6 +132,10 @@ class AuthManager:
             "created_at": int(time.time()),
             "all_sites": all_sites,
             "site_ids": list(site_ids or []),
+            "mfa_secret_encrypted": None,
+            "mfa_pending_secret_encrypted": None,
+            "mfa_pending_created_at": None,
+            "mfa_recovery_hashes": [],
         }
 
     @staticmethod
@@ -142,7 +158,7 @@ class AuthManager:
             raise ValueError("site_ids must be empty when all_sites is enabled")
         return all_sites, sorted(cleaned)
 
-    def _validate_v3_state(self, state: dict[str, Any]) -> dict[str, Any]:
+    def _validate_v4_state(self, state: dict[str, Any]) -> dict[str, Any]:
         users = state.get("users")
         if not isinstance(users, list) or not 1 <= len(users) <= MAX_USERS:
             raise ValueError("invalid user collection")
@@ -173,6 +189,36 @@ class AuthManager:
             )
             if role == "owner" and (not all_sites or site_ids):
                 raise ValueError("the workspace owner must retain unrestricted site access")
+            active_secret = user.get("mfa_secret_encrypted")
+            pending_secret = user.get("mfa_pending_secret_encrypted")
+            pending_created_at = user.get("mfa_pending_created_at")
+            recovery_hashes = user.get("mfa_recovery_hashes", [])
+            for label, encrypted in (("active", active_secret), ("pending", pending_secret)):
+                if encrypted is not None:
+                    if not isinstance(encrypted, str) or not re.fullmatch(r"[A-Za-z0-9_-]{40,512}", encrypted):
+                        raise ValueError(f"invalid encrypted {label} MFA secret")
+                    decoded = base64.urlsafe_b64decode(encrypted + "=" * (-len(encrypted) % 4))
+                    if len(decoded) < 28:
+                        raise ValueError(f"invalid encrypted {label} MFA secret")
+            if pending_secret is None:
+                if pending_created_at is not None:
+                    raise ValueError("pending MFA timestamp requires a pending secret")
+            elif (
+                isinstance(pending_created_at, bool)
+                or not isinstance(pending_created_at, int)
+                or pending_created_at < 0
+            ):
+                raise ValueError("invalid pending MFA timestamp")
+            if not isinstance(recovery_hashes, list) or len(recovery_hashes) > MFA_RECOVERY_CODE_COUNT:
+                raise ValueError("invalid MFA recovery-code collection")
+            if any(
+                not isinstance(item, str)
+                or not re.fullmatch(r"[a-f0-9]{32}:[a-f0-9]{64}", item)
+                for item in recovery_hashes
+            ):
+                raise ValueError("invalid MFA recovery-code verifier")
+            if active_secret is None and recovery_hashes:
+                raise ValueError("MFA recovery codes require an active MFA secret")
             if user_id in seen_ids or username in seen_names:
                 raise ValueError("duplicate user identity")
             seen_ids.add(user_id)
@@ -183,10 +229,14 @@ class AuthManager:
                 "enabled": enabled, "salt": salt.hex(),
                 "verifier": verifier.hex(), "created_at": created_at,
                 "all_sites": all_sites, "site_ids": site_ids,
+                "mfa_secret_encrypted": active_secret,
+                "mfa_pending_secret_encrypted": pending_secret,
+                "mfa_pending_created_at": pending_created_at,
+                "mfa_recovery_hashes": list(recovery_hashes),
             })
         if owners != 1:
             raise ValueError("the user directory must contain exactly one owner")
-        return {"version": 3, "users": validated, "created_at": int(state.get("created_at", time.time()))}
+        return {"version": 4, "users": validated, "created_at": int(state.get("created_at", time.time()))}
 
     def _load(self) -> None:
         if not self.path.exists():
@@ -230,9 +280,26 @@ class AuthManager:
                 ]
                 self._write_state(migrated)
                 state = migrated
-            if state.get("version") != 3:
+            if state.get("version") == 3:
+                # MFA is opt-in. Existing accounts migrate without password resets,
+                # role changes, or loss of their prior site access.
+                migrated = dict(state)
+                migrated["version"] = 4
+                migrated["users"] = [
+                    {
+                        **user,
+                        "mfa_secret_encrypted": None,
+                        "mfa_pending_secret_encrypted": None,
+                        "mfa_pending_created_at": None,
+                        "mfa_recovery_hashes": [],
+                    }
+                    for user in state.get("users", [])
+                ]
+                self._write_state(migrated)
+                state = migrated
+            if state.get("version") != 4:
                 raise ValueError("unsupported auth file format")
-            self._state = self._validate_v3_state(state)
+            self._state = self._validate_v4_state(state)
             if os.name != "nt":
                 os.chmod(self.path, 0o600)
         except Exception:
@@ -300,7 +367,7 @@ class AuthManager:
             normalised = self._normalise_username(username)
             valid_password = self._validate_password(password)
             state = {
-                "version": 3,
+                "version": 4,
                 "created_at": int(time.time()),
                 "users": [self._make_user(normalised, valid_password, "owner", all_sites=True)],
             }
@@ -308,7 +375,197 @@ class AuthManager:
             self._state = state
             return self._new_session(state["users"][0]["id"])
 
-    def login(self, password: str, username: str = "admin") -> str:
+    @staticmethod
+    def _totp_code(secret: str, *, at: float | None = None) -> str:
+        moment = time.time() if at is None else at
+        key = base64.b32decode(secret.upper() + "=" * (-len(secret) % 8), casefold=True)
+        counter = int(moment // 30)
+        digest = hmac.new(key, counter.to_bytes(8, "big"), hashlib.sha1).digest()
+        offset = digest[-1] & 0x0F
+        value = int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF
+        return f"{value % 1_000_000:06d}"
+
+    @classmethod
+    def _verify_totp(cls, secret: str, code: object, *, at: float | None = None) -> bool:
+        if not isinstance(code, str) or not re.fullmatch(r"[0-9]{6}", code):
+            return False
+        moment = time.time() if at is None else at
+        counter = int(moment // 30)
+        return any(
+            hmac.compare_digest(cls._totp_code(secret, at=(counter + offset) * 30), code)
+            for offset in (-1, 0, 1)
+        )
+
+    @staticmethod
+    def _normalise_recovery_code(code: object) -> str:
+        if not isinstance(code, str):
+            return ""
+        value = code.replace("-", "").replace(" ", "").strip().upper()
+        return value if re.fullmatch(r"[A-F0-9]{20}", value) else ""
+
+    @classmethod
+    def _make_recovery_codes(cls) -> tuple[list[str], list[str]]:
+        clear_codes, stored_hashes = [], []
+        for _ in range(MFA_RECOVERY_CODE_COUNT):
+            raw = secrets.token_hex(10).upper()
+            clear_codes.append("-".join(raw[index:index + 4] for index in range(0, 20, 4)))
+            salt = secrets.token_bytes(16)
+            digest = hashlib.sha256(salt + raw.encode("ascii")).hexdigest()
+            stored_hashes.append(f"{salt.hex()}:{digest}")
+        return clear_codes, stored_hashes
+
+    @staticmethod
+    def _encrypt_mfa_secret(user_id: str, secret: str, key_material: bytes) -> str:
+        nonce = secrets.token_bytes(12)
+        encrypted = AESGCM(key_material[:32]).encrypt(
+            nonce, secret.encode("ascii"), user_id.encode("ascii")
+        )
+        return base64.urlsafe_b64encode(nonce + encrypted).decode("ascii").rstrip("=")
+
+    @staticmethod
+    def _decrypt_mfa_secret(user: dict[str, Any], encrypted: str, key_material: bytes) -> str:
+        packed = base64.urlsafe_b64decode(encrypted + "=" * (-len(encrypted) % 4))
+        try:
+            clear = AESGCM(key_material[:32]).decrypt(
+                packed[:12], packed[12:], user["id"].encode("ascii")
+            )
+        except InvalidTag as error:
+            raise RuntimeError("The encrypted MFA secret cannot be verified; restore the account backup") from error
+        return clear.decode("ascii")
+
+    @classmethod
+    def _recovery_code_index(cls, stored_hashes: list[str], code: object) -> int | None:
+        normalised = cls._normalise_recovery_code(code)
+        if not normalised:
+            return None
+        candidate = normalised.encode("ascii")
+        matched = None
+        for index, stored in enumerate(stored_hashes):
+            salt_hex, digest = stored.split(":", 1)
+            actual = hashlib.sha256(bytes.fromhex(salt_hex) + candidate).hexdigest()
+            if hmac.compare_digest(actual, digest):
+                matched = index
+        return matched
+
+    def begin_mfa_setup(
+        self, token: str | None, password: str, *, now: float | None = None
+    ) -> dict[str, str]:
+        with self._lock:
+            user, _ = self._session(token)
+            if not user:
+                raise PermissionError("Authentication required")
+            if user.get("mfa_secret_encrypted"):
+                raise ValueError("Multi-factor authentication is already enabled")
+            valid_password = self._validate_password(password)
+            material = self._derive(valid_password, bytes.fromhex(user["salt"]))
+            if not hmac.compare_digest(material, bytes.fromhex(user["verifier"])):
+                raise PermissionError("Password verification failed")
+            secret = base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+            original = dict(user)
+            user["mfa_pending_secret_encrypted"] = self._encrypt_mfa_secret(user["id"], secret, material)
+            user["mfa_pending_created_at"] = int(time.time() if now is None else now)
+            try:
+                self._persist()
+            except Exception:
+                user.clear()
+                user.update(original)
+                raise
+            issuer = quote("WiFi Analyzer Pro", safe="")
+            label = quote(user["username"], safe="")
+            return {
+                "secret": secret,
+                "otpauth_uri": (
+                    f"otpauth://totp/{issuer}:{label}?secret={secret}"
+                    f"&issuer={issuer}&algorithm=SHA1&digits=6&period=30"
+                ),
+                "expires_in_seconds": str(MFA_SETUP_TTL_SECONDS),
+            }
+
+    def confirm_mfa_setup(
+        self, token: str | None, password: str, code: object, *, now: float | None = None
+    ) -> dict[str, Any]:
+        with self._lock:
+            user, _ = self._session(token)
+            if not user:
+                raise PermissionError("Authentication required")
+            encrypted = user.get("mfa_pending_secret_encrypted")
+            created_at = user.get("mfa_pending_created_at")
+            moment = time.time() if now is None else now
+            if not encrypted or created_at is None:
+                raise ValueError("Start MFA setup before confirming it")
+            if moment < created_at or moment - created_at > MFA_SETUP_TTL_SECONDS:
+                original = dict(user)
+                user["mfa_pending_secret_encrypted"] = None
+                user["mfa_pending_created_at"] = None
+                try:
+                    self._persist()
+                except Exception:
+                    user.clear()
+                    user.update(original)
+                    raise
+                raise ValueError("The MFA setup has expired; start again")
+            valid_password = self._validate_password(password)
+            material = self._derive(valid_password, bytes.fromhex(user["salt"]))
+            if not hmac.compare_digest(material, bytes.fromhex(user["verifier"])):
+                raise PermissionError("Password verification failed")
+            secret = self._decrypt_mfa_secret(user, encrypted, material)
+            if not self._verify_totp(secret, code, at=moment):
+                raise PermissionError("The authenticator code is invalid")
+            clear_codes, stored_hashes = self._make_recovery_codes()
+            original = dict(user)
+            user["mfa_secret_encrypted"] = encrypted
+            user["mfa_pending_secret_encrypted"] = None
+            user["mfa_pending_created_at"] = None
+            user["mfa_recovery_hashes"] = stored_hashes
+            try:
+                self._persist()
+            except Exception:
+                user.clear()
+                user.update(original)
+                raise
+            return {
+                "mfa_enabled": True,
+                "recovery_codes": clear_codes,
+                "recovery_codes_remaining": len(clear_codes),
+            }
+
+    def disable_mfa(
+        self, token: str | None, password: str, code: object, *, now: float | None = None
+    ) -> dict[str, bool]:
+        with self._lock:
+            user, _ = self._session(token)
+            if not user:
+                raise PermissionError("Authentication required")
+            encrypted = user.get("mfa_secret_encrypted")
+            if not encrypted:
+                raise ValueError("Multi-factor authentication is not enabled")
+            valid_password = self._validate_password(password)
+            material = self._derive(valid_password, bytes.fromhex(user["salt"]))
+            if not hmac.compare_digest(material, bytes.fromhex(user["verifier"])):
+                raise PermissionError("Password verification failed")
+            secret = self._decrypt_mfa_secret(user, encrypted, material)
+            valid_code = self._verify_totp(secret, code, at=now)
+            recovery_index = None if valid_code else self._recovery_code_index(
+                user.get("mfa_recovery_hashes", []), code
+            )
+            if not valid_code and recovery_index is None:
+                raise PermissionError("A valid authenticator or unused recovery code is required")
+            original = dict(user)
+            user["mfa_secret_encrypted"] = None
+            user["mfa_pending_secret_encrypted"] = None
+            user["mfa_pending_created_at"] = None
+            user["mfa_recovery_hashes"] = []
+            try:
+                self._persist()
+            except Exception:
+                user.clear()
+                user.update(original)
+                raise
+            return {"mfa_enabled": False}
+
+    def login(
+        self, password: str, username: str = "admin", *, code: object = None, now: float | None = None
+    ) -> str:
         with self._lock:
             if self._broken:
                 raise RuntimeError("The existing auth file is unreadable; restore or remove it manually")
@@ -320,11 +577,11 @@ class AuthManager:
                 normalised = self._normalise_username(username)
             except ValueError:
                 normalised = ""
-            now = time.time()
+            moment = time.time() if now is None else now
             user = self._find_user(normalised) if normalised else None
             attempt_key = normalised if user is not None else "__unknown__"
             failed_count, locked_until = self._login_failures.get(attempt_key, (0, 0.0))
-            if now < locked_until:
+            if moment < locked_until:
                 raise PermissionError("Too many failed attempts; try again later")
             if user is None:
                 supplied = self._derive(password, b"\x00" * 16)
@@ -338,10 +595,36 @@ class AuthManager:
             if user is None:
                 failed_count += 1
                 if failed_count >= 5:
-                    self._login_failures[attempt_key] = (0, now + 300)
+                    self._login_failures[attempt_key] = (0, moment + 300)
                     raise PermissionError("Too many failed attempts; sign-in is locked for five minutes")
                 self._login_failures[attempt_key] = (failed_count, 0.0)
                 raise PermissionError("Invalid username or password")
+            encrypted = user.get("mfa_secret_encrypted")
+            if encrypted:
+                if not isinstance(code, str) or not code.strip():
+                    raise MFARequiredError("A two-factor authenticator or recovery code is required")
+                secret = self._decrypt_mfa_secret(user, encrypted, supplied)
+                valid_code = self._verify_totp(secret, code, at=moment)
+                recovery_index = None if valid_code else self._recovery_code_index(
+                    user.get("mfa_recovery_hashes", []), code
+                )
+                if not valid_code and recovery_index is None:
+                    failed_count += 1
+                    if failed_count >= 5:
+                        self._login_failures[attempt_key] = (0, moment + 300)
+                        raise PermissionError("Too many failed attempts; sign-in is locked for five minutes")
+                    self._login_failures[attempt_key] = (failed_count, 0.0)
+                    raise PermissionError("Invalid username, password or two-factor code")
+                if recovery_index is not None:
+                    original_hashes = list(user["mfa_recovery_hashes"])
+                    user["mfa_recovery_hashes"] = [
+                        item for index, item in enumerate(original_hashes) if index != recovery_index
+                    ]
+                    try:
+                        self._persist()
+                    except Exception:
+                        user["mfa_recovery_hashes"] = original_hashes
+                        raise
             self._login_failures.pop(attempt_key, None)
             return self._new_session(user["id"])
 
@@ -502,6 +785,12 @@ class AuthManager:
                 new_salt = secrets.token_bytes(16)
                 updates["salt"] = new_salt.hex()
                 updates["verifier"] = self._derive(valid_password, new_salt).hex()
+                # MFA encryption is password-derived: a password reset clears the
+                # second factor and unused recovery codes, requiring fresh enrolment.
+                updates["mfa_secret_encrypted"] = None
+                updates["mfa_pending_secret_encrypted"] = None
+                updates["mfa_pending_created_at"] = None
+                updates["mfa_recovery_hashes"] = []
             if not updates:
                 raise ValueError("At least one of role, enabled or password must be supplied")
             original = dict(target)
