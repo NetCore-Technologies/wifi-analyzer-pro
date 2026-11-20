@@ -22,6 +22,8 @@ from typing import Any
 USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 ROLES = {"owner", "admin", "network_admin", "analyst", "viewer"}
 MAX_USERS = 100
+MAX_SITE_SCOPE_IDS = 100
+SITE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 ROLE_PERMISSIONS = {
     "owner": frozenset({
@@ -98,10 +100,15 @@ class AuthManager:
             "role": user["role"],
             "enabled": user["enabled"],
             "created_at": user["created_at"],
+            "all_sites": user["all_sites"],
+            "site_ids": list(user["site_ids"]),
         }
 
     @staticmethod
-    def _make_user(username: str, password: str, role: str) -> dict[str, Any]:
+    def _make_user(
+        username: str, password: str, role: str, *,
+        all_sites: bool = True, site_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
         salt = secrets.token_bytes(16)
         return {
             "id": uuid.uuid4().hex,
@@ -111,9 +118,31 @@ class AuthManager:
             "salt": salt.hex(),
             "verifier": AuthManager._derive(password, salt).hex(),
             "created_at": int(time.time()),
+            "all_sites": all_sites,
+            "site_ids": list(site_ids or []),
         }
 
-    def _validate_v2_state(self, state: dict[str, Any]) -> dict[str, Any]:
+    @staticmethod
+    def _normalise_site_access(all_sites: object, site_ids: object) -> tuple[bool, list[str]]:
+        if not isinstance(all_sites, bool):
+            raise ValueError("all_sites must be a boolean")
+        if not isinstance(site_ids, list) or len(site_ids) > MAX_SITE_SCOPE_IDS:
+            raise ValueError(f"site_ids must be a list containing no more than {MAX_SITE_SCOPE_IDS} site identifiers")
+        cleaned = []
+        for value in site_ids:
+            if not isinstance(value, str):
+                raise ValueError("each site_id must be a valid 1 to 128 character identifier")
+            site_id = value.strip()
+            if not SITE_ID.fullmatch(site_id):
+                raise ValueError("each site_id must be a valid 1 to 128 character identifier")
+            cleaned.append(site_id)
+        if len(cleaned) != len(set(cleaned)):
+            raise ValueError("site_ids must be unique")
+        if all_sites and cleaned:
+            raise ValueError("site_ids must be empty when all_sites is enabled")
+        return all_sites, sorted(cleaned)
+
+    def _validate_v3_state(self, state: dict[str, Any]) -> dict[str, Any]:
         users = state.get("users")
         if not isinstance(users, list) or not 1 <= len(users) <= MAX_USERS:
             raise ValueError("invalid user collection")
@@ -139,6 +168,11 @@ class AuthManager:
             created_at = user.get("created_at")
             if isinstance(created_at, bool) or not isinstance(created_at, int) or created_at < 0:
                 raise ValueError("invalid user creation timestamp")
+            all_sites, site_ids = self._normalise_site_access(
+                user.get("all_sites"), user.get("site_ids")
+            )
+            if role == "owner" and (not all_sites or site_ids):
+                raise ValueError("the workspace owner must retain unrestricted site access")
             if user_id in seen_ids or username in seen_names:
                 raise ValueError("duplicate user identity")
             seen_ids.add(user_id)
@@ -148,10 +182,11 @@ class AuthManager:
                 "id": user_id, "username": username, "role": role,
                 "enabled": enabled, "salt": salt.hex(),
                 "verifier": verifier.hex(), "created_at": created_at,
+                "all_sites": all_sites, "site_ids": site_ids,
             })
         if owners != 1:
             raise ValueError("the user directory must contain exactly one owner")
-        return {"version": 2, "users": validated, "created_at": int(state.get("created_at", time.time()))}
+        return {"version": 3, "users": validated, "created_at": int(state.get("created_at", time.time()))}
 
     def _load(self) -> None:
         if not self.path.exists():
@@ -179,13 +214,25 @@ class AuthManager:
                         "salt": salt.hex(),
                         "verifier": verifier.hex(),
                         "created_at": int(state.get("created_at", time.time())),
+                        "all_sites": True,
+                        "site_ids": [],
                     }],
                 }
                 self._write_state(migrated)
                 state = migrated
-            if state.get("version") != 2:
+            if state.get("version") == 2:
+                # Existing accounts retain their previous unrestricted access.
+                migrated = dict(state)
+                migrated["version"] = 3
+                migrated["users"] = [
+                    {**user, "all_sites": True, "site_ids": []}
+                    for user in state.get("users", [])
+                ]
+                self._write_state(migrated)
+                state = migrated
+            if state.get("version") != 3:
                 raise ValueError("unsupported auth file format")
-            self._state = self._validate_v2_state(state)
+            self._state = self._validate_v3_state(state)
             if os.name != "nt":
                 os.chmod(self.path, 0o600)
         except Exception:
@@ -253,9 +300,9 @@ class AuthManager:
             normalised = self._normalise_username(username)
             valid_password = self._validate_password(password)
             state = {
-                "version": 2,
+                "version": 3,
                 "created_at": int(time.time()),
-                "users": [self._make_user(normalised, valid_password, "owner")],
+                "users": [self._make_user(normalised, valid_password, "owner", all_sites=True)],
             }
             self._write_state(state)
             self._state = state
@@ -332,6 +379,20 @@ class AuthManager:
             user, _ = self._session(token)
             return user is not None
 
+    def site_access(self, token: str | None) -> dict[str, Any] | None:
+        with self._lock:
+            user, _ = self._session(token)
+            if not user:
+                return None
+            return {"all_sites": user["all_sites"], "site_ids": list(user["site_ids"])}
+
+    def can_access_site(self, token: str | None, site_id: str) -> bool:
+        if not isinstance(site_id, str) or not SITE_ID.fullmatch(site_id.strip()):
+            return False
+        with self._lock:
+            user, _ = self._session(token)
+            return bool(user and (user["all_sites"] or site_id.strip() in user["site_ids"]))
+
     def has_permission(self, token: str | None, permission: str) -> bool:
         if permission not in {
             "users.manage", "agents.manage", "agents.read",
@@ -350,7 +411,10 @@ class AuthManager:
                 raise PermissionError("User-management permission required")
             return [self._safe_user(user) for user in sorted(self._users(), key=lambda item: item["username"])]
 
-    def create_user(self, actor_token: str | None, username: object, password: object, role: object) -> dict[str, Any]:
+    def create_user(
+        self, actor_token: str | None, username: object, password: object, role: object, *,
+        all_sites: object = False, site_ids: object = None,
+    ) -> dict[str, Any]:
         with self._lock:
             actor, _ = self._session(actor_token)
             if not actor or "users.manage" not in ROLE_PERMISSIONS[actor["role"]]:
@@ -361,11 +425,20 @@ class AuthManager:
                 raise ValueError("role must be admin, network_admin, analyst or viewer")
             if actor["role"] != "owner" and role == "admin":
                 raise PermissionError("Only the owner can create administrators")
+            all_sites, site_ids = self._normalise_site_access(
+                all_sites, [] if site_ids is None else site_ids
+            )
+            if not actor["all_sites"]:
+                if all_sites or not set(site_ids).issubset(actor["site_ids"]):
+                    raise PermissionError("You cannot grant site access outside your own assigned scope")
             if len(self._users()) >= MAX_USERS:
                 raise ValueError(f"The local directory is limited to {MAX_USERS} users")
             if self._find_user(normalised):
                 raise ValueError("A user with that username already exists")
-            user = self._make_user(normalised, valid_password, role)
+            user = self._make_user(
+                normalised, valid_password, role,
+                all_sites=all_sites, site_ids=site_ids,
+            )
             self._state["users"].append(user)
             try:
                 self._persist()
@@ -382,6 +455,8 @@ class AuthManager:
         role: object = None,
         enabled: object = None,
         password: object = None,
+        all_sites: object = None,
+        site_ids: object = None,
     ) -> dict[str, Any]:
         with self._lock:
             actor, _ = self._session(actor_token)
@@ -408,6 +483,19 @@ class AuthManager:
                 if not isinstance(enabled, bool):
                     raise ValueError("enabled must be a boolean")
                 updates["enabled"] = enabled
+            if all_sites is not None or site_ids is not None:
+                next_all_sites = target["all_sites"] if all_sites is None else all_sites
+                next_site_ids = target["site_ids"] if site_ids is None else site_ids
+                if all_sites is True and site_ids is None:
+                    next_site_ids = []
+                next_all_sites, next_site_ids = self._normalise_site_access(
+                    next_all_sites, next_site_ids
+                )
+                if not actor["all_sites"]:
+                    if next_all_sites or not set(next_site_ids).issubset(actor["site_ids"]):
+                        raise PermissionError("You cannot grant site access outside your own assigned scope")
+                updates["all_sites"] = next_all_sites
+                updates["site_ids"] = next_site_ids
             new_salt = None
             if password is not None:
                 valid_password = self._validate_password(password)

@@ -179,6 +179,7 @@ class SiteHistoryStore:
         site_id: str | None = None,
         limit: int = 50,
         before_id: int | None = None,
+        site_ids: list[str] | None = None,
     ) -> list[dict]:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_LIST_LIMIT:
             raise ValueError(f"limit must be an integer between 1 and {MAX_LIST_LIMIT}")
@@ -186,12 +187,31 @@ class SiteHistoryStore:
             raise ValueError("site_id must contain 1 to 128 characters")
         if before_id is not None and (isinstance(before_id, bool) or not isinstance(before_id, int) or before_id < 1):
             raise ValueError("before_id must be a positive integer")
+        if site_id is not None and site_ids is not None:
+            raise ValueError("site_id and site_ids cannot be supplied together")
+        if site_ids is not None:
+            if not isinstance(site_ids, list) or len(site_ids) > 100:
+                raise ValueError("site_ids must contain no more than 100 site identifiers")
+            cleaned = []
+            for item in site_ids:
+                if not isinstance(item, str) or not item.strip() or len(item) > 128:
+                    raise ValueError("each site_id must contain 1 to 128 characters")
+                cleaned.append(item.strip())
+            if len(cleaned) != len(set(cleaned)):
+                raise ValueError("site_ids must be unique")
+            site_ids = cleaned
+            if not site_ids:
+                return []
 
         clauses = []
         values = []
         if site_id is not None:
             clauses.append("site_id = ?")
             values.append(site_id)
+        elif site_ids is not None:
+            placeholders = ", ".join("?" for _ in site_ids)
+            clauses.append(f"site_id IN ({placeholders})")
+            values.extend(site_ids)
         if before_id is not None:
             clauses.append("id < ?")
             values.append(before_id)
@@ -207,9 +227,9 @@ class SiteHistoryStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def site_ids(self, *, limit: int = 20) -> list[str]:
-        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 20:
-            raise ValueError("site limit must be an integer between 1 and 20")
+    def site_ids(self, *, limit: int = 100) -> list[str]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("site limit must be an integer between 1 and 100")
         with self._connection() as connection:
             rows = connection.execute(
                 "SELECT DISTINCT site_id FROM site_snapshots ORDER BY site_id LIMIT ?",

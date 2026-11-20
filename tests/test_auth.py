@@ -51,7 +51,8 @@ class AuthManagerTests(unittest.TestCase):
         token = migrated.login("correct horse battery staple")
         self.assertEqual(migrated.identity(token)["role"], "owner")
         saved = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
-        self.assertEqual(saved["version"], 2)
+        self.assertEqual(saved["version"], 3)
+        self.assertTrue(saved["users"][0]["all_sites"])
         self.assertEqual(saved["users"][0]["username"], "admin")
         self.assertEqual(saved["users"][0]["created_at"], 123)
 
@@ -183,6 +184,75 @@ class AuthManagerTests(unittest.TestCase):
         self.assertFalse(self.auth.validate(old_token))
         with self.assertRaises(PermissionError):
             self.auth.login("analyst password secure", "analyst")
+
+    def test_site_scopes_are_least_privilege_and_take_effect_for_existing_sessions(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        scoped = self.auth.create_user(
+            owner, "site.analyst", "scoped analyst password", "analyst",
+            all_sites=False, site_ids=["home", "branch"],
+        )
+        token = self.auth.login("scoped analyst password", "site.analyst")
+        self.assertEqual(scoped["site_ids"], ["branch", "home"])
+        self.assertFalse(scoped["all_sites"])
+        self.assertTrue(self.auth.can_access_site(token, "home"))
+        self.assertFalse(self.auth.can_access_site(token, "office"))
+        self.auth.update_user(owner, scoped["id"], site_ids=["office"])
+        self.assertFalse(self.auth.can_access_site(token, "home"))
+        self.assertTrue(self.auth.can_access_site(token, "office"))
+
+    def test_site_scope_validation_and_delegation_cannot_escalate_access(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        scoped_admin = self.auth.create_user(
+            owner, "scoped.admin", "scoped admin password", "admin",
+            all_sites=False, site_ids=["home"],
+        )
+        admin_token = self.auth.login("scoped admin password", "scoped.admin")
+        with self.assertRaisesRegex(PermissionError, "outside your own assigned scope"):
+            self.auth.create_user(
+                admin_token, "outside.user", "outside user password", "viewer",
+                all_sites=False, site_ids=["office"],
+            )
+        with self.assertRaisesRegex(PermissionError, "outside your own assigned scope"):
+            self.auth.create_user(
+                admin_token, "global.user", "global user password", "viewer",
+                all_sites=True,
+            )
+        with self.assertRaisesRegex(ValueError, "unique"):
+            self.auth.create_user(
+                owner, "duplicate.site", "duplicate site password", "viewer",
+                site_ids=["home", "home"],
+            )
+        with self.assertRaisesRegex(ValueError, "all_sites"):
+            self.auth.create_user(
+                owner, "conflict.site", "conflict site password", "viewer",
+                all_sites=True, site_ids=["home"],
+            )
+        with self.assertRaisesRegex(ValueError, "identifier"):
+            self.auth.create_user(
+                owner, "invalid.site", "invalid site password", "viewer",
+                site_ids=["bad site id"],
+            )
+        self.assertTrue(self.auth.can_access_site(admin_token, "home"))
+        self.assertFalse(self.auth.can_access_site(admin_token, "office"))
+        self.assertEqual(self.auth.site_access(admin_token), {
+            "all_sites": False, "site_ids": ["home"],
+        })
+
+    def test_version_two_accounts_migrate_with_existing_unrestricted_site_access(self):
+        owner_token = self.auth.setup("owner passphrase is secure")
+        self.auth.create_user(owner_token, "legacy.user", "legacy user password", "viewer")
+        saved = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
+        saved["version"] = 2
+        for user in saved["users"]:
+            user.pop("all_sites", None)
+            user.pop("site_ids", None)
+        Path(self.auth_path).write_text(json.dumps(saved), encoding="utf-8")
+        migrated = AuthManager(path=self.auth_path)
+        login = migrated.login("legacy user password", "legacy.user")
+        self.assertTrue(migrated.site_access(login)["all_sites"])
+        migrated_state = json.loads(Path(self.auth_path).read_text(encoding="utf-8"))
+        self.assertEqual(migrated_state["version"], 3)
+        self.assertTrue(all(user["all_sites"] for user in migrated_state["users"]))
 
     def test_role_assignment_and_user_directory_are_bounded_and_secret_free(self):
         owner = self.auth.setup("owner passphrase is secure")

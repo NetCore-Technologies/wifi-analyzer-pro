@@ -62,6 +62,21 @@ class SiteHistoryStoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "storage limit"):
                 store.record(huge)
 
+    def test_site_id_filter_returns_only_assigned_sites_and_empty_scope_returns_none(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SiteHistoryStore(Path(directory) / "history.sqlite3")
+            home = store.record(snapshot("home", "2026-11-20T10:00:00+00:00"))
+            store.record(snapshot("branch", "2026-11-20T10:01:00+00:00"))
+            store.record(snapshot("office", "2026-11-20T10:02:00+00:00"))
+            restricted = store.list(site_ids=["home", "branch"], limit=10)
+            self.assertEqual({item["site_id"] for item in restricted}, {"home", "branch"})
+            self.assertEqual(store.list(site_ids=[], limit=10), [])
+            self.assertEqual(store.list(site_ids=["home"], limit=10)[0]["id"], home["id"])
+            with self.assertRaisesRegex(ValueError, "cannot be supplied together"):
+                store.list(site_id="home", site_ids=["home"])
+            with self.assertRaisesRegex(ValueError, "unique"):
+                store.list(site_ids=["home", "home"])
+
     def test_latest_pairs_returns_two_newest_snapshots_per_site(self):
         with tempfile.TemporaryDirectory() as directory:
             store = SiteHistoryStore(Path(directory) / "history.sqlite3")
