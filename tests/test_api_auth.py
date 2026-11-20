@@ -546,10 +546,12 @@ class AuthenticatedApiTests(unittest.TestCase):
     def test_openwrt_snapshot_delivery_is_idempotent_and_rejects_payload_reuse(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
         admin_token = setup["token"]
-        agent_token = self.enroll_agent(admin_token, "delivery-agent", ["system.board", "inventory.snapshot"])
+        agent_token = self.enroll_agent(
+            admin_token, "delivery-agent", ["system.board", "system.health", "inventory.snapshot"]
+        )
         status, heartbeat = self.request("POST", "/api/agents/heartbeat", {
             "agent_id":"delivery-agent","adapter_id":"openwrt","agent_version":"1.2.0",
-            "status":"healthy","capabilities":["system.board","inventory.snapshot"],
+            "status":"healthy","capabilities":["system.board","system.health","inventory.snapshot"],
         }, token=agent_token)
         self.assertEqual(status, 201)
         delivery_id = "6c6329b5-8611-4c45-8926-5d6a85bc9f7d"
@@ -560,6 +562,12 @@ class AuthenticatedApiTests(unittest.TestCase):
             "wireless":[{"interface":"phy0-ap0","ssid":"Home","bssid":"00:11:22:33:44:55","frequency_mhz":5180,"channel":36,"channel_width_mhz":80}],
             "associations":[],
             "routes":[{"target":"0.0.0.0/0","nexthop":"192.168.1.1","device":"eth0"}],
+            "system_health":{
+                "uptime_seconds":1234,
+                "load_average":{"1m":1.0,"5m":0.5,"15m":0.25},
+                "memory_bytes":{"total":1048576,"free":524288,"available":540672},
+                "swap_bytes":{"total":262144,"free":131072},
+            },
         }
         payload = {"agent_id":"delivery-agent","delivery_id":delivery_id,"snapshot":snapshot}
         status, first = self.request("POST", "/api/agents/snapshots/batch", payload, token=agent_token)
@@ -569,6 +577,12 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(retry["delivery"]["replayed"])
         self.assertEqual(retry["delivery"]["id"], first["delivery"]["id"])
+        status, latest = self.request("GET", "/api/agents/snapshots/delivery-agent", token=admin_token)
+        self.assertEqual(status, 200)
+        health = latest["snapshot"]["snapshot"]["system_health"]
+        self.assertEqual(health["uptime_seconds"], 1234)
+        self.assertEqual(health["load_average"]["1m"], 1.0)
+        self.assertEqual(health["memory_bytes"]["available"], 540672)
 
         changed = {**snapshot, "board": {"model":"Different router"}}
         status, conflict = self.request("POST", "/api/agents/snapshots/batch", {
@@ -586,7 +600,52 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, denied = self.request("POST", "/api/agents/snapshots/batch", payload)
         self.assertEqual(status, 401)
 
+    def test_snapshot_health_metrics_require_credential_and_heartbeat_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})
+        admin_token = setup["token"]
+        token_without_health = self.enroll_agent(
+            admin_token, "no-health-agent", ["system.board", "inventory.snapshot"]
+        )
+        self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"no-health-agent","adapter_id":"openwrt","agent_version":"1.2.0",
+            "capabilities":["system.board","inventory.snapshot"],
+        }, token=token_without_health)
+        snapshot = {
+            "captured_at":"2026-11-20T10:00:00Z",
+            "board":{},
+            "interfaces":[],
+            "wireless":[],
+            "associations":[],
+            "routes":[],
+            "system_health":{
+                "uptime_seconds":10,
+                "load_average":{"1m":0.1,"5m":0.1,"15m":0.1},
+                "memory_bytes":{"total":1024,"free":512},
+                "swap_bytes":{"total":0,"free":0},
+            },
+        }
+        status, denied = self.request("POST", "/api/agents/snapshots/batch", {
+            "agent_id":"no-health-agent",
+            "delivery_id":"6c6329b5-8611-4c45-8926-5d6a85bc9f7e",
+            "snapshot":snapshot,
+        }, token=token_without_health)
+        self.assertEqual(status, 400)
+        self.assertIn("credential does not include the system.health", denied["error"])
 
+        token_with_health = self.enroll_agent(
+            admin_token, "not-negotiated-health", ["system.board", "system.health", "inventory.snapshot"]
+        )
+        self.request("POST", "/api/agents/heartbeat", {
+            "agent_id":"not-negotiated-health","adapter_id":"openwrt","agent_version":"1.2.0",
+            "capabilities":["system.board","inventory.snapshot"],
+        }, token=token_with_health)
+        status, denied = self.request("POST", "/api/agents/snapshots/batch", {
+            "agent_id":"not-negotiated-health",
+            "delivery_id":"6c6329b5-8611-4c45-8926-5d6a85bc9f7f",
+            "snapshot":snapshot,
+        }, token=token_with_health)
+        self.assertEqual(status, 400)
+        self.assertIn("not negotiated the system.health", denied["error"])
 
     def test_concurrent_snapshot_delivery_retries_share_one_acknowledgement(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})

@@ -123,7 +123,7 @@ The local HTTP service exposes:
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.
 
-For router-side, read-only telemetry collection, see the [OpenWrt agent installation and service guide](agent/README.md). The agent uses an enrolled scoped token, TLS verification, a private on-disk retry spool and the idempotent snapshot-delivery endpoint.
+For router-side, read-only telemetry collection, see the [OpenWrt agent installation and service guide](agent/README.md). The agent uses an enrolled scoped token, TLS verification, a private on-disk retry spool and the idempotent snapshot-delivery endpoint. Optional uptime, load-average, memory and swap telemetry is collected only when the enrolled credential grants `system.health`.
 
 For a Vite development server accessed from another device, add its exact origin to `WIFI_ANALYZER_CORS_ORIGINS` (comma-separated). Keep the default backend bind address on loopback unless LAN access is intentionally configured.
 

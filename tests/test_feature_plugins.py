@@ -1,4 +1,5 @@
 """Regression tests for the independently registered feature tools."""
+import json
 import unittest
 
 from wifi_analyzer_backend.feature_plugins import catalog, run, count
@@ -276,6 +277,12 @@ PAYLOADS = {
         "requested_permissions": ["read", "config.write"]
     },
     "openwrt_snapshot_normalizer": {
+        "system_health": {
+            "uptime_seconds": 1234,
+            "load_average": {"1m": 1.0, "5m": 0.5, "15m": 0.25},
+            "memory_bytes": {"total":1048576,"free":524288,"shared":8192,"buffered":16384,"available":540672,"cached":32768},
+            "swap_bytes": {"total":262144,"free":131072}
+        },
         "captured_at": "2026-11-20T10:00:00+11:00",
         "board": {"model":"Example OpenWrt Router","hostname":"router","kernel":"6.6.1","release":{"distribution":"OpenWrt","version":"24.10.0","target":"qualcommax/ipq807x"}},
         "interfaces": [{"interface":"lan","device":"br-lan","proto":"static","up":True,"ipv4-address":[{"address":"192.168.1.1","mask":24}]}],
@@ -989,6 +996,10 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(result["routes"][0]["gateway"], "192.168.1.254")
         self.assertNotIn("password", result["wireless_radios"][0])
         self.assertEqual(result["summary"]["association_count"], 1)
+        self.assertEqual(result["system_health"]["uptime_seconds"], 1234)
+        self.assertEqual(result["system_health"]["load_average"]["1m"], 1.0)
+        self.assertEqual(result["system_health"]["memory_bytes"]["available"], 540672)
+        self.assertNotIn("secret", json.dumps(result["system_health"]))
 
     def test_openwrt_snapshot_normalizer_rejects_invalid_addresses_timestamps_and_bounds(self):
         with self.assertRaisesRegex(ValueError, "timezone offset"):
@@ -997,6 +1008,32 @@ class FeatureCatalogTests(unittest.TestCase):
             run("openwrt_snapshot_normalizer", {"captured_at":"2026-11-20T10:00:00Z","wireless":[{"interface":"wlan0","bssid":"invalid"}]})
         with self.assertRaisesRegex(ValueError, "IPv4 interface address"):
             run("openwrt_snapshot_normalizer", {"captured_at":"2026-11-20T10:00:00Z","interfaces":[{"interface":"lan","ipv4-address":[{"address":"999.1.1.1","mask":24}]}]})
+
+    def test_openwrt_snapshot_normalizer_rejects_invalid_system_health_values(self):
+        base = {
+            "captured_at":"2026-11-20T10:00:00Z",
+            "system_health":{
+                "uptime_seconds":10,
+                "load_average":{"1m":0.5,"5m":0.4,"15m":0.3},
+                "memory_bytes":{"total":1024,"free":512},
+                "swap_bytes":{"total":0,"free":0},
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "load_average.1m"):
+            run("openwrt_snapshot_normalizer", {
+                **base,
+                "system_health":{**base["system_health"],"load_average":{"1m":float("nan"),"5m":0.4,"15m":0.3}},
+            })
+        with self.assertRaisesRegex(ValueError, "free cannot exceed total"):
+            run("openwrt_snapshot_normalizer", {
+                **base,
+                "system_health":{**base["system_health"],"memory_bytes":{"total":1024,"free":2048}},
+            })
+        with self.assertRaisesRegex(ValueError, "uptime_seconds"):
+            run("openwrt_snapshot_normalizer", {
+                **base,
+                "system_health":{**base["system_health"],"uptime_seconds":True},
+            })
 
     def test_router_agent_health_report_classifies_healthy_degraded_and_stale_agents(self):
         result = run("router_agent_health_report", PAYLOADS["router_agent_health_report"])["result"]

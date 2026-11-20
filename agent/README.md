@@ -2,7 +2,7 @@
 
 The agent collects router telemetry locally and sends normalised, credential-free snapshots to WiFi Analyzer Pro. It uses the per-agent token issued by the Agent enrolment API and the idempotent snapshot-delivery endpoint.
 
-It is deliberately read-only. The collector invokes only fixed ubus, ip and iw read commands. It does not run a shell, invoke uci, alter firewall/network configuration, trigger a disruptive wireless scan, or copy wireless PSKs/passwords into its payload.
+It is deliberately read-only. The collector invokes only fixed ubus, ip and iw read commands. It does not run a shell, invoke uci, alter firewall/network configuration, trigger a disruptive wireless scan, or copy wireless PSKs/passwords into its payload. System health collection (`ubus call system info`) is optional and runs only when `system.health` is included in the agent credential scope.
 
 ## Requirements
 
@@ -23,6 +23,7 @@ Example JSON body:
       "agent_version": "1.0.0",
       "advertised_capabilities": [
         "system.board",
+        "system.health",
         "network.interfaces",
         "network.routes",
         "wireless.radios",
@@ -31,6 +32,7 @@ Example JSON body:
       ],
       "requested_capabilities": [
         "system.board",
+        "system.health",
         "network.interfaces",
         "network.routes",
         "wireless.radios",
@@ -40,7 +42,7 @@ Example JSON body:
       "requested_permissions": ["read"]
     }
 
-The response contains a one-time credential.token. Copy it directly into the router's protected configuration. It is not shown again by the server; rotate the credential from the admin API if it is lost.
+The response contains a one-time credential.token. Copy it directly into the router's protected configuration. It is not shown again by the server; rotate the credential from the admin API if it is lost. Existing agents must be re-enrolled or have their credential rotated with `system.health` added before that optional query is enabled; older credentials continue to collect the base inventory only.
 
 ## 2. Install the agent
 
@@ -78,7 +80,7 @@ The placeholder token is intentionally invalid; replace it before starting the s
     /etc/init.d/wifi-analyzer-agent enable
     /etc/init.d/wifi-analyzer-agent start
 
-The service runs under procd. It sends a heartbeat each collection cycle, verifies that the credential includes inventory.snapshot, and then posts a UUID-keyed delivery to /api/agents/snapshots/batch.
+The service runs under procd. It sends a heartbeat each collection cycle, verifies that the credential includes inventory.snapshot, and then posts a UUID-keyed delivery to /api/agents/snapshots/batch. When the credential also includes `system.health`, it reads the read-only `system info` ubus method and sends uptime, 1/5/15-minute load averages, and raw memory/swap byte counters. Load averages are converted from procd's 16.16 fixed-point representation; no memory-use percentage is inferred.
 
 ## Retry and local storage
 
