@@ -7,7 +7,7 @@ on:
       - ".github/workflows/temporary-npm-lock-refresh.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   refresh-lockfile:
@@ -33,3 +33,28 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm run build
+
+      - name: Commit the verified lockfile
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git reset --hard origin/main
+            npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+            npm ci --no-audit --no-fund
+            npm run build
+            git add package-lock.json
+            if git diff --cached --quiet; then
+              echo "package-lock.json is already synchronised"
+              exit 0
+            fi
+            git commit -m "fix(deps): synchronise npm lockfile"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+          done
+          echo "Could not push the refreshed lockfile after three attempts" >&2
+          exit 1
