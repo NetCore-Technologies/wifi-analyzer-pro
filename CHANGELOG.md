@@ -25,6 +25,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Ship a standard-library OpenWrt read-only agent with fixed ubus/ip/iw command allowlists, no shell or configuration writes, HTTPS verification, procd service packaging and a mode-0600 single-delivery outbox for restart-safe retries.
 - Refuse HTTP redirects in the agent API client so its bearer credential cannot be forwarded to a redirected endpoint.
 - Collect optional OpenWrt uptime, fixed-point load averages, memory and swap counters only when the agent credential negotiates `system.health`; validate and whitelist values before snapshot persistence.
+- Add an authenticated Router Agent Console with OpenWrt enrolment, explicit read-only capability selection, health/heartbeat status, latest inventory and drift, one-time credential display, rotation/revocation controls, and persisted negotiation-audit visibility.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
 - Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.
