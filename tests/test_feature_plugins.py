@@ -176,19 +176,20 @@ PAYLOADS = {
     "ap_observation_freshness_audit": {"now":"2026-11-20T10:00:00Z","stale_after_seconds":900,"access_points":[{"ap_id":"ap-a","site_id":"home","last_seen":"2026-11-20T09:30:00Z"},{"ap_id":"ap-b","site_id":"home","last_seen":"2026-11-20T09:59:00Z"},{"ap_id":"ap-c","site_id":"branch"}]},
 
     "site_ap_channel_reuse_audit": {"radios":[{"radio_id":"r1","ap_id":"a","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20},{"radio_id":"r2","ap_id":"b","site_id":"home","band":"2.4GHz","channel":3,"channel_width_mhz":20},{"radio_id":"r3","ap_id":"c","site_id":"home","band":"2.4GHz","channel":1,"channel_width_mhz":20}]} ,
+    "site_topology_history_timeline": {"snapshots":[{"captured_at":"2026-11-20T09:00:00Z","access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"b","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"b","relationship":"wired_uplink"}]},{"captured_at":"2026-11-20T10:00:00Z","access_points":[{"ap_id":"a","site_id":"home"},{"ap_id":"c","site_id":"home"}],"links":[{"from_ap_id":"a","to_ap_id":"c","relationship":"mesh_backhaul"}]}]},
 
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
-    def test_exactly_one_hundred_fifty_three_distinct_features_are_registered(self):
+    def test_exactly_one_hundred_fifty_four_distinct_features_are_registered(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 153)
-        self.assertEqual(len(set(FEATURE_MODULES)), 153)
-        self.assertEqual(count(), 153)
-        self.assertEqual(len(entries), 153)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 153)
-        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 154)])
+        self.assertEqual(len(FEATURE_MODULES), 154)
+        self.assertEqual(len(set(FEATURE_MODULES)), 154)
+        self.assertEqual(count(), 154)
+        self.assertEqual(len(entries), 154)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 154)
+        self.assertEqual([entry["id"] for entry in entries], [f"F{i:03d}" for i in range(1, 155)])
 
     def test_each_feature_executes_with_its_sample_payload(self):
         for entry in catalog():
@@ -492,6 +493,67 @@ class FeatureCatalogTests(unittest.TestCase):
             run("site_ap_channel_reuse_audit", {
                 "radios": [{"radio_id": "r1", "ap_id": "a", "site_id": "home", "band": "5GHz", "channel": 36, "channel_width_mhz": 80}]
             })
+
+
+    def test_site_topology_history_timeline_reports_snapshot_changes(self):
+        result = run("site_topology_history_timeline", {
+            "snapshots": [
+                {
+                    "captured_at": "2026-11-20T09:00:00Z",
+                    "access_points": [
+                        {"ap_id": "a", "site_id": "home", "name": "Hall"},
+                        {"ap_id": "b", "site_id": "home", "name": "Office"},
+                    ],
+                    "links": [
+                        {"from_ap_id": "a", "to_ap_id": "b", "relationship": "wired_uplink"}
+                    ],
+                },
+                {
+                    "captured_at": "2026-11-20T10:00:00+00:00",
+                    "access_points": [
+                        {"ap_id": "a", "site_id": "remote", "name": "Hall"},
+                        {"ap_id": "c", "site_id": "home", "name": "Garage"},
+                    ],
+                    "links": [
+                        {"from_ap_id": "a", "to_ap_id": "c", "relationship": "mesh_backhaul"}
+                    ],
+                },
+            ]
+        })["result"]
+        self.assertEqual(result["summary"]["snapshot_count"], 2)
+        self.assertEqual(result["summary"]["comparison_count"], 1)
+        self.assertEqual(result["summary"]["total_topology_changes"], 5)
+        window = result["change_windows"][0]
+        self.assertEqual(window["interval_seconds"], 3600.0)
+        self.assertEqual(window["added_access_points"][0]["ap_id"], "c")
+        self.assertEqual(window["removed_access_points"][0]["ap_id"], "b")
+        self.assertEqual(window["changed_access_points"][0]["ap_id"], "a")
+        self.assertEqual(window["added_links"][0]["relationship"], "mesh_backhaul")
+        self.assertEqual(window["removed_links"][0]["relationship"], "wired_uplink")
+
+    def test_site_topology_history_timeline_rejects_non_monotonic_or_naive_times(self):
+        with self.assertRaisesRegex(ValueError, "strictly increasing"):
+            run("site_topology_history_timeline", {
+                "snapshots": [
+                    {"captured_at": "2026-11-20T10:00:00Z"},
+                    {"captured_at": "2026-11-20T10:00:00+00:00"},
+                ]
+            })
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
+            run("site_topology_history_timeline", {
+                "snapshots": [{"captured_at": "2026-11-20T10:00:00"}]
+            })
+
+    def test_site_topology_history_timeline_validates_a_single_snapshot(self):
+        result = run("site_topology_history_timeline", {
+            "snapshots": [{
+                "captured_at": "2026-11-20T10:00:00Z",
+                "access_points": [{"ap_id": "a"}],
+            }]
+        })["result"]
+        self.assertEqual(result["summary"]["snapshot_count"], 1)
+        self.assertEqual(result["summary"]["comparison_count"], 0)
+        self.assertEqual(result["summary"]["total_topology_changes"], 0)
 
 
 if __name__ == "__main__":
