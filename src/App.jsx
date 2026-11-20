@@ -105,16 +105,6 @@ const DEVICES = [
   { name:"Unknown Device",    mac:"DE:AD:BE:EF:CA:FE", ip:"192.168.1.99",  vendor:"???",          type:"Unknown",  rssi:-81, online:false, bw:0,    gw:false },
 ];
 
-const ALERTS_DATA = [
-  { type:"danger",  msg:"Evil Twin detected — ManitNet-AX3600 clone at DE:AD:BE:EF:00:01", time:"2m ago" },
-  { type:"warning", msg:"High packet loss on wlan0: 8.3% (threshold 5%)",                  time:"5m ago" },
-  { type:"success", msg:"New device joined: Galaxy Watch 6 (B4:EF:1C:44:55:66)",           time:"12m ago"},
-  { type:"info",    msg:"Internet restored after 43s outage",                               time:"28m ago"},
-  { type:"warning", msg:"Channel 6 congestion: 78% utilisation",                           time:"35m ago"},
-  { type:"info",    msg:"DNS benchmark complete — AdGuard fastest (2ms avg)",              time:"1h ago" },
-  { type:"success", msg:"Speed test complete — 924 Mbps DL / 421 Mbps UL",               time:"2h ago" },
-];
-
 const sin = (i, o = 0) => Math.sin(i * 0.4 + o) * 0.5 + 0.5;
 const rand = () => (Math.random() - 0.5);
 const genRSSI  = () => Array.from({length:40},(_,i)=>({ t:i, rssi:-(42+sin(i)*10+rand()*4), snr:38+sin(i,1)*10+rand()*3 }));
@@ -235,7 +225,7 @@ function Toast({ toasts, dismiss }) {
   );
 }
 
-function DashboardPanel({ rssiData, speedData, networks: netsProp, devices: devsProp, diag }) {
+function DashboardPanel({ rssiData, speedData, networks: netsProp, devices: devsProp, diag, alertsProp = [], isLive = false }) {
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
@@ -267,9 +257,9 @@ function DashboardPanel({ rssiData, speedData, networks: netsProp, devices: devs
           </ResponsiveContainer>
         </div>
         <div className="hover-card anim-fade-d3" style={s.card}>
-          <SHdr title="Active Alerts" right={<Tag text="7 TOTAL" col={C.yellow}/>}/>
+          <SHdr title="Observed Alerts" right={<Tag text={`${alertsProp.length} ACTIVE`} col={C.yellow}/>}/>
           <div style={{...s.col,gap:7}}>
-            {ALERTS_DATA.slice(0,4).map((a,i)=>{
+            {alertsProp.slice(0,4).map((a,i)=>{
               const col={danger:C.red,warning:C.yellow,success:C.green,info:C.cyan}[a.type];
               const I={danger:XCircle,warning:AlertTriangle,success:CheckCircle,info:Info}[a.type];
               return (
@@ -626,18 +616,33 @@ function DevicesPanel({ devices: devsProp }) {
   );
 }
 
-function AlertsPanel() {
+function buildObservedAlerts(networks, diagnostics) {
+  const alerts = [];
+  for (const network of Array.isArray(networks) ? networks : []) {
+    const label = network.ssid || network.bssid || "Unnamed access point";
+    const security = String(network.sec ?? network.security ?? "").toLowerCase();
+    if (network.rogue === true) alerts.push({ type: "warning", msg: `Scanner flagged ${label} as a candidate anomaly; verify its BSSID manually.`, time: "Current scan" });
+    if (security === "open") alerts.push({ type: "warning", msg: `Open network observed: ${label}. Confirm that this is expected before connecting.`, time: "Current scan" });
+    if (network.rssi != null && Number.isFinite(Number(network.rssi)) && Number(network.rssi) <= -80) alerts.push({ type: "info", msg: `Weak measured signal for ${label}: ${Number(network.rssi)} dBm.`, time: "Current scan" });
+  }
+  const loss = Number(diagnostics?.packet_loss_pct);
+  const latency = Number(diagnostics?.latency_ms);
+  if (diagnostics && Number.isFinite(loss) && loss >= 5) alerts.push({ type: "warning", msg: `Measured packet loss is ${loss}%.`, time: "Latest diagnostic" });
+  if (diagnostics && Number.isFinite(latency) && latency >= 100) alerts.push({ type: "warning", msg: `Measured latency is ${latency} ms.`, time: "Latest diagnostic" });
+  return alerts.slice(0, 50);
+}
+function AlertsPanel({ alerts = [] }) {
   const [filter,setFilter]=useState("all");
   const COLS={danger:C.red,warning:C.yellow,success:C.green,info:C.cyan};
   const ICONS={danger:XCircle,warning:AlertTriangle,success:CheckCircle,info:Info};
-  const filtered=filter==="all"?ALERTS_DATA:ALERTS_DATA.filter(a=>a.type===filter);
+  const filtered=filter==="all"?alerts:alerts.filter(a=>a.type===filter);
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label="Critical"  value="1" sub="Evil Twin active"   col={C.red}    Icon={XCircle}       delay={1}/>
-        <Stat label="Warnings"  value="2" sub="Packet loss · Ch 6" col={C.yellow} Icon={AlertTriangle} delay={2}/>
-        <Stat label="Info"      value="2" sub="New device · DNS"   col={C.cyan}   Icon={Info}          delay={3}/>
-        <Stat label="Resolved"  value="2" sub="Last 2 hours"       col={C.green}  Icon={CheckCircle}   delay={4}/>
+        <Stat label="Critical" value={alerts.filter(a=>a.type==="danger").length} sub="Verified critical conditions" col={C.red} Icon={XCircle} delay={1}/>
+        <Stat label="Warnings" value={alerts.filter(a=>a.type==="warning").length} sub="From current measurements" col={C.yellow} Icon={AlertTriangle} delay={2}/>
+        <Stat label="Info" value={alerts.filter(a=>a.type==="info").length} sub="Advisories" col={C.cyan} Icon={Info} delay={3}/>
+        <Stat label="Resolved" value="—" sub="No alert history stored" col={C.green} Icon={CheckCircle} delay={4}/>
       </div>
       <div className="anim-fade-d2" style={s.card}>
         <div style={{...s.bet,marginBottom:12}}>
@@ -655,6 +660,7 @@ function AlertsPanel() {
           </div>
         </div>
         <div style={{...s.col,gap:8}}>
+          {filtered.length===0&&<div style={{padding:"16px 10px",color:C.muted,fontSize:12}}>No alert conditions were detected in the available measurements. This is not a guarantee that the network is secure.</div>}
           {filtered.map((a,i)=>{
             const c=COLS[a.type]; const I=ICONS[a.type];
             return (
@@ -903,6 +909,7 @@ export default function App() {
 
   const networks=liveNets||NETWORKS;
   const devices=liveDevs||DEVICES;
+  const observedAlerts=liveMode?buildObservedAlerts(networks,liveDiag):[];
 
   const addToast=(msg,type="info")=>{
     const id=Date.now();
@@ -934,17 +941,17 @@ export default function App() {
 
   const switchTab=id=>{
     setTab(id);
-    if(id==="alerts") addToast("1 critical alert requires attention","danger");
+
   };
 
   const panels={
     featureTools: <FeatureWorkbench/>,
-    dashboard:   <DashboardPanel rssiData={rssiData} speedData={speedData} networks={networks} devices={devices} diag={liveDiag}/>,
+    dashboard:   <DashboardPanel rssiData={rssiData} speedData={speedData} networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
     speed:       <SpeedPanel speedData={speedData}/>,
     devices:     <DevicesPanel devices={devices}/>,
-    alerts:      <AlertsPanel/>,
+    alerts:      <AlertsPanel alerts={observedAlerts}/>,
     system:      <SystemPanel sysInfo={liveSystem}/>,
     ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem} isLive={liveMode}/>,
     phy:         <FeatureGrid title="PHY Information" badge="v1.0.5" col={C.cyan}
