@@ -1,0 +1,9 @@
+{
+  "agent_id": "openwrt-home",
+  "server_url": "https://wifi-analyzer.example:199",
+  "token": "wpa_REPLACE_WITH_THE_ONE_TIME_ENROLMENT_TOKEN",
+  "state_dir": "/var/lib/wifi-analyzer-agent",
+  "interval_seconds": 300,
+  "request_timeout_seconds": 10,
+  "allow_insecure_http": false
+}

@@ -96,7 +96,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 157 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 168 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
@@ -116,13 +116,14 @@ The local HTTP service exposes:
 | `GET /api/agents/{agent_id}/negotiations` | Admin-only negotiation history for one agent, in enrolment chronology within the retained window |
 | `POST /api/agents/{agent_id}/credentials/rotate` | Admin-only token rotation; the previous token is invalidated immediately |
 | `POST /api/agents/{agent_id}/credentials/revoke` | Admin-only credential revocation |
-| `POST /api/agents/snapshot` | Store a normalised OpenWrt snapshot from a previously registered agent |
 | `GET /api/agents/snapshots` | List latest snapshot metadata for registered agents |
 | `GET /api/agents/snapshots/{agent_id}` | Read one agent’s latest credential-free normalised snapshot |
 | `GET /api/agents/snapshots/{agent_id}/diff` | Compare the two most recent retained snapshots and list board/network/wireless/client/route changes |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
 After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token.
+
+For router-side, read-only telemetry collection, see the [OpenWrt agent installation and service guide](agent/README.md). The agent uses an enrolled scoped token, TLS verification, a private on-disk retry spool and the idempotent snapshot-delivery endpoint.
 
 For a Vite development server accessed from another device, add its exact origin to `WIFI_ANALYZER_CORS_ORIGINS` (comma-separated). Keep the default backend bind address on loopback unless LAN access is intentionally configured.
 

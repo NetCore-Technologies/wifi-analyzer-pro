@@ -22,6 +22,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add per-agent read-only bearer credentials with hashed-at-rest secrets, bounded expiry, one-time enrollment/rotation responses, immediate revocation, capability-scoped heartbeat/snapshot writes and admin-only credential metadata.
 - Add UUID-keyed OpenWrt snapshot delivery with payload-hash matching, replay-safe acknowledgements, conflicting-retry rejection and bounded delivery-ledger retention.
 - Add append-only, bounded router-agent negotiation history persisted transactionally with enrolment, including adapter/schema versions and sanitised advertised/requested/negotiated/rejected capability scopes.
+- Ship a standard-library OpenWrt read-only agent with fixed ubus/ip/iw command allowlists, no shell or configuration writes, HTTPS verification, procd service packaging and a mode-0600 single-delivery outbox for restart-safe retries.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
 - Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.
