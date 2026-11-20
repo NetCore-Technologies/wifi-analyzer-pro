@@ -415,7 +415,7 @@ jobs:
           pathlib.Path('SHA256SUMS-windows-x64.txt').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in files))
           PY
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-${{ matrix.target }}
           path: wifi_analyzer_backend/release-out/*
