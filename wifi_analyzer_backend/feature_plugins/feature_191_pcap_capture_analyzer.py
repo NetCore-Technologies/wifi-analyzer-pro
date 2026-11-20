@@ -234,6 +234,96 @@ def _wireless(packet: bytes, state: dict) -> None:
         state["malformed"] += 1
 
 
+RADIOTAP_FIELDS = {
+    0: (8, 8),   # TSFT
+    1: (1, 1),   # Flags
+    2: (1, 1),   # Legacy data rate
+    3: (2, 4),   # Channel frequency and flags
+    4: (2, 2),   # FHSS
+    5: (1, 1),   # dBm antenna signal
+    6: (1, 1),   # dBm antenna noise
+    7: (2, 2),   # RX quality
+    8: (2, 2),   # TX attenuation
+    9: (2, 2),   # dB TX attenuation
+    10: (1, 1),  # dBm TX power
+    11: (1, 1),  # Antenna index
+    12: (1, 1),  # dB antenna signal
+    13: (1, 1),  # dB antenna noise
+    14: (2, 2),  # RX flags
+    15: (2, 2),  # TX flags
+    16: (1, 1),  # RTS retries
+    17: (1, 1),  # Data retries
+    18: (4, 8),  # XChannel
+    19: (1, 3),  # MCS
+    20: (4, 8),  # AMPDU status
+    21: (2, 12), # VHT
+}
+
+
+def _radiotap(packet: bytes, state: dict) -> None:
+    if len(packet) < 8 or packet[0] != 0:
+        state["malformed"] += 1
+        return
+    header_length = _integer(packet, 2, 2, "little")
+    if header_length < 8 or header_length > len(packet):
+        state["malformed"] += 1
+        return
+
+    present_words = []
+    bitmap_cursor = 4
+    for _ in range(8):
+        if bitmap_cursor + 4 > header_length:
+            state["malformed"] += 1
+            return
+        word = _integer(packet, bitmap_cursor, 4, "little")
+        present_words.append(word)
+        bitmap_cursor += 4
+        if not word & 0x80000000:
+            break
+    else:
+        state["malformed"] += 1
+        return
+
+    field_cursor = bitmap_cursor
+    for word_index, word in enumerate(present_words):
+        for bit in range(31):
+            if not word & (1 << bit):
+                continue
+            field_index = word_index * 32 + bit
+            field_layout = RADIOTAP_FIELDS.get(field_index)
+            if field_layout is None:
+                # Unknown field sizes make later offsets ambiguous. Keep the
+                # already-decoded common PHY evidence and stop safely.
+                state["radiotap_unsupported_fields"] += 1
+                break
+            alignment, size = field_layout
+            field_cursor = (field_cursor + alignment - 1) & ~(alignment - 1)
+            if field_cursor + size > header_length:
+                state["malformed"] += 1
+                return
+            value = packet[field_cursor:field_cursor + size]
+            if field_index == 3:
+                frequency = _integer(value, 0, 2, "little")
+                if 2000 <= frequency <= 8000:
+                    state["radio_frequency_mhz"][str(frequency)] += 1
+            elif field_index == 5:
+                signal = int.from_bytes(value, "little", signed=True)
+                if -127 <= signal <= 0:
+                    state["radio_signal_sum"] += signal
+                    state["radio_signal_samples"] += 1
+            elif field_index == 6:
+                noise = int.from_bytes(value, "little", signed=True)
+                if -127 <= noise <= 0:
+                    state["radio_noise_sum"] += noise
+                    state["radio_noise_samples"] += 1
+            field_cursor += size
+        else:
+            continue
+        break
+
+    _wireless(packet[header_length:], state)
+
+
 def _parse_packet(packet: bytes, link_type: int, state: dict) -> None:
     if link_type == 1:
         _ethernet(packet, state)
@@ -244,14 +334,7 @@ def _parse_packet(packet: bytes, link_type: int, state: dict) -> None:
     elif link_type == 276:
         _linux_cooked(packet, state, version=2)
     elif link_type == 127:
-        if len(packet) < 8 or packet[0] != 0:
-            state["malformed"] += 1
-            return
-        header_length = _integer(packet, 2, 2, "little")
-        if header_length < 8 or header_length > len(packet):
-            state["malformed"] += 1
-            return
-        _wireless(packet[header_length:], state)
+        _radiotap(packet, state)
 
 
 def _sorted_counts(counter: Counter, *, numeric=False) -> dict:
@@ -308,6 +391,12 @@ def run(payload: dict) -> dict:
         "wireless_types": Counter(),
         "wireless_subtypes": Counter(),
         "destination_ports": Counter(),
+        "radio_frequency_mhz": Counter(),
+        "radio_signal_sum": 0,
+        "radio_signal_samples": 0,
+        "radio_noise_sum": 0,
+        "radio_noise_samples": 0,
+        "radiotap_unsupported_fields": 0,
     }
     cursor = 24
     packets_read = 0
@@ -385,6 +474,20 @@ def run(payload: dict) -> dict:
         "top_destination_ports": top_ports,
         "wireless_frame_type_counts": _sorted_counts(state["wireless_types"]),
         "wireless_subtype_counts": _sorted_counts(state["wireless_subtypes"]),
+        "radiotap_observations": {
+            "signal": {
+                "sample_count": state["radio_signal_samples"],
+                "average_dbm": round(state["radio_signal_sum"] / state["radio_signal_samples"], 1)
+                if state["radio_signal_samples"] else None,
+            },
+            "noise": {
+                "sample_count": state["radio_noise_samples"],
+                "average_dbm": round(state["radio_noise_sum"] / state["radio_noise_samples"], 1)
+                if state["radio_noise_samples"] else None,
+            },
+            "channel_frequency_mhz_counts": _sorted_counts(state["radio_frequency_mhz"], numeric=True),
+            "unsupported_field_count": state["radiotap_unsupported_fields"],
+        },
         "privacy": {
             "packet_payloads_returned": False,
             "source_and_destination_addresses_returned": False,
@@ -405,7 +508,7 @@ FEATURE = {
     "category": "Packet analysis",
     "description": (
         "Analyse bounded classic PCAP files for Ethernet, Linux cooked, IPv4/IPv6, TCP/UDP, DSCP and "
-        "802.11/radiotap frame statistics without returning packet payloads or endpoint addresses."
+        "802.11/radiotap frame and measured PHY statistics without returning packet payloads or endpoint addresses."
     ),
     "parameters": {
         "capture_base64": "standard-base64 classic PCAP file, decoded size up to 512 KiB",
