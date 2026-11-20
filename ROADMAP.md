@@ -44,7 +44,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
 - ✅ Team Access UI for creating users, changing assigned roles and disabling/enabling accounts.
-- ✅ Local append-only SQLite security audit ledger with SHA-256 event chaining, row update/delete triggers, bounded event filtering/pagination, chain verification and an owner/administrator audit viewer.
+- ✅ Local append-only SQLite security audit ledger with SHA-256 event chaining, row update/delete triggers, bounded event filtering/pagination, chain verification, an owner/administrator audit viewer and Ed25519-signed offline checkpoints with public-key fingerprint verification.
 - ✅ Authenticated REST feature catalogue and execution endpoints; API access fails closed before account setup.
 - ✅ Docker and standalone Linux packaging include the auth and feature modules.
 - ✅ Unit and HTTP integration tests cover the account gate, feature catalogue, tool execution, logout and rejected browser origins.
@@ -59,7 +59,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - 📋 Example plugin and developer guide.
 - 📋 Packet capture with explicit interface selection, bounded file size, capture filters and PCAP export.
 - 📋 Per-site and per-tenant authorization scopes across sites, agents, reports and feature inputs.
-- 📋 Enterprise identity: OIDC/SAML SSO, MFA/WebAuthn, SCIM provisioning, external immutable audit export/checkpoints and centralised retention.
+- 📋 Enterprise identity: OIDC/SAML SSO, MFA/WebAuthn, SCIM provisioning, external SIEM forwarding and centralised retention.
 - 📋 Multi-site dashboards for distributed local agents.
 - 📋 Authenticated WebSocket streaming and API rate limits for expensive diagnostics.
 - 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.

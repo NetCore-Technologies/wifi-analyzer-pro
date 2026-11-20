@@ -12,6 +12,7 @@ from http.client import HTTPConnection
 
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
+from wifi_analyzer_backend.audit_checkpoint import verify_signed_checkpoint
 from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
 from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
@@ -1526,6 +1527,23 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(verification["verification"]["valid"])
         self.assertEqual(verification["verification"]["event_count"], len(audit["events"]))
+
+        status, checkpoint_denied = self.request("GET", "/api/security/audit/checkpoint", token=viewer_token)
+        self.assertEqual(status, 403)
+        self.assertEqual(checkpoint_denied["required_permission"], "users.manage")
+
+        status, checkpoint_response = self.request("GET", "/api/security/audit/checkpoint", token=owner_token)
+        self.assertEqual(status, 200)
+        bundle = checkpoint_response["checkpoint"]
+        verified = verify_signed_checkpoint(
+            bundle,
+            expected_public_key_fingerprint=bundle["public_key_fingerprint"],
+        )
+        self.assertTrue(verified["valid"], verified)
+        self.assertEqual(bundle["checkpoint"]["event_count"], len(audit["events"]))
+        tampered = dict(bundle)
+        tampered["checkpoint"] = {**bundle["checkpoint"], "event_count": bundle["checkpoint"]["event_count"] + 1}
+        self.assertFalse(verify_signed_checkpoint(tampered)["valid"])
 
     def test_agent_negotiations_are_persisted_versioned_and_append_only(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password":"correct horse battery staple"})

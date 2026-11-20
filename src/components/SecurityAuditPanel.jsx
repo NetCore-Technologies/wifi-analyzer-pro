@@ -34,6 +34,8 @@ export default function SecurityAuditPanel() {
   const [nextBeforeId, setNextBeforeId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [verifying, setVerifying] = useState(false);
+  const [checkpointing, setCheckpointing] = useState(false);
+  const [checkpointFingerprint, setCheckpointFingerprint] = useState("");
   const [error, setError] = useState("");
   const initialLoadStarted = useRef(false);
 
@@ -59,6 +61,37 @@ export default function SecurityAuditPanel() {
       setLoading(false);
     }
   }, [action, outcome, nextBeforeId]);
+
+  const exportCheckpoint = async () => {
+    setCheckpointing(true);
+    setError("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/security/audit/checkpoint`, {
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await readResponse(response);
+      const checkpoint = data.checkpoint;
+      if (!checkpoint?.signature || !checkpoint?.public_key_fingerprint) {
+        throw new Error("The server returned an invalid checkpoint bundle.");
+      }
+      const blob = new Blob([JSON.stringify(checkpoint, null, 2)], {
+        type: "application/json",
+      });
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `wifi-analyzer-audit-checkpoint-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+      setCheckpointFingerprint(checkpoint.public_key_fingerprint);
+    } catch (exportError) {
+      setError(exportError.message || "Could not create a signed audit checkpoint.");
+    } finally {
+      setCheckpointing(false);
+    }
+  };
 
   const verify = async () => {
     setVerifying(true);
@@ -98,6 +131,7 @@ export default function SecurityAuditPanel() {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button type="button" style={styles.button} disabled={loading} onClick={() => loadEvents()}>Refresh</button>
             <button type="button" style={styles.button} disabled={verifying} onClick={verify}>{verifying ? "Verifying…" : "Verify hash chain"}</button>
+            <button type="button" style={styles.button} disabled={checkpointing} onClick={exportCheckpoint}>{checkpointing ? "Signing…" : "Export signed checkpoint"}</button>
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 9, marginTop: 16 }}>
@@ -117,6 +151,12 @@ export default function SecurityAuditPanel() {
         {verification ? (
           <div role="status" style={{ marginTop: 12, padding: 10, borderRadius: 8, border: `1px solid ${verification.valid ? "rgba(74,222,128,.35)" : "rgba(248,113,113,.35)"}`, background: verification.valid ? "rgba(74,222,128,.07)" : "rgba(248,113,113,.07)", color: verification.valid ? "#4ade80" : "#f87171", fontSize: 11 }}>
             {verification.valid ? "Hash chain verified" : "Hash-chain verification failed"} · {verification.verified_count}/{verification.event_count} records checked
+          </div>
+        ) : null}
+        {checkpointFingerprint ? (
+          <div role="status" style={{ marginTop: 10, padding: 10, borderRadius: 8, border: "1px solid #1e2d47", background: "#070b14", color: "#cbd5e1", fontSize: 10, overflowWrap: "anywhere" }}>
+            Checkpoint signing identity · Ed25519 · Pin this public-key fingerprint outside this host:
+            <div style={{ color: "#06d6f0", fontFamily: "monospace", marginTop: 5 }}>{checkpointFingerprint}</div>
           </div>
         ) : null}
       </section>
@@ -164,7 +204,7 @@ export default function SecurityAuditPanel() {
         </div> : null}
       </section>
       <p style={{ ...styles.muted, margin: 0, lineHeight: 1.6 }}>
-        The database rejects ordinary row updates and deletions and links each event to the previous digest. This detects local edits and gaps, but it is not a tamper-proof external archive: a host administrator can replace the database and rewrite the chain. Export signed checkpoints to an independently administered log platform for stronger retention.
+        The database links events with SHA-256 digests. Exported Ed25519 checkpoints let an independently administered system verify the recorded ledger head. Pin the public-key fingerprint off-host; local administrators can otherwise replace both the database and signing key.
       </p>
     </div>
   );

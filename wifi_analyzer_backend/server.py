@@ -18,6 +18,7 @@ import psutil
 if __package__:
     from .auth import AuthManager
     from .audit_store import SecurityAuditStore
+    from .audit_checkpoint import create_signed_checkpoint
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
@@ -36,6 +37,7 @@ if __package__:
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager
     from audit_store import SecurityAuditStore
+    from audit_checkpoint import create_signed_checkpoint
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
@@ -889,6 +891,16 @@ class Handler(BaseHTTPRequestHandler):
                                 "next_before_id": events[-1]["id"] if len(events) == limit else None})
             elif path == "/api/security/audit/verify":
                 self.send_json({"verification": AUDIT.verify_chain()})
+            elif path == "/api/security/audit/checkpoint":
+                try:
+                    checkpoint = create_signed_checkpoint(AUDIT)
+                except ValueError as error:
+                    self.send_json({"error": str(error)}, 409)
+                    return
+                except RuntimeError:
+                    self.send_json({"error": "Audit checkpoint signing is unavailable; inspect the local key file and permissions."}, 503)
+                    return
+                self.send_json({"checkpoint": checkpoint})
             elif path == "/api/security/audit/summary":
                 self.send_json({"summary": AUDIT.summary()})
             elif path == "/api/sites/history/report":
