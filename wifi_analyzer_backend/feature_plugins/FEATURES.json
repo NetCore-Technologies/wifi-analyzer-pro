@@ -848,5 +848,199 @@
       "capabilities": "object",
       "band": "string"
     }
+  },
+  {
+    "slug": "same_ssid_band_presence",
+    "name": "Same-SSID band presence",
+    "category": "Roaming",
+    "description": "Group visible SSIDs by advertised band and count their BSSID observations.",
+    "parameters": {
+      "networks": "network[]"
+    }
+  },
+  {
+    "slug": "band_steering_evidence",
+    "name": "Band-steering evidence",
+    "category": "Roaming",
+    "description": "Compare measured RSSI for the same SSID across bands without inferring AP steering decisions.",
+    "parameters": {
+      "networks": "network[]"
+    }
+  },
+  {
+    "slug": "roaming_candidate_ranking",
+    "name": "Roaming candidate ranking",
+    "category": "Roaming",
+    "description": "Rank same-SSID BSSIDs by measured signal improvement over the connected BSSID.",
+    "parameters": {
+      "networks": "network[]",
+      "current_bssid": "MAC",
+      "min_improvement_db": "number"
+    }
+  },
+  {
+    "slug": "association_roam_events",
+    "name": "Association roam events",
+    "category": "Roaming",
+    "description": "Diff client association snapshots and classify roam, network-change, connect and disconnect events.",
+    "parameters": {
+      "previous": "client[]",
+      "current": "client[]"
+    }
+  },
+  {
+    "slug": "roaming_timeline_summary",
+    "name": "Roaming timeline summary",
+    "category": "Roaming",
+    "description": "Summarise observed roaming and network-change events per client from association diffs.",
+    "parameters": {
+      "events": "event[]"
+    }
+  },
+  {
+    "slug": "sticky_client_candidates",
+    "name": "Sticky-client candidates",
+    "category": "Roaming",
+    "description": "Flag weak client associations when supplied AP-side observations show a stronger same-SSID alternative.",
+    "parameters": {
+      "clients": "client[]",
+      "weak_rssi_dbm": "number",
+      "min_improvement_db": "number"
+    }
+  },
+  {
+    "slug": "association_dwell_summary",
+    "name": "Association dwell summary",
+    "category": "Roaming",
+    "description": "Calculate per-client and per-BSSID association dwell durations from supplied timestamp intervals.",
+    "parameters": {
+      "sessions": "session[]"
+    }
+  },
+  {
+    "slug": "roam_latency_summary",
+    "name": "Roam latency summary",
+    "category": "Roaming",
+    "description": "Compare latency measurements before and after roaming, preserving sample counts and median values.",
+    "parameters": {
+      "samples": "sample[]"
+    }
+  },
+  {
+    "slug": "roaming_stability_score",
+    "name": "Roaming stability score",
+    "category": "Roaming",
+    "description": "Calculate a transparent heuristic from observed roam events per client and a chosen time window.",
+    "parameters": {
+      "events": "event[]",
+      "window_hours": "number"
+    }
+  },
+  {
+    "slug": "band_occupancy_delta",
+    "name": "Band occupancy delta",
+    "category": "RF planning",
+    "description": "Compare per-band BSS observation counts between two scans.",
+    "parameters": {
+      "previous": "network[]",
+      "current": "network[]"
+    }
+  },
+  {
+    "slug": "channel_width_frequency_range",
+    "name": "Channel width frequency range",
+    "category": "RF planning",
+    "description": "Calculate the nominal occupied frequency span for a channel centre and channel width.",
+    "parameters": {
+      "center_frequency_mhz": "number",
+      "width_mhz": "number"
+    }
+  },
+  {
+    "slug": "frequency_overlap_score",
+    "name": "Frequency overlap score",
+    "category": "RF planning",
+    "description": "Compute frequency-span overlap between two channel observations with measured widths.",
+    "parameters": {
+      "a": "channel block",
+      "b": "channel block"
+    }
+  },
+  {
+    "slug": "channel_separation_rank",
+    "name": "Channel separation ranking",
+    "category": "RF planning",
+    "description": "Rank candidate channel centres by minimum non-overlap separation from observed channel spans.",
+    "parameters": {
+      "candidates": "channel block[]",
+      "observed": "channel block[]"
+    }
+  },
+  {
+    "slug": "channel_overlap_pairs",
+    "name": "Channel overlap pairs",
+    "category": "RF planning",
+    "description": "Find overlapping nominal channel spans in a set of access-point observations.",
+    "parameters": {
+      "channels": "channel block[]"
+    }
+  },
+  {
+    "slug": "dfs_frequency_intersection",
+    "name": "DFS frequency intersection",
+    "category": "RF planning",
+    "description": "Check whether a nominal 5 GHz channel span intersects the commonly used DFS frequency range.",
+    "parameters": {
+      "center_frequency_mhz": "number",
+      "width_mhz": "number"
+    }
+  },
+  {
+    "slug": "six_ghz_psc_plan",
+    "name": "6 GHz PSC availability plan",
+    "category": "RF planning",
+    "description": "List Preferred Scanning Channels not present in a supplied 6 GHz scan.",
+    "parameters": {
+      "observed_channels": "integer[]",
+      "candidate_channels": "integer[]"
+    }
+  },
+  {
+    "slug": "wifi7_eht_summary",
+    "name": "Wi-Fi 7 EHT capability summary",
+    "category": "PHY analysis",
+    "description": "Summarise explicitly supplied EHT and Wi-Fi 7 capability flags without inferring unsupported features.",
+    "parameters": {
+      "capabilities": "object"
+    }
+  },
+  {
+    "slug": "multi_link_operation_summary",
+    "name": "Multi-Link Operation summary",
+    "category": "PHY analysis",
+    "description": "Summarise supplied Wi-Fi 7 MLO link records by active state, band and signal.",
+    "parameters": {
+      "links": "link[]"
+    }
+  },
+  {
+    "slug": "pmf_security_audit",
+    "name": "Protected Management Frames audit",
+    "category": "Security",
+    "description": "Audit explicit PMF/802.11w states from scan or controller observations.",
+    "parameters": {
+      "networks": "network[]"
+    }
+  },
+  {
+    "slug": "regulatory_channel_allowlist_check",
+    "name": "Regulatory channel allowlist check",
+    "category": "RF planning",
+    "description": "Compare observed channels against an OS/controller-supplied regional allowlist.",
+    "parameters": {
+      "band": "string",
+      "allowed_channels": "integer[]",
+      "networks": "network[]"
+    }
   }
 ]
