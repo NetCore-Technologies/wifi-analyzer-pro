@@ -3,6 +3,7 @@
 All notable changes to WiFi Analyzer Pro are documented here.
 
 ## [1.0.7] — Unreleased
+- Add the Signal Pulse application mark and product-site identity, with browser-persistent refresh interval, compact navigation, demo-data visibility and reduced-motion controls.
 - Expose authenticated worker lease renewal and database-verified scheduled-report delivery packaging; the server now loads the current unexpired SQLite lease rather than trusting a caller-supplied claimed-job object.
 
 ### Feature library and local account
