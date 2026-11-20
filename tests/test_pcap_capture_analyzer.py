@@ -168,7 +168,7 @@ class PcapCaptureAnalyzerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "block extends beyond its declared section length"):
             malformed = pcapng_section(section_length=len(interface) - 4) + interface
             run({"capture_base64": base64.b64encode(malformed).decode("ascii")})
-        with self.assertRaisesRegex(ValueError, "section length does not match"):
+        with self.assertRaisesRegex(ValueError, "extends beyond the capture file"):
             truncated_section = pcapng_section(section_length=len(interface) + 4) + interface
             run({"capture_base64": base64.b64encode(truncated_section).decode("ascii")})
         with self.assertRaisesRegex(ValueError, "non-negative multiple of four"):
