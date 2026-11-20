@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, Clock3, Download, FileSearch,
   Radio, ShieldCheck, Upload, X,
@@ -129,6 +129,47 @@ export default function PcapAnalyzer() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [analysis, setAnalysis] = useState(null);
+  const [captureInventory, setCaptureInventory] = useState({ available: false, interfaces: [], reason: "Checking local capture support…" });
+  const [selectedInterface, setSelectedInterface] = useState("");
+  const [filterProfile, setFilterProfile] = useState("all");
+  const [durationSeconds, setDurationSeconds] = useState(15);
+  const [packetLimit, setPacketLimit] = useState(250);
+  const [captureConsent, setCaptureConsent] = useState(false);
+  const [startingCapture, setStartingCapture] = useState(false);
+  const [liveCapture, setLiveCapture] = useState(null);
+
+  useEffect(() => {
+    let disposed = false;
+    apiFetch(`${API_BASE}/api/capture/interfaces`, { signal: AbortSignal.timeout(8000) })
+      .then(response => response.json().then(data => ({ response, data })))
+      .then(({ response, data }) => {
+        if (disposed) return;
+        if (!response.ok) throw new Error(data.error || `Capture inventory failed (HTTP ${response.status})`);
+        setCaptureInventory(data);
+        if (data.interfaces?.length) setSelectedInterface(data.interfaces[0].name);
+      })
+      .catch(caught => {
+        if (!disposed) setCaptureInventory({ available: false, interfaces: [], reason: caught.message || "Could not inspect packet-capture support." });
+      });
+    return () => { disposed = true; };
+  }, []);
+
+  useEffect(() => {
+    if (liveCapture?.state !== "running") return undefined;
+    let disposed = false;
+    const refresh = async () => {
+      try {
+        const response = await apiFetch(`${API_BASE}/api/capture/status`, { signal: AbortSignal.timeout(5000) });
+        const data = await response.json().catch(() => ({}));
+        if (!disposed && response.ok && data.capture) setLiveCapture(data.capture);
+      } catch {
+        // Keep the last known capture state; the operator can still stop it manually.
+      }
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 1200);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [liveCapture?.capture_id, liveCapture?.state]);
 
   const chooseFile = event => {
     const selected = event.target.files?.[0] || null;
@@ -150,9 +191,9 @@ export default function PcapAnalyzer() {
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const analyze = async () => {
-    if (!file || busy) return;
-    if (file.size === 0) {
+  const analyze = async (targetFile = file) => {
+    if (!targetFile || busy) return;
+    if (targetFile.size === 0) {
       setError("The selected capture file is empty.");
       return;
     }
@@ -160,7 +201,7 @@ export default function PcapAnalyzer() {
     setError("");
     setAnalysis(null);
     try {
-      const data = new Uint8Array(await file.arrayBuffer());
+      const data = new Uint8Array(await targetFile.arrayBuffer());
       let binary = "";
       const chunkSize = 0x8000;
       for (let offset = 0; offset < data.length; offset += chunkSize) {
@@ -185,6 +226,76 @@ export default function PcapAnalyzer() {
       setError(caught?.message || "The capture could not be analysed.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const startLiveCapture = async () => {
+    if (!captureConsent || !selectedInterface || startingCapture) return;
+    setStartingCapture(true);
+    setError("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/capture/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interface: selectedInterface,
+          duration_seconds: durationSeconds,
+          packet_limit: packetLimit,
+          filter_profile: filterProfile,
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Capture start failed (HTTP ${response.status})`);
+      setLiveCapture(data.capture || null);
+    } catch (caught) {
+      setError(caught.message || "Could not start the local packet capture.");
+    } finally {
+      setStartingCapture(false);
+    }
+  };
+
+  const stopLiveCapture = async () => {
+    if (!liveCapture?.capture_id) return;
+    setError("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/capture/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ capture_id: liveCapture.capture_id }),
+        signal: AbortSignal.timeout(8000),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Capture stop failed (HTTP ${response.status})`);
+      setLiveCapture(data.capture || null);
+    } catch (caught) {
+      setError(caught.message || "Could not stop the local packet capture.");
+    }
+  };
+
+  const loadLiveCaptureForAnalysis = async () => {
+    if (!liveCapture?.capture_id || liveCapture.state !== "completed" || busy) return;
+    setError("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/capture/${liveCapture.capture_id}/download`, {
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `PCAP download failed (HTTP ${response.status})`);
+      }
+      const blob = await response.blob();
+      if (blob.size === 0 || blob.size > MAX_CAPTURE_BYTES) {
+        throw new Error("The captured file is empty or exceeds the 512 KiB analysis limit.");
+      }
+      const capturedFile = new File([blob], `live-${liveCapture.interface}-${liveCapture.capture_id.slice(0, 8)}.pcap`, {
+        type: "application/vnd.tcpdump.pcap",
+      });
+      setFile(capturedFile);
+      setAnalysis(null);
+      await analyze(capturedFile);
+    } catch (caught) {
+      setError(caught.message || "Could not load the live capture into the analyzer.");
     }
   };
 
@@ -216,6 +327,103 @@ export default function PcapAnalyzer() {
             border: "1px solid rgba(80,227,210,.3)", borderRadius: 99,
             padding: "5px 9px", color: "#50e3d2", fontSize: 10, fontWeight: 700,
           }}>LOCAL ANALYSIS</span>
+        </div>
+
+        <div style={{
+          marginTop: 16, padding: 15, border: "1px solid #2a596b", borderRadius: 10,
+          background: "rgba(4,14,24,.45)", display: "grid", gap: 12,
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <div>
+              <div style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 750 }}>Live interface capture</div>
+              <div style={{ ...MUTED, marginTop: 4 }}>Explicit, local capture via tcpdump / libpcap · no monitor-mode changes</div>
+            </div>
+            <span style={{ color: captureInventory.available ? "#4ade80" : "#fbbf24", fontSize: 10, fontWeight: 750 }}>
+              {captureInventory.available ? "CAPTURE SUPPORT AVAILABLE" : "CAPTURE SUPPORT UNAVAILABLE"}
+            </span>
+          </div>
+          {captureInventory.available ? (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 9 }}>
+                <label style={{ ...MUTED, display: "grid", gap: 5 }}>
+                  Interface
+                  <select aria-label="Capture network interface" value={selectedInterface} onChange={event => setSelectedInterface(event.target.value)}
+                    disabled={startingCapture || liveCapture?.state === "running"}
+                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    {captureInventory.interfaces.map(item => <option key={item.name} value={item.name}>{item.description}</option>)}
+                  </select>
+                </label>
+                <label style={{ ...MUTED, display: "grid", gap: 5 }}>
+                  Capture filter
+                  <select aria-label="Capture filter profile" value={filterProfile} onChange={event => setFilterProfile(event.target.value)}
+                    disabled={startingCapture || liveCapture?.state === "running"}
+                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    <option value="all">All traffic</option>
+                    <option value="dns">DNS</option>
+                    <option value="dhcp">DHCP</option>
+                    <option value="arp">ARP</option>
+                    <option value="tcp">TCP</option>
+                    <option value="udp">UDP</option>
+                    <option value="icmp">ICMP / ICMPv6</option>
+                  </select>
+                </label>
+                <label style={{ ...MUTED, display: "grid", gap: 5 }}>
+                  Duration
+                  <select aria-label="Capture duration" value={durationSeconds} onChange={event => setDurationSeconds(Number(event.target.value))}
+                    disabled={startingCapture || liveCapture?.state === "running"}
+                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    <option value={5}>5 seconds</option>
+                    <option value={15}>15 seconds</option>
+                    <option value={30}>30 seconds</option>
+                    <option value={60}>60 seconds (max)</option>
+                  </select>
+                </label>
+                <label style={{ ...MUTED, display: "grid", gap: 5 }}>
+                  Packet limit
+                  <select aria-label="Capture packet limit" value={packetLimit} onChange={event => setPacketLimit(Number(event.target.value))}
+                    disabled={startingCapture || liveCapture?.state === "running"}
+                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    <option value={100}>100 packets</option>
+                    <option value={250}>250 packets</option>
+                    <option value={500}>500 packets</option>
+                    <option value={1000}>1,000 packets (max)</option>
+                  </select>
+                </label>
+              </div>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "#fbbf24", fontSize: 10, lineHeight: 1.55 }}>
+                <input type="checkbox" checked={captureConsent} onChange={event => setCaptureConsent(event.target.checked)} disabled={liveCapture?.state === "running"} style={{ marginTop: 2 }}/>
+                I am authorised to capture traffic on this interface and network. Captures can contain sensitive data.
+              </label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {liveCapture?.state === "running" ? (
+                  <button type="button" onClick={stopLiveCapture} style={{ border: "1px solid #f59e0b", borderRadius: 8, padding: "8px 11px", background: "rgba(245,158,11,.12)", color: "#fbbf24", fontSize: 11, fontWeight: 750, cursor: "pointer" }}>
+                    Stop capture
+                  </button>
+                ) : (
+                  <button type="button" onClick={startLiveCapture} disabled={!captureConsent || !selectedInterface || startingCapture}
+                    style={{ border: "1px solid #50e3d2", borderRadius: 8, padding: "8px 11px", background: captureConsent && selectedInterface && !startingCapture ? "#50e3d2" : "#24404a", color: captureConsent && selectedInterface && !startingCapture ? "#07111d" : "#94a3b8", fontSize: 11, fontWeight: 800, cursor: captureConsent && !startingCapture ? "pointer" : "not-allowed" }}>
+                    {startingCapture ? "Starting…" : liveCapture?.state === "completed" ? "Start another capture" : "Start live capture"}
+                  </button>
+                )}
+                {liveCapture?.state === "completed" ? (
+                  <button type="button" onClick={loadLiveCaptureForAnalysis} disabled={busy}
+                    style={{ border: "1px solid #2a3f65", borderRadius: 8, padding: "8px 11px", background: "#111827", color: "#cbd5e1", fontSize: 11, fontWeight: 750, cursor: "pointer" }}>
+                    {busy ? "Analysing…" : "Load & analyse PCAP"}
+                  </button>
+                ) : null}
+                {liveCapture ? <span style={{ ...MUTED, color: liveCapture.state === "failed" ? "#f87171" : liveCapture.state === "running" ? "#50e3d2" : "#94a3b8" }}>
+                  {liveCapture.state.toUpperCase()} · {liveCapture.interface} · {bytes(liveCapture.captured_bytes || 0)}
+                </span> : null}
+              </div>
+              {liveCapture?.error ? <div role="alert" style={{ color: "#f87171", fontSize: 10 }}>{liveCapture.error}</div> : null}
+              <div style={MUTED}>Hard limits: 60 seconds · 1,000 packets · 256-byte snap length · 512 KiB file. Only one capture runs at a time.</div>
+            </>
+          ) : (
+            <div style={{ ...MUTED, lineHeight: 1.6 }}>
+              {captureInventory.reason || "No supported packet-capture interface is available."}
+              {" "}Install tcpdump/libpcap and grant this service account capture permissions, then reload this page. WiFi Analyzer Pro will not elevate privileges or change monitor mode automatically.
+            </div>
+          )}
         </div>
 
         <div style={{

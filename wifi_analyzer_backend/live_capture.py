@@ -252,8 +252,9 @@ class LiveCaptureManager:
                 daemon=True,
             )
             capture["thread"] = thread
+            public_capture = self._public(capture)
             thread.start()
-            return self._public(capture)
+            return public_capture
 
     def _terminate(self, capture: dict[str, Any], reason: str) -> None:
         capture["stop_reason"] = reason

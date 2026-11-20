@@ -76,7 +76,8 @@ BPF expressions are not accepted.
 The operator must explicitly confirm authorization before starting. A capture
 is limited to 60 seconds, 1,000 packets, 256-byte snap length and 512 KiB on
 disk. Only one capture may run at a time. Capture files are stored in a
-private local directory and expire after 24 hours. Packet contents are only
+private local directory and stale files are removed when a new capture starts
+once the 24-hour retention period has elapsed. Packet contents are only
 downloaded when the operator explicitly requests the PCAP; offline analysis
 continues to redact endpoint addresses and payloads from its results.
 
