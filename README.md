@@ -181,7 +181,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports should include the OS, Pytho
 MIT — see [LICENSE](LICENSE).
 
 
-Scheduled report execution is coordinated through the authenticated `/api/reports/jobs` endpoints. Jobs are queued with an idempotency key, claimed by workers using expiring leases, and transitioned to completion, retry or dead-letter state; delivery remains the responsibility of an external worker that follows the signed webhook and egress policy contracts.
+Scheduled report execution is coordinated through the authenticated `/api/reports/jobs` endpoints. Jobs are queued with an idempotency key, claimed by workers using expiring leases, and transitioned to completion, retry or dead-letter state; delivery remains the responsibility of an external worker that follows the signed webhook and egress policy contracts. Workers can renew a lease before expiry. The delivery-package endpoint reads the claimed job and lease from the local SQLite store, rejects mismatched or expired leases, and only then prepares F189 output using supplied fresh DNS/TLS evidence. This endpoint does not transmit the webhook; an external worker remains responsible for network delivery and should complete or fail the job using the same lease ID.
 
 
 Workers can prepare a report webhook package through `router_scheduled_report_delivery_package` only while holding the active report-job lease and supplying fresh DNS/TLS evidence that passes the egress policy. The feature creates a signed request envelope; outbound transmission remains an explicit worker responsibility.
