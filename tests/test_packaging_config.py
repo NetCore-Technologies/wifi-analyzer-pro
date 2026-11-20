@@ -22,6 +22,9 @@ class FrozenPackagingConfigTests(unittest.TestCase):
 
         self.assertIn("SMOKE_PORT=$(", arm64_script)
         self.assertIn("WIFI_ANALYZER_PORT=", arm64_script)
+        self.assertIn("WIFI_ANALYZER_AUTH_FILE=", arm64_script)
+        self.assertIn("WIFI_ANALYZER_HISTORY_DB=", arm64_script)
+        self.assertIn('rm -rf "$SMOKE_DIR"', arm64_script)
         self.assertIn("smoke_test_frozen_features.py", arm64_script)
         self.assertIn("WIFI_ANALYZER_SMOKE_URL", smoke_helper)
 
