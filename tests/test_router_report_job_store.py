@@ -155,6 +155,8 @@ class RouterReportJobStoreTests(unittest.TestCase):
         expired_at = NOW + timedelta(minutes=1, seconds=16)
         with self.assertRaises(ReportJobNotFoundError):
             self.store.complete(first["id"], first["lease_id"], {}, now=expired_at)
+        with self.assertRaises(ReportJobNotFoundError):
+            self.store.renew_lease(first["id"], first["lease_id"], now=expired_at)
         # Attempt 1 was consumed by the first claim. Expiry schedules a 30-second backoff.
         too_early = self.store.claim_due("worker-b", now=expired_at, lease_seconds=30)
         self.assertEqual(too_early["jobs"], [])
