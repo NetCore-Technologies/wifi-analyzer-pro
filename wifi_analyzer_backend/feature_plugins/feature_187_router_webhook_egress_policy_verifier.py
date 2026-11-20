@@ -144,12 +144,12 @@ def run(payload: dict) -> dict:
     elif age > max_dns_age:
         reasons.append("dns_resolution_too_old")
     for address in resolved:
-        effective = address.ipv4_mapped if isinstance(address, ipaddress.IPv6Address) else address
+        effective = (address.ipv4_mapped or address) if isinstance(address, ipaddress.IPv6Address) else address
         if not effective.is_global or effective.is_multicast or effective.is_reserved:
             reasons.append(f"non_public_dns_address:{address}")
     if peer not in resolved:
         reasons.append("connected_peer_not_in_resolved_address_set")
-    effective_peer = peer.ipv4_mapped if isinstance(peer, ipaddress.IPv6Address) else peer
+    effective_peer = (peer.ipv4_mapped or peer) if isinstance(peer, ipaddress.IPv6Address) else peer
     if not effective_peer.is_global or effective_peer.is_multicast or effective_peer.is_reserved:
         reasons.append("connected_peer_is_not_public")
     if connected_port != 443:

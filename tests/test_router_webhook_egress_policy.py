@@ -96,7 +96,6 @@ class RouterWebhookEgressPolicyVerifierTests(unittest.TestCase):
     def test_uses_exact_dns_host_allowlist_and_normalizes_idna(self):
         payload = valid_payload()
         payload["endpoint"] = "https://hooks.example.net.attacker.test/events"
-        result = run(payload)
         with self.assertRaisesRegex(ValueError, "exact host allowlist"):
             payload = valid_payload()
             payload["endpoint"] = "https://hooks.example.net.attacker.test/events"
