@@ -40,11 +40,16 @@ with socket.socket() as sock:
 PY
 )"
 SMOKE_LOG="$SCRIPT_DIR/build/frozen-smoke.log"
-WIFI_ANALYZER_PORT="$SMOKE_PORT" "$SCRIPT_DIR/build/binary/wifi-analyzer-pro" >"$SMOKE_LOG" 2>&1 &
+SMOKE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/wifi-analyzer-pro-smoke.XXXXXX")"
+WIFI_ANALYZER_PORT="$SMOKE_PORT" \
+WIFI_ANALYZER_AUTH_FILE="$SMOKE_DIR/auth.json" \
+WIFI_ANALYZER_HISTORY_DB="$SMOKE_DIR/history.sqlite3" \
+  "$SCRIPT_DIR/build/binary/wifi-analyzer-pro" >"$SMOKE_LOG" 2>&1 &
 SERVER_PID=$!
 cleanup() {
   kill "$SERVER_PID" 2>/dev/null || true
   wait "$SERVER_PID" 2>/dev/null || true
+  rm -rf "$SMOKE_DIR"
 }
 trap cleanup EXIT
 
