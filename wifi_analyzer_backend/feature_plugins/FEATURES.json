@@ -1518,7 +1518,7 @@
     "slug": "pcap_capture_analyzer",
     "name": "Bounded PCAP capture analyzer",
     "category": "Packet analysis",
-    "description": "Analyse classic PCAP files up to 512 KiB for Ethernet, Linux cooked, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap statistics including measured RSSI, noise and channel frequency; omit payloads and endpoint addresses and do not start live capture.",
+    "description": "Analyse classic PCAP and PCAPNG files up to 512 KiB, including multi-interface sections, per-interface timestamps, Ethernet, Linux cooked v1/v2, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap RSSI, noise and channel-frequency statistics; omit payloads and endpoint addresses and do not start live capture.",
     "parameters": {
       "capture_base64": "standard-base64 classic PCAP file, decoded size up to 512 KiB",
       "maximum_packets": "optional packet limit from 1 to 5000"
