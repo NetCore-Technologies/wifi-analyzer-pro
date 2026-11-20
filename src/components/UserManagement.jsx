@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiBase, apiFetch } from "../lib/api.js";
+import { apiFetch } from "../lib/api.js";
 import { useAuth } from "../auth/AuthContext.jsx";
+
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
 
 const PANEL = {
   background: "#0d1725",
@@ -33,7 +35,7 @@ const BUTTON = {
 const ROLE_COLOURS = { admin: "#50e3d2", viewer: "#9bb4d1" };
 
 async function request(path, payload) {
-  const response = await apiFetch(`${apiBase()}${path}`, {
+  const response = await apiFetch(`${API_BASE}${path}`, {
     method: payload === undefined ? "GET" : "POST",
     headers: payload === undefined ? undefined : { "Content-Type": "application/json" },
     body: payload === undefined ? undefined : JSON.stringify(payload),
