@@ -14,14 +14,9 @@ const buttonStyle = {
 
 export default function AuthGate({ children }) {
   const [mode, setMode] = useState('checking');
-  const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
-<<<<<<< HEAD
-  const [sessionUser, setSessionUser] = useState(null);
-=======
   const [username, setUsername] = useState('admin');
   const [identity, setIdentity] = useState(null);
->>>>>>> origin/main
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -30,7 +25,7 @@ export default function AuthGate({ children }) {
     setMode('checking');
     setError('');
     try {
-      const response = await fetch(`${window.location.protocol}//${window.location.hostname}:199/api/auth/status`, {
+      const response = await fetch(`${apiBase()}/api/auth/status`, {
         headers: getSessionToken() ? { Authorization: `Bearer ${getSessionToken()}` } : {},
         signal: AbortSignal.timeout(5000),
       });
@@ -38,24 +33,6 @@ export default function AuthGate({ children }) {
       const status = await response.json();
       if (status.broken) {
         setSessionToken('');
-<<<<<<< HEAD
-        setSessionUser(null);
-        setMode('recovery');
-        setError('The saved local auth file is unreadable. Restore a valid backup or remove the file manually on the host before signing in again.');
-      } else if (!status.configured) {
-        setSessionUser(null);
-        setMode('setup');
-      } else if (status.authenticated) {
-        setSessionUser({
-          username: status.username,
-          role: status.role,
-          site_ids: status.site_ids || [],
-        });
-        setMode('ready');
-      } else {
-        setSessionToken('');
-        setSessionUser(null);
-=======
         setIdentity(null);
         setMode('recovery');
         setError('The saved local auth file is unreadable. Restore a valid backup or remove the file manually on the host before signing in again.');
@@ -68,7 +45,6 @@ export default function AuthGate({ children }) {
       } else {
         setSessionToken('');
         setIdentity(null);
->>>>>>> origin/main
         setMode('login');
       }
     } catch (err) {
@@ -79,11 +55,7 @@ export default function AuthGate({ children }) {
 
   useEffect(() => {
     refreshStatus();
-<<<<<<< HEAD
-    const onExpired = () => { setMode('login'); setSessionUser(null); setPassword(''); setNotice('Your session expired. Please sign in again.'); };
-=======
     const onExpired = () => { setMode('login'); setPassword(''); setIdentity(null); setNotice('Your session expired. Please sign in again.'); };
->>>>>>> origin/main
     window.addEventListener('wifi-analyzer:auth-expired', onExpired);
     return () => window.removeEventListener('wifi-analyzer:auth-expired', onExpired);
   }, [refreshStatus]);
@@ -95,24 +67,12 @@ export default function AuthGate({ children }) {
       const endpoint = mode === 'setup' ? '/api/auth/setup' : '/api/auth/login';
       const response = await fetch(`${apiBase()}${endpoint}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-<<<<<<< HEAD
-        body: JSON.stringify({ username: username.trim(), password }), signal: AbortSignal.timeout(10000),
-=======
         body: JSON.stringify({ username, password }), signal: AbortSignal.timeout(10000),
->>>>>>> origin/main
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || `Authentication failed (${response.status})`);
       setSessionToken(payload.token);
-<<<<<<< HEAD
-      setSessionUser({
-        username: payload.status?.username || username.trim().toLowerCase(),
-        role: payload.status?.role || 'admin',
-        site_ids: payload.status?.site_ids || (payload.status?.role === 'admin' ? ['*'] : []),
-      });
-=======
       setIdentity(payload.status?.identity || null);
->>>>>>> origin/main
       setPassword(''); setMode('ready');
       if (endpoint.endsWith('/setup')) setNotice('Local account password configured.');
     } catch (err) {
@@ -128,44 +88,11 @@ export default function AuthGate({ children }) {
         signal: AbortSignal.timeout(4000),
       });
     } catch { /* Clear the browser token even when the server is unavailable. */ }
-<<<<<<< HEAD
-    setSessionToken(''); setSessionUser(null); setMode('login'); setNotice('You have been logged out.');
-  }, []);
-
-  const refreshUser = useCallback(async () => {
-    const token = getSessionToken();
-    if (!token) {
-      setSessionUser(null);
-      return;
-    }
-    try {
-      const response = await fetch(`${apiBase()}/api/auth/status`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!response.ok) throw new Error(`Backend returned HTTP ${response.status}`);
-      const status = await response.json();
-      if (!status.authenticated) {
-        setSessionToken('');
-        setSessionUser(null);
-        setMode('login');
-        return;
-      }
-      setSessionUser({ username: status.username, role: status.role, site_ids: status.site_ids || [] });
-    } catch {
-      // Keep the visible session identity unchanged during a transient status failure.
-    }
-  }, []);
-
-  if (mode === 'ready') {
-    return <AuthContext.Provider value={{ logout, user: sessionUser, refreshUser }}>{children}</AuthContext.Provider>;
-=======
     setSessionToken(''); setIdentity(null); setMode('login'); setNotice('You have been logged out.');
   }, []);
 
   if (mode === 'ready') {
     return <AuthContext.Provider value={{ logout, identity }}>{children}</AuthContext.Provider>;
->>>>>>> origin/main
   }
 
   return (
@@ -197,22 +124,9 @@ export default function AuthGate({ children }) {
           </p>
           <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
             <label style={{ fontSize: 12, color: '#94a3b8' }} htmlFor="wifi-auth-username">Username</label>
-<<<<<<< HEAD
-            <input
-              id="wifi-auth-username"
-              autoComplete="username"
-              required
-              minLength={2}
-              maxLength={32}
-              value={username}
-              onChange={event => setUsername(event.target.value)}
-              style={fieldStyle}
-            />
-=======
             <input id="wifi-auth-username" autoComplete="username" required minLength={3} maxLength={64}
               value={username} onChange={event => setUsername(event.target.value)}
               style={fieldStyle}/>
->>>>>>> origin/main
             <label style={{ fontSize: 12, color: '#94a3b8' }} htmlFor="wifi-auth-password">{mode === 'setup' ? 'Password (12 characters minimum)' : 'Password'}</label>
             <input id="wifi-auth-password" autoComplete={mode === 'setup' ? 'new-password' : 'current-password'} type="password" minLength={mode === 'setup' ? 12 : undefined} required value={password} onChange={e => setPassword(e.target.value)} style={fieldStyle}/>
             <button type="submit" disabled={busy} style={{ ...buttonStyle, opacity: busy ? .65 : 1 }}>{busy ? 'Please wait…' : mode === 'setup' ? 'Create password and continue' : 'Sign in'}</button>
