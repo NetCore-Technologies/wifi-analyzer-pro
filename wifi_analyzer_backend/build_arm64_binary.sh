@@ -32,6 +32,31 @@ python3 -m venv .venv
   --add-data "dist:dist" \
   server.py
 
-echo "[+] Built: $SCRIPT_DIR/build/binary/wifi-analyzer-pro"
-echo "[+] The executable includes the web UI and Python runtime."
+SMOKE_PORT=19991
+SMOKE_LOG="$SCRIPT_DIR/build/frozen-smoke.log"
+WIFI_ANALYZER_PORT="$SMOKE_PORT" "$SCRIPT_DIR/build/binary/wifi-analyzer-pro" >"$SMOKE_LOG" 2>&1 &
+SERVER_PID=$!
+cleanup() {
+  kill "$SERVER_PID" 2>/dev/null || true
+  wait "$SERVER_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+READY=0
+for _ in $(seq 1 40); do
+  if .venv/bin/python -c "from urllib.request import urlopen; urlopen('http://127.0.0.1:$SMOKE_PORT/health', timeout=1)" >/dev/null 2>&1; then
+    READY=1
+    break
+  fi
+  sleep 0.5
+done
+if [[ "$READY" -ne 1 ]]; then
+  cat "$SMOKE_LOG"
+  echo "[!] Frozen binary did not become healthy." >&2
+  exit 1
+fi
+WIFI_ANALYZER_SMOKE_URL="http://127.0.0.1:$SMOKE_PORT" .venv/bin/python "$SCRIPT_DIR/smoke_test_frozen_features.py"
+
+echo "[+] Built and verified: $SCRIPT_DIR/build/binary/wifi-analyzer-pro"
+echo "[+] The executable includes the web UI, Python runtime and dynamically loaded feature plugins."
 echo "[+] Run ./build/binary/wifi-analyzer-pro and browse to http://127.0.0.1:199"
