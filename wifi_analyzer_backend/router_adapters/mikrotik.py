@@ -27,7 +27,7 @@ BAND_ALIASES = {
     "5ghz-ac": "5GHz", "5ghz-ax": "5GHz",
     "6ghz": "6GHz", "6ghz-ax": "6GHz",
 }
-INTERFACE_NAME = re.compile(r"^[^\x00-\x1f\x7f]{1,64}$")
+INTERFACE_NAME = re.compile(r"^[^\x00-\x20\x7f]{1,64}$")
 
 
 def _object(value: object, field: str) -> dict:

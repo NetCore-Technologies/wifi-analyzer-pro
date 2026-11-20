@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 174 independently callable feature modules (F001–F168 and F172–F177; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 175 independently callable feature modules (F001–F168 and F172–F178; F169–F171 cover the OpenWrt agent, negotiated system-health telemetry and Router Agent Console), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Add multi-site AP inventory snapshots, topology redundancy and snapshot-diff analysis, and AP inventory drift detection.
 - Add cross-site AP inventory and channel-reuse audits, observation freshness checks, and a bounded timestamped topology history timeline.
 - Add a site-aware AP-to-gateway path audit that excludes RF-neighbour and cross-site links and distinguishes missing evidence from unreachable paths.
@@ -29,6 +29,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add F175: a multi-vendor router fleet health audit for normalized OpenWrt, UniFi and MikroTik snapshots. It evaluates freshness, measured CPU/memory pressure, down interfaces/radios, offline APs and weak client signals while reporting missing telemetry as unknown.
 - Add F176: a site-scoped IPv4/IPv6 subnet overlap audit across normalized OpenWrt interfaces, UniFi network profiles and MikroTik address records; it reports duplicates and overlapping ranges with context instead of assuming every repeated private subnet is a fault.
 - Add F177: a cross-vendor client roaming timeline from normalized OpenWrt, UniFi and MikroTik association snapshots, reporting observed AP handoffs, short multi-AP windows and weak measured signals while skipping wired clients.
+- Add F178: an OpenWrt and MikroTik route-table audit for duplicate routes, default-route candidates, disabled/inactive/blackhole defaults and gateways without a directly connected prefix match; recursive, point-to-point and tunnel routes are explicitly left for operator review.
 - Add F174: a bounded multi-vendor router snapshot drift report for OpenWrt, UniFi and MikroTik. It compares stable interface/radio/client/network identities, reports added/removed/changed records, and emits only allow-listed fields.
 - Add subnet capacity/correlation, gateway redundancy auditing, floor-plan anchor validation and room-zone assignment.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.

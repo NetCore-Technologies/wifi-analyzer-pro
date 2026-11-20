@@ -109,6 +109,55 @@ class MikroTikSnapshotTests(unittest.TestCase):
         self.assertEqual(result["summary"]["wireless_radio_count"], 2)
         self.assertEqual(result["summary"]["association_count"], 1)
         self.assertEqual(result["summary"]["dhcp_lease_count"], 1)
+        self.assertEqual(result["summary"]["route_count"], 0)
+        self.assertEqual(result["routes"], [])
+
+
+    def test_normalises_routeros_routes_and_gateway_interfaces(self):
+        result = normalize_snapshot({
+            "captured_at": "2026-11-20T10:00:00Z",
+            "routes": [
+                {
+                    "dst-address": "0.0.0.0/0",
+                    "gateway": "192.0.2.1%ether1",
+                    "routing-table": "main",
+                    "distance": "1",
+                    "active": "yes",
+                    "disabled": "no",
+                },
+                {
+                    "dst_address": "::/0",
+                    "gateway": "fe80::1",
+                    "table": "backup",
+                    "distance": 2,
+                    "active": False,
+                    "blackhole": False,
+                },
+            ],
+        })
+        self.assertEqual(result["summary"]["route_count"], 2)
+        self.assertEqual(result["summary"]["active_route_count"], 1)
+        self.assertEqual(result["summary"]["default_route_count"], 2)
+        self.assertEqual(result["routes"][0]["target"], "0.0.0.0/0")
+        self.assertEqual(result["routes"][0]["gateway"], "192.0.2.1")
+        self.assertEqual(result["routes"][0]["gateway_interface"], "ether1")
+        self.assertEqual(result["routes"][0]["routing_table"], "main")
+        self.assertTrue(result["routes"][0]["active"])
+        self.assertFalse(result["routes"][0]["disabled"])
+        self.assertEqual(result["routes"][1]["target"], "::/0")
+        self.assertEqual(result["routes"][1]["routing_table"], "backup")
+        self.assertFalse(result["routes"][1]["active"])
+
+    def test_rejects_invalid_routeros_route_target_distance_and_flags(self):
+        base = {"captured_at": "2026-11-20T10:00:00Z"}
+        for route, message in (
+            ({"dst-address": "192.0.2.1/99"}, "valid IP network"),
+            ({"dst-address": "0.0.0.0/0", "distance": 0}, "distance"),
+            ({"dst-address": "0.0.0.0/0", "active": "maybe"}, "active must be a boolean"),
+            ({"dst-address": "0.0.0.0/0", "gateway": "192.0.2.1%invalid iface"}, "invalid interface"),
+        ):
+            with self.subTest(route=route), self.assertRaisesRegex(ValueError, message):
+                normalize_snapshot({**base, "routes": [route]})
 
     def test_unknown_and_credential_like_fields_never_leave_import_boundary(self):
         payload = {

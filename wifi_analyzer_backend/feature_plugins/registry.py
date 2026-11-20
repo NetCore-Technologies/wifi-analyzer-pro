@@ -178,6 +178,7 @@ FEATURE_MODULES = (
     "feature_175_router_fleet_health_audit",
     "feature_176_router_subnet_overlap_audit",
     "feature_177_router_client_roaming_audit",
+    "feature_178_router_route_table_audit",
 )
 
 @lru_cache(maxsize=1)

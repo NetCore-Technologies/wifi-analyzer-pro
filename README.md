@@ -96,7 +96,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the one local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 174 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 175 built-in tools |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
@@ -127,7 +127,7 @@ The SYSTEM → Router Agents page provides the authenticated Router Agent Consol
 
 The `unifi_snapshot_normalizer` (F172) and `mikrotik_snapshot_normalizer` (F173) features accept caller-supplied controller/router exports through their `/api/features/{slug}` endpoints. They validate inventory, radio, client, address and network records and omit unknown and credential-like fields. These are offline imports, not live controller integrations.
 
-The `router_snapshot_drift_report` (F174) compares two normalized snapshots from the same supported adapter. It reports bounded inventory drift for interfaces, radios, associations, network profiles and routes; only allow-listed fields are returned. The `router_fleet_health_audit` (F175) rolls up the same vendor schemas across sites, scoring only measured health evidence and marking absent telemetry as unknown. The `router_subnet_overlap_audit` (F176) checks IPv4 and IPv6 CIDRs across routers within each site and reports overlaps for operator review. The `router_client_roaming_audit` (F177) builds AP handoff timelines from the same normalized vendor snapshots.
+The `router_snapshot_drift_report` (F174) compares two normalized snapshots from the same supported adapter. It reports bounded inventory drift for interfaces, radios, associations, network profiles and routes; only allow-listed fields are returned. The `router_fleet_health_audit` (F175) rolls up the same vendor schemas across sites, scoring only measured health evidence and marking absent telemetry as unknown. The `router_subnet_overlap_audit` (F176) checks IPv4 and IPv6 CIDRs across routers within each site and reports overlaps for operator review. The `router_client_roaming_audit` (F177) builds AP handoff timelines from the same normalized vendor snapshots. The `router_route_table_audit` (F178) validates OpenWrt and MikroTik route metadata and connected prefixes without probing or changing routes.
 
 For router-side, read-only telemetry collection, see the [OpenWrt agent installation and service guide](agent/README.md). The agent uses an enrolled scoped token, TLS verification, a private on-disk retry spool and the idempotent snapshot-delivery endpoint. Optional uptime, load-average, memory and swap telemetry is collected only when the enrolled credential grants `system.health`.
 
