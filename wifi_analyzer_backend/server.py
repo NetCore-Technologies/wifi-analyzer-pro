@@ -656,10 +656,33 @@ class Handler(BaseHTTPRequestHandler):
         # instead of localhost; allow only an exact Host match in that case.
         return parsed.scheme in {"http", "https"} and parsed.netloc == self.headers.get("Host")
 
+    def session_info(self):
+        return AUTH.session_info(self.bearer_token())
+
     def require_auth(self):
-        if AUTH.validate(self.bearer_token()):
+        if self.session_info() is not None:
             return True
         self.send_json({"error": "Authentication required"}, 401)
+        return False
+
+    def require_admin(self):
+        info = self.session_info()
+        if info is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if info["role"] != "admin":
+            self.send_json({"error": "Administrator role required"}, 403)
+            return False
+        return True
+
+    def require_site_access(self, site_id):
+        info = self.session_info()
+        if info is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if info["role"] == "admin" or site_id in info["site_ids"]:
+            return True
+        self.send_json({"error": "This account does not have access to the requested site"}, 403)
         return False
 
     def read_json_body(self):
@@ -700,8 +723,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/auth/status":
             self.send_json(AUTH.status(self.bearer_token()))
             return
+        if path == "/api/auth/users":
+            if not self.require_admin():
+                return
+            self.send_json({"users": AUTH.list_users()})
+            return
         if path.startswith("/api/") and not self.require_auth():
             return
+        if path.startswith("/api/agents/") or path.startswith("/api/reports/jobs"):
+            if not self.require_admin():
+                return
 
         api_routes = {
             "/api/scan": lambda: {
@@ -828,9 +859,13 @@ class Handler(BaseHTTPRequestHandler):
                 if values and values[0].strip():
                     site_ids = [item.strip() for item in values[0].split(",") if item.strip()]
                 else:
-                    site_ids = HISTORY.site_ids(limit=20)
+                    info = self.session_info()
+                    site_ids = HISTORY.site_ids(limit=20) if info["role"] == "admin" else list(info["site_ids"])
                 if len(site_ids) > 20:
                     raise ValueError("site_ids may contain no more than 20 sites")
+                for site_id in site_ids:
+                    if not self.require_site_access(site_id):
+                        return
                 pairs = HISTORY.latest_pairs(site_ids)
                 report = run_feature("site_to_site_change_report", {"sites": pairs})
                 self.send_json({
@@ -853,7 +888,18 @@ class Handler(BaseHTTPRequestHandler):
                     before_id = None if raw_before_id is None else int(raw_before_id)
                 except ValueError as error:
                     raise ValueError("limit and before_id must be integers") from error
-                snapshots = HISTORY.list(site_id=raw_site_id, limit=limit, before_id=before_id)
+                info = self.session_info()
+                if raw_site_id:
+                    if not self.require_site_access(raw_site_id):
+                        return
+                    snapshots = HISTORY.list(site_id=raw_site_id, limit=limit, before_id=before_id)
+                elif info["role"] == "admin":
+                    snapshots = HISTORY.list(limit=limit, before_id=before_id)
+                else:
+                    merged = []
+                    for allowed_site in info["site_ids"]:
+                        merged.extend(HISTORY.list(site_id=allowed_site, limit=limit, before_id=before_id))
+                    snapshots = sorted(merged, key=lambda item: item["id"], reverse=True)[:limit]
                 self.send_json({
                     "snapshots": snapshots,
                     "next_before_id": snapshots[-1]["id"] if len(snapshots) == limit else None,
@@ -871,6 +917,8 @@ class Handler(BaseHTTPRequestHandler):
                 snapshot = HISTORY.get(snapshot_id)
                 if snapshot is None:
                     self.send_json({"error": "Snapshot not found"}, 404)
+                elif not self.require_site_access(snapshot["site_id"]):
+                    return
                 else:
                     self.send_json({"snapshot": snapshot})
             elif path in api_routes:
