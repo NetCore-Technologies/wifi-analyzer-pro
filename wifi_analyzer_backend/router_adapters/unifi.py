@@ -68,12 +68,28 @@ def _integer(value: object, field: str, minimum: int, maximum: int) -> int | Non
     return value
 
 
+def _channel(value: object, band: str, field: str) -> int | None:
+    maximum = {"2.4GHz": 14, "5GHz": 196, "6GHz": 233}[band]
+    parsed = _integer(value, field, 1, maximum)
+    if parsed is not None and parsed > maximum:
+        raise ValueError(f"{field} is outside the valid {band} channel range")
+    return parsed
+
+
 def _boolean(value: object, field: str) -> bool | None:
     if value is None:
         return None
     if not isinstance(value, bool):
         raise ValueError(f"{field} must be a boolean")
     return value
+
+
+def _vlan(value: object, enabled: bool | None, field: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int) and not isinstance(value, bool) and value == 0 and enabled is not True:
+        return None
+    return _integer(value, field, 1, 4094)
 
 
 def _timestamp(value: object) -> str:
@@ -118,7 +134,7 @@ def _band(value: object, field: str) -> str | None:
     token = _text(value, field, maximum=24, required=True).lower()
     result = BANDS.get(token)
     if result is None:
-        raise ValueError(f"{field} must identify 2.4GHz, 5GHz or 6GHz")
+        raise ValueError(f"{field} must identify a supported band (2.4GHz, 5GHz or 6GHz)")
     return result
 
 
@@ -211,7 +227,7 @@ def normalize_snapshot(payload: dict) -> dict:
             band = _band(radio_name, f"{radio_field}.radio")
             if band is None:
                 raise ValueError(f"{radio_field}.radio must identify a supported band")
-            channel = _integer(radio.get("channel"), f"{radio_field}.channel", 1, 233)
+            channel = _channel(radio.get("channel"), band, f"{radio_field}.channel")
             width = _width(
                 radio.get("channel_width_mhz", radio.get("channel_width", radio.get("ht", radio.get("htmode")))),
                 f"{radio_field}.channel_width",
@@ -311,13 +327,15 @@ def normalize_snapshot(payload: dict) -> dict:
                 subnet = str(ipaddress.ip_network(subnet.strip(), strict=False))
             except ValueError as error:
                 raise ValueError(f"{field}.ip_subnet must be a valid CIDR network") from error
+        vlan_enabled = _boolean(network.get("vlan_enabled"), f"{field}.vlan_enabled")
+        vlan_id = _vlan(network.get("vlan", network.get("vlan_id")), vlan_enabled, f"{field}.vlan")
         networks.append({
             "id": network_id,
             "name": _text(network.get("name", network.get("ssid")), f"{field}.name", 128),
             "purpose": _text(network.get("purpose"), f"{field}.purpose", 64),
             "enabled": _boolean(network.get("enabled"), f"{field}.enabled"),
-            "vlan_enabled": _boolean(network.get("vlan_enabled"), f"{field}.vlan_enabled"),
-            "vlan_id": _integer(network.get("vlan", network.get("vlan_id")), f"{field}.vlan", 1, 4094),
+            "vlan_enabled": vlan_enabled,
+            "vlan_id": vlan_id,
             "ip_subnet": subnet,
         })
 

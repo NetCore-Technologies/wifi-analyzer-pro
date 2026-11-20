@@ -90,8 +90,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 168)
-        self.assertEqual(len(catalog["features"]), 168)
+        self.assertEqual(catalog["count"], 169)
+        self.assertEqual(len(catalog["features"]), 169)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -309,9 +309,11 @@ class AuthenticatedApiTests(unittest.TestCase):
         token = setup["token"]
         status, catalogue = self.request("GET", "/api/adapters", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalogue["count"], 1)
-        self.assertEqual(catalogue["adapters"][0]["adapter_id"], "openwrt")
-        self.assertTrue(catalogue["adapters"][0]["read_only"])
+        self.assertEqual(catalogue["count"], 2)
+        adapters = {item["adapter_id"]: item for item in catalogue["adapters"]}
+        self.assertTrue(adapters["openwrt"]["read_only"])
+        self.assertTrue(adapters["unifi"]["read_only"])
+        self.assertEqual(adapters["unifi"]["transport"], "controller_export")
 
         status, negotiated = self.request("POST", "/api/adapters/negotiate", {
             "adapter_id": "openwrt",
@@ -333,6 +335,24 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["feature"], "F162")
         self.assertEqual(result["result"]["adapter_id"], "openwrt")
+
+    def test_unifi_snapshot_normalizer_is_available_through_authenticated_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
+        token = setup["token"]
+        status, result = self.request("POST", "/api/features/unifi_snapshot_normalizer", {
+            "captured_at": "2026-11-20T10:00:00Z",
+            "devices": [{
+                "mac": "00:11:22:33:44:55",
+                "radio_table": [{"radio": "na", "channel": 36, "ht": "VHT80"}],
+            }],
+            "clients": [],
+            "networks": [{"name": "Office", "vlan_enabled": False, "vlan": 0}],
+        }, token=token)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["feature"], "F170")
+        self.assertEqual(result["result"]["adapter_id"], "unifi")
+        self.assertEqual(result["result"]["summary"]["wireless_radio_count"], 1)
+        self.assertIsNone(result["result"]["networks"][0]["vlan_id"])
 
     def test_router_agent_heartbeat_persists_and_health_endpoint_reports_agent_status(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

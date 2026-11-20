@@ -150,6 +150,19 @@ class UniFiSnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "vlan"):
             normalize_snapshot({**base, "networks": [{"vlan": 4095}]})
 
+    def test_untagged_networks_allow_vlan_zero_without_inventing_a_vlan_id(self):
+        result = normalize_snapshot({
+            "captured_at": "2026-11-20T10:00:00Z",
+            "networks": [{"name": "Default", "vlan_enabled": False, "vlan": 0}],
+        })
+        self.assertFalse(result["networks"][0]["vlan_enabled"])
+        self.assertIsNone(result["networks"][0]["vlan_id"])
+        with self.assertRaisesRegex(ValueError, "vlan"):
+            normalize_snapshot({
+                "captured_at": "2026-11-20T10:00:00Z",
+                "networks": [{"vlan_enabled": True, "vlan": 0}],
+            })
+
     def test_rejects_duplicate_ap_client_and_network_identities(self):
         base = {"captured_at": "2026-11-20T10:00:00Z"}
         ap = {"mac": "00:11:22:33:44:55"}

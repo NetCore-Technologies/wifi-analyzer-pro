@@ -193,8 +193,8 @@ class RouterAgentHealthStore:
             raise ValueError("adapter_id is required")
         adapter_id = adapter_id.strip().lower()
         manifest = next((item for item in list_manifests() if item["adapter_id"] == adapter_id), None)
-        if manifest is None:
-            raise ValueError("adapter_id is not installed")
+        if manifest is None or manifest.get("transport") != "local_agent":
+            raise ValueError("adapter_id is not installed as a router agent")
         if not isinstance(agent_version, str) or not _VERSION.fullmatch(agent_version):
             raise ValueError("agent_version must use numeric major.minor.patch version syntax")
         self._validate_ttl_days(ttl_days)
@@ -529,8 +529,8 @@ class RouterAgentHealthStore:
             raise ValueError("adapter_id is required")
         adapter_id = adapter_id.strip().lower()
         manifest = next((item for item in list_manifests() if item["adapter_id"] == adapter_id), None)
-        if manifest is None:
-            raise ValueError("adapter_id is not installed")
+        if manifest is None or manifest.get("transport") != "local_agent":
+            raise ValueError("adapter_id is not installed as a router agent")
         version = payload.get("agent_version")
         if not isinstance(version, str) or not _VERSION.fullmatch(version):
             raise ValueError("agent_version must use numeric major.minor.patch version syntax")
