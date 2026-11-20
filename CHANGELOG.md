@@ -5,7 +5,7 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## [1.0.7] — Unreleased
 
 ### Feature library and local account
-- Add 100 independently callable feature modules (F001–F100), a stable registry, metadata catalogue and searchable Feature Workbench.
+- Add 120 independently callable feature modules (F001–F120), a stable registry, metadata catalogue and searchable Feature Workbench.
 - Wire local first-run password setup, login, logout and bearer sessions into the running app and backend.
 - Protect API routes with local authentication; add JSON feature execution, bounded request bodies and browser-Origin validation.
 - Add HTTP integration tests for setup, authenticated catalogue access, feature execution, logout and rejected origins.
