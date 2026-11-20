@@ -16,12 +16,15 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         self.assertIn("--collect-submodules feature_plugins", release_workflow)
         self.assertIn("--collect-submodules feature_plugins", arm64_script)
 
-    def test_release_smoke_test_executes_dynamic_feature_plugins(self):
+    def test_release_smoke_test_executes_dynamic_feature_plugins_while_server_is_running(self):
         release_workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-        self.assertIn("Smoke test bundled feature plugins", release_workflow)
-        self.assertIn("router_webhook_subscription_router", release_workflow)
-        self.assertIn("router_scheduled_report_delivery_package", release_workflow)
-        self.assertIn("pcap_capture_analyzer", release_workflow)
+        smoke_helper = (ROOT / "wifi_analyzer_backend" / "smoke_test_frozen_features.py").read_text(encoding="utf-8")
+
+        self.assertEqual(release_workflow.count("smoke_test_frozen_features.py"), 3)
+        self.assertIn("router_webhook_subscription_router", smoke_helper)
+        self.assertIn("router_scheduled_report_delivery_package", smoke_helper)
+        self.assertIn("pcap_capture_analyzer", smoke_helper)
+        self.assertIn('result.get("feature") != "F191"', smoke_helper)
 
 
 if __name__ == "__main__":
