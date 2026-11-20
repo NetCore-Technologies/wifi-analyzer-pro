@@ -3,7 +3,7 @@
 All notable changes to WiFi Analyzer Pro are documented here.
 
 ## [1.0.7] — Unreleased
-- Add F191: a bounded offline classic-PCAP analyzer for Ethernet, Linux cooked v1/v2, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap summaries, including measured RSSI, noise and channel-frequency metadata. It enforces file/packet limits and omits packet payloads and endpoint addresses; it does not perform live capture or support PCAPNG.
+- Add F191: a bounded offline classic-PCAP/PCAPNG analyzer for Ethernet, Linux cooked v1/v2, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap, including measured RSSI, noise, channel frequency, multi-interface sections and per-interface timestamp resolution/offset. It enforces file/packet limits and omits packet payloads and endpoint addresses; it does not perform live capture.
 - Add the Signal Pulse application mark and product-site identity, with browser-persistent refresh interval, compact navigation, demo-data visibility and reduced-motion controls.
 - Expose authenticated worker lease renewal and database-verified scheduled-report delivery packaging; the server now loads the current unexpired SQLite lease rather than trusting a caller-supplied claimed-job object.
 
