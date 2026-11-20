@@ -779,38 +779,40 @@ function SystemPanel({ sysInfo }) {
 function AiPanel({ networks: netsProp, devices: devsProp, diag, sysInfo, isLive = false }) {
   const nets = isLive ? (netsProp || []) : [];
   const devs = isLive ? (devsProp || []) : [];
-  const best = nets.length ? [...nets].sort((a,b)=>b.rssi-a.rssi)[0] : null;
-  const rogues = nets.filter(n=>n.rogue);
-  const loss = diag?.packet_loss_pct || 0;
-  const latency = diag?.latency_ms || 0;
-  const score = Math.max(0, 100 - rogues.length*20 - (loss>5?15:loss>0?5:0) - (latency>100?10:0));
+  const measuredNets = nets.filter(n=>n.rssi!=null&&Number.isFinite(Number(n.rssi)));
+  const best = measuredNets.length ? [...measuredNets].sort((a,b)=>Number(b.rssi)-Number(a.rssi))[0] : null;
+  const rogues = nets.filter(n=>n.rogue===true);
+  const loss = diag?.packet_loss_pct==null ? null : Number(diag.packet_loss_pct);
+  const latency = diag?.latency_ms==null ? null : Number(diag.latency_ms);
+  const hasDiagnosticMeasurements = loss!=null || latency!=null;
+  const score = hasDiagnosticMeasurements ? Math.max(0, 100 - rogues.length*20 - (loss!=null&&loss>5?15:loss!=null&&loss>0?5:0) - (latency!=null&&latency>100?10:0)) : null;
   const liveInsights = isLive ? [
-    rogues.length>0 && {Icon:Shield, col:C.red, title:"Rogue AP Detected", body:`${rogues[0].ssid} is visible on unknown BSSID ${rogues[0].bssid}. This may be an Evil Twin attack. Do not connect.`},
-    loss>5 && {Icon:Activity, col:C.yellow, title:"High Packet Loss", body:`${loss}% packet loss detected on active connection. Possible causes: interference, distance, or congestion.`},
-    best && best.rssi > -50 && {Icon:Wifi, col:C.green, title:"Excellent Signal", body:`${best.ssid} reporting ${best.rssi} dBm on ${best.band}. Conditions are optimal for high-throughput transfers.`},
-    latency > 100 && {Icon:Globe, col:C.yellow, title:"High Latency", body:`Gateway latency at ${latency}ms — above 100ms threshold. Check for background downloads or QoS issues.`},
-    best && {Icon:ScanLine, col:C.cyan, title:"Channel Recommendation", body:`Best available channel: ${best.ch} (${best.band}). ${nets.filter(n=>n.ch===best.ch).length} APs on same channel.`},
-    devs.filter(d=>!d.vendor||d.vendor==="???").length>0 && {Icon:AlertTriangle, col:C.red, title:"Unknown Device", body:`${devs.filter(d=>!d.vendor||d.vendor==="???").length} device(s) with unidentified MAC vendor detected on network.`},
+    rogues.length>0 && {Icon:Shield, col:C.yellow, title:"Scanner anomaly flag", body:`${rogues[0].ssid||"Unnamed network"} at ${rogues[0].bssid||"unknown BSSID"} was flagged by scan metadata. This is not proof of an Evil Twin; verify the BSSID against a trusted inventory.`},
+    loss!=null && loss>5 && {Icon:Activity, col:C.yellow, title:"High Packet Loss", body:`${loss}% packet loss reported by the latest diagnostic. Possible causes include interference, distance, congestion or upstream loss.`},
+    best && best.rssi > -50 && {Icon:Wifi, col:C.green, title:"Strong observed signal", body:`${best.ssid||best.bssid||"A nearby BSS"} measured ${best.rssi} dBm on ${best.band} in this scan. Throughput is not measured by RSSI alone.`},
+    latency != null && latency > 100 && {Icon:Globe, col:C.yellow, title:"High Latency", body:`The latest diagnostic measured ${latency} ms latency. Check the route and repeat the test under comparable load.`},
+    best && {Icon:ScanLine, col:C.cyan, title:"Strongest observed access point", body:`${best.ssid||best.bssid||"A nearby BSS"} is the strongest measured observation at ${best.rssi} dBm on ${best.band}. This scan alone cannot recommend a new channel.`},
+    devs.filter(d=>!d.vendor||d.vendor==="???"||d.vendor==="Unknown vendor").length>0 && {Icon:Info, col:C.muted, title:"Vendor lookup unavailable", body:`${devs.filter(d=>!d.vendor||d.vendor==="???"||d.vendor==="Unknown vendor").length} neighbour record(s) have no resolved vendor. An unknown OUI is not evidence of a malicious device.`},
   ].filter(Boolean).slice(0,4) : [];
   const tips = liveInsights.length ? liveInsights : [
     {Icon:Info, col:C.cyan, title:"Awaiting live observations", body:"Connect the Wi-Fi Analyzer Pro local service to generate recommendations from measured scans and diagnostics. Demo samples are not security findings."},
   ];
-  const summaryScore = isLive && diag ? score : null;
+  const summaryScore = isLive && hasDiagnosticMeasurements ? score : null;
   return (
     <div style={{...s.col,gap:14}}>
       <div className="anim-fade" style={{...s.card,background:C.purpleFaint,border:`1px solid ${C.purple}33`,animation:"borderPulse 3s ease-in-out infinite"}}>
         <div style={{...s.row,gap:10,marginBottom:10}}>
           <Bot size={18} color={C.purple}/>
-          <span style={{fontSize:14,fontWeight:700,color:C.text}}>AI Network Health Summary</span>
+          <span style={{fontSize:14,fontWeight:700,color:C.text}}>Network Health Summary · rules-based</span>
           <Tag text="v1.0.5 NEW" col={C.purple}/>
         </div>
         <p style={{fontSize:13,color:C.textSec,lineHeight:1.75,margin:0}}>
           Your network is <span style={{color:summaryScore==null?C.cyan:summaryScore>75?C.green:summaryScore>50?C.yellow:C.red,fontWeight:600}}>{summaryScore==null?"awaiting live observations":summaryScore>75?"generally healthy":summaryScore>50?"moderate":"needs attention"}</span>
           {rogues.length>0&&<span> with <span style={{color:C.red,fontWeight:600}}>{rogues.length} critical alert{rogues.length>1?"s":""}</span> requiring immediate action.</span>}
           {best&&<span> {best.ssid} ({best.band}) shows signal at {best.rssi} dBm{best.sec==="WPA3"?" with WPA3 — solid":best.sec==="WPA2"?" with WPA2":" (open — insecure)"}.</span>}
-          {diag&&<span> Gateway latency: {latency}ms. Packet loss: {loss}%.</span>}
+          {(latency!=null||loss!=null)&&<span> {latency!=null?`Measured latency: ${latency} ms.`:""} {loss!=null?`Measured packet loss: ${loss}%.`:""}</span>}
           {!isLive&&<span> Connect the backend for live AI analysis.</span>}
-          {" "}Overall score: <span style={{color:C.cyan,fontWeight:700}}>{summaryScore}/100</span>.
+          {summaryScore==null?" A diagnostic score is unavailable until latency or packet loss is measured.":<> Diagnostic heuristic: <span style={{color:C.cyan,fontWeight:700}}>{summaryScore}/100</span> (not a security assessment).</>}
         </p>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
