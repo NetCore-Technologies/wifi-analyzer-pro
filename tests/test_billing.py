@@ -160,6 +160,37 @@ class BillingStoreTests(unittest.TestCase):
         self.assertFalse(self.store.status()["active"])
         self.assertEqual(self.store.status()["plan_id"], "free")
 
+    def test_repeated_past_due_updates_do_not_extend_original_grace_period(self):
+        first = self.subscription_event("evt_firstpastdue", status="past_due")
+        first["created"] = int(self.now[0])
+        self.store.process_stripe_event(first, price_plans=self.price_plans)
+        original_end = self.store.status()["grace_period_ends_at"]
+
+        self.now[0] += 24 * 60 * 60
+        second = self.subscription_event("evt_secondpastdue", status="past_due")
+        second["created"] = int(self.now[0])
+        self.store.process_stripe_event(second, price_plans=self.price_plans)
+
+        self.assertEqual(self.store.status()["grace_period_ends_at"], original_end)
+
+    def test_out_of_order_subscription_events_cannot_restore_cancelled_access(self):
+        active = self.subscription_event("evt_orderactive", status="active")
+        active["created"] = int(self.now[0])
+        self.store.process_stripe_event(active, price_plans=self.price_plans)
+
+        cancelled = self.subscription_event("evt_ordercancel", status="canceled")
+        cancelled["type"] = "customer.subscription.deleted"
+        cancelled["created"] = int(self.now[0]) + 10
+        self.store.process_stripe_event(cancelled, price_plans=self.price_plans)
+
+        stale_active = self.subscription_event("evt_orderstale", status="active")
+        stale_active["created"] = int(self.now[0]) + 5
+        self.store.process_stripe_event(stale_active, price_plans=self.price_plans)
+
+        self.assertFalse(self.store.status()["active"])
+        self.assertEqual(self.store.status()["plan_id"], "free")
+        self.assertEqual(self.store.status()["subscription_status"], "canceled")
+
     def test_expired_and_unpaid_subscriptions_revert_to_free(self):
         expired = self.subscription_event("evt_123456", period_end=self.now[0] - 1)
         self.store.process_stripe_event(expired, price_plans=self.price_plans)

@@ -313,6 +313,13 @@ class WorkspaceBillingStore:
             )
             """
         )
+        subscription_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(workspace_subscription)")
+        }
+        if "last_stripe_event_created" not in subscription_columns:
+            connection.execute(
+                "ALTER TABLE workspace_subscription ADD COLUMN last_stripe_event_created REAL"
+            )
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS stripe_webhook_events (
@@ -362,6 +369,14 @@ class WorkspaceBillingStore:
 
     def status(self) -> dict[str, Any]:
         now = float(self._clock())
+        event_created = event.get("created", now)
+        if (
+            isinstance(event_created, bool)
+            or not isinstance(event_created, (int, float))
+            or event_created < 0
+        ):
+            raise ValueError("Stripe event creation timestamp is invalid")
+        event_created = float(event_created)
         with self._connection() as connection:
             row = connection.execute(
                 "SELECT * FROM workspace_subscription WHERE id=1"
@@ -471,7 +486,11 @@ class WorkspaceBillingStore:
                 "SELECT instance_id FROM billing_instance WHERE id=1"
             ).fetchone()["instance_id"]
             current = connection.execute(
-                "SELECT stripe_customer_id FROM workspace_subscription WHERE id=1"
+                """
+                SELECT stripe_customer_id, subscription_status, grace_until,
+                       last_stripe_event_created
+                FROM workspace_subscription WHERE id=1
+                """
             ).fetchone()
             known_customer = current["stripe_customer_id"] if current else None
 
@@ -512,7 +531,16 @@ class WorkspaceBillingStore:
                     isinstance(customer_id, str) and known_customer is not None
                     and hmac.compare_digest(customer_id, known_customer)
                 )
-                if belongs_here:
+                last_event_created = current["last_stripe_event_created"] if current else None
+                stale_event = (
+                    belongs_here
+                    and last_event_created is not None
+                    and event_created < float(last_event_created)
+                )
+                # Stripe can retry or deliver distinct events out of order.
+                # Record stale events for idempotency, but never let them
+                # overwrite newer subscription state.
+                if belongs_here and not stale_event:
                     subscription_id = obj.get("id")
                     if not isinstance(subscription_id, str) or not re.fullmatch(r"sub_[A-Za-z0-9]{4,128}", subscription_id):
                         raise ValueError("Stripe subscription identifier is invalid")
@@ -535,7 +563,21 @@ class WorkspaceBillingStore:
                     cancel_at_period_end = obj.get("cancel_at_period_end", False)
                     if not isinstance(cancel_at_period_end, bool):
                         cancel_at_period_end = False
-                    grace_until = now + PAST_DUE_GRACE_SECONDS if status == "past_due" else None
+                    if status == "past_due":
+                        existing_grace = current["grace_until"] if current else None
+                        if (
+                            current
+                            and current["subscription_status"] == "past_due"
+                            and isinstance(existing_grace, (int, float))
+                            and not isinstance(existing_grace, bool)
+                        ):
+                            # Repeated past-due updates must not restart the
+                            # payment grace window on every webhook delivery.
+                            grace_until = float(existing_grace)
+                        else:
+                            grace_until = now + PAST_DUE_GRACE_SECONDS
+                    else:
+                        grace_until = None
                     if status == "canceled" and event_type == "customer.subscription.deleted" and period_end is None:
                         period_end = now
                     if status not in {"active", "trialing", "past_due"}:
@@ -551,6 +593,7 @@ class WorkspaceBillingStore:
                             current_period_end=?,
                             cancel_at_period_end=?,
                             grace_until=?,
+                            last_stripe_event_created=?,
                             updated_at=?
                         WHERE id=1
                         """,
@@ -563,6 +606,7 @@ class WorkspaceBillingStore:
                             period_end,
                             int(cancel_at_period_end),
                             grace_until,
+                            event_created,
                             now,
                         ),
                     )
