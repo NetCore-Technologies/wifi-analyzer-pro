@@ -1618,9 +1618,9 @@
     "slug": "multi_ap_channel_reuse_planner",
     "name": "Multi-AP RF channel reuse planner",
     "category": "RF planning",
-    "description": "Optimise channel assignments across same-site AP radios using caller-supplied regulatory channel options and explicit, weighted RF interference evidence, with a measurable baseline comparison.",
+    "description": "Generate a bounded heuristic channel assignment across same-site AP radios using channel options already validated by the operator and explicit weighted RF interference evidence; report baseline comparison, convergence and residual overlap without applying configuration.",
     "parameters": {
-      "radios": "1-256 radios, each with site/AP/radio identity, band, channel width, current channel and 1-32 regulatory-approved channel options",
+      "radios": "1-256 radios with site/AP/radio identity, band, channel width, current channel and 1-32 channel options already validated for the radio and regulatory domain",
       "interference_edges": "Up to 8192 same-site/same-band AP radio relationships with explicit 0-1 relative weights and survey/controller/operator provenance",
       "change_penalty": "Optional 0-0.5 penalty per changed radio to balance interference reduction and deployment churn"
     }
