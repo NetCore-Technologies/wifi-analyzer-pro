@@ -95,9 +95,11 @@ def _normalise_radio(value: object, index: int) -> dict:
         else:
             center_frequency = _number(
                 explicit_frequency, f"{field}.center_frequency_mhz",
-                2300.0 if band == "2.4GHz" else 4900.0 if band == "5GHz" else 5900.0,
-                2600.0 if band == "2.4GHz" else 6000.0 if band == "5GHz" else 7200.0,
+                2300.0 if band == "2.4GHz" else 4900.0 if band == "5GHz" else 5925.0,
+                2600.0 if band == "2.4GHz" else 5900.0 if band == "5GHz" else 7125.0,
             )
+            if abs(center_frequency - nominal_frequency) > width / 2.0:
+                raise ValueError(f"{field}.center_frequency_mhz does not contain the primary channel within the declared width")
             if width == 20 and abs(center_frequency - nominal_frequency) > 0.5:
                 raise ValueError(f"{field}.center_frequency_mhz must match the 20 MHz channel centre")
         normalised_options.append({"channel": channel, "center_frequency_mhz": round(center_frequency, 3)})

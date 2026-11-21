@@ -126,9 +126,20 @@ export function mapSavedSiteSnapshotToPlannerRadios(snapshot) {
       skippedIncomplete += 1;
       return;
     }
-    if (ap.channel_width_mhz !== 20) {
-      skippedWide += 1;
+    const width = ap.channel_width_mhz;
+    if (!WIDTHS.has(width) || (ap.band === '2.4GHz' && ![20, 40].includes(width))
+      || (ap.band === '5GHz' && width === 320)) {
+      skippedIncomplete += 1;
       return;
+    }
+    let channelOption = String(ap.channel);
+    if (width !== 20) {
+      const centerFrequency = Number(ap.center_frequency_mhz);
+      if (!Number.isFinite(centerFrequency) || centerFrequency <= 0) {
+        skippedWide += 1;
+        return;
+      }
+      channelOption = ap.channel + '@' + centerFrequency;
     }
     let safeApId = identity.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 42);
     if (!safeApId) {
@@ -142,9 +153,9 @@ export function mapSavedSiteSnapshotToPlannerRadios(snapshot) {
       ap_id: safeApId,
       site_id: siteId,
       band: ap.band,
-      width: '20',
+      width: String(width),
       current_channel: String(ap.channel),
-      options: String(ap.channel),
+      options: channelOption,
     });
   });
   return {

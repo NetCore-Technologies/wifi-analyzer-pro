@@ -1212,15 +1212,18 @@ class FeatureCatalogTests(unittest.TestCase):
             "site_id": "home",
             "access_points": [
                 {"name": "Hall", "bssid": "00:11:22:33:44:55", "model": "AX",
-                 "band": "5GHz", "channel": 36, "channel_width_mhz": 80, "location": "hall"},
+                 "band": "5GHz", "channel": 36, "channel_width_mhz": 80, "center_frequency_mhz": 5210, "location": "hall"},
                 {"name": "Garage", "bssid": "00:11:22:33:44:55", "model": "AX",
-                 "band": "2.4GHz", "channel": 6, "channel_width_mhz": 20,
+                 "band": "2.4GHz", "channel": 6, "channel_width_mhz": 20, "center_frequency_mhz": 2437,
                  "location": "garage", "site_id": "remote"}
             ]
         })["result"]
         self.assertEqual(result["site_count"], 2)
         self.assertEqual(result["access_points_by_band"], {"2.4GHz": 1, "5GHz": 1})
         self.assertEqual(result["duplicate_bssid_count"], 1)
+        self.assertEqual(result["access_points"][0]["center_frequency_mhz"], 5210.0)
+        self.assertEqual(result["access_points"][1]["center_frequency_mhz"], 2437.0)
+        self.assertEqual(result["wide_channel_missing_center_frequency_count"], 0)
         self.assertEqual(result["inventory_field_coverage_pct"], 100.0)
 
     def test_site_inventory_snapshot_rejects_invalid_bssid_and_channel_width(self):
@@ -1230,6 +1233,31 @@ class FeatureCatalogTests(unittest.TestCase):
             run("site_inventory_snapshot", {
                 "access_points": [{"bssid": "00:11:22:33:44:55", "channel_width_mhz": 10}]
             })
+
+    def test_site_inventory_snapshot_preserves_wide_centre_and_counts_missing_evidence(self):
+        result = run("site_inventory_snapshot", {
+            "site_id": "home",
+            "access_points": [
+                {"bssid":"00:11:22:33:44:55","band":"5GHz","channel":36,
+                 "channel_width_mhz":80,"center_frequency_mhz":5210},
+                {"bssid":"00:11:22:33:44:66","band":"6GHz","channel":5,
+                 "channel_width_mhz":160},
+            ],
+        })["result"]
+        self.assertEqual(result["access_points"][0]["center_frequency_mhz"], 5210.0)
+        self.assertIsNone(result["access_points"][1]["center_frequency_mhz"])
+        self.assertEqual(result["wide_channel_missing_center_frequency_count"], 1)
+
+    def test_site_inventory_snapshot_rejects_inconsistent_centre_frequency_evidence(self):
+        with self.assertRaisesRegex(ValueError, "does not contain the primary channel"):
+            run("site_inventory_snapshot", {"site_id":"home","access_points":[{
+                "bssid":"00:11:22:33:44:55","band":"5GHz","channel":36,
+                "channel_width_mhz":80,"center_frequency_mhz":5800,
+            }]})
+        with self.assertRaisesRegex(ValueError, "requires band, channel and channel_width"):
+            run("site_inventory_snapshot", {"site_id":"home","access_points":[{
+                "bssid":"00:11:22:33:44:55","center_frequency_mhz":5210,
+            }]})
 
     def test_site_inventory_snapshot_keeps_empty_inventory_unknown(self):
         result = run("site_inventory_snapshot", {"access_points": []})["result"]

@@ -46,7 +46,7 @@ export default function MultiApChannelPlanner() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Unable to load the saved snapshot.');
       const mapped = mapSavedSiteSnapshotToPlannerRadios(data.snapshot?.snapshot);
-      if (!mapped.radios.length) throw new Error('No 20 MHz AP radio records with site, band and channel evidence were available to import.');
+      if (!mapped.radios.length) throw new Error('No AP radio records with sufficient site, band, channel-width and required centre-frequency evidence were available to import.');
       const rows = mapped.radios.map((radio, index) => ({ ...radio, rowId: radioSequence + index }));
       setRadios(rows);
       setRadioSequence(value => value + rows.length);

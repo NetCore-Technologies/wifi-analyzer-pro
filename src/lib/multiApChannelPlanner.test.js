@@ -54,25 +54,27 @@ test('rejects repeated channel options and invalid change penalties', () => {
   assert.throws(() => buildMultiApPlannerPayload(radios, edges, '0.75'), /penalty must be between 0 and 0.5/);
 });
 
-test('imports only observed single-width AP radios from a saved site snapshot', () => {
+test('imports AP radios with explicit wide-channel centre evidence and skips unsupported records', () => {
   const mapped = mapSavedSiteSnapshotToPlannerRadios({
     site_id: 'hq',
     access_points: [
       { bssid: 'AA:BB:CC:DD:EE:01', band: '2.4GHz', channel: 6, channel_width_mhz: 20 },
-      { bssid: 'AA:BB:CC:DD:EE:02', band: '5GHz', channel: 36, channel_width_mhz: 80 },
-      { bssid: 'AA:BB:CC:DD:EE:03', site_id: 'branch', band: '2.4GHz', channel: 1, channel_width_mhz: 20 },
-      { bssid: 'AA:BB:CC:DD:EE:04', band: null, channel: null, channel_width_mhz: null },
+      { bssid: 'AA:BB:CC:DD:EE:02', band: '5GHz', channel: 36, channel_width_mhz: 80, center_frequency_mhz: 5210 },
+      { bssid: 'AA:BB:CC:DD:EE:03', band: '5GHz', channel: 149, channel_width_mhz: 80 },
+      { bssid: 'AA:BB:CC:DD:EE:04', site_id: 'branch', band: '2.4GHz', channel: 1, channel_width_mhz: 20 },
+      { bssid: 'AA:BB:CC:DD:EE:05', band: null, channel: null, channel_width_mhz: null },
     ],
   });
-  assert.equal(mapped.radios.length, 1);
+  assert.equal(mapped.radios.length, 2);
   assert.equal(mapped.radios[0].site_id, 'hq');
-  assert.equal(mapped.radios[0].current_channel, '6');
   assert.equal(mapped.radios[0].options, '6');
+  assert.equal(mapped.radios[1].width, '80');
+  assert.equal(mapped.radios[1].current_channel, '36');
+  assert.equal(mapped.radios[1].options, '36@5210');
   assert.equal(mapped.skipped_wide_channel_count, 1);
   assert.equal(mapped.skipped_cross_site_count, 1);
   assert.equal(mapped.skipped_incomplete_count, 1);
 });
-
 test('refuses saved snapshots without a site identity or AP inventory', () => {
   assert.throws(() => mapSavedSiteSnapshotToPlannerRadios({ access_points: [] }), /no site identifier/);
   assert.throws(() => mapSavedSiteSnapshotToPlannerRadios({ site_id: 'hq' }), /does not contain an AP inventory/);
