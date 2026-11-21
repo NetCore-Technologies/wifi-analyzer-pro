@@ -170,7 +170,11 @@ def _policy(payload: dict) -> dict:
     return result
 
 
-def _radius_inventory(value: object, field: str) -> tuple[int, list[bool | None]]:
+def _radius_inventory(value: object, field: str) -> tuple[int, list[bool | None], bool]:
+    # Missing inventory means "not observed", while an explicit empty list
+    # means the source confirms that no RADIUS servers are configured.
+    if value is None:
+        return 0, [], False
     if not isinstance(value, list) or len(value) > MAX_RADIUS_SERVERS:
         raise ValueError(f"{field} must be a list containing no more than {MAX_RADIUS_SERVERS} servers")
     addresses = set()
@@ -192,7 +196,7 @@ def _radius_inventory(value: object, field: str) -> tuple[int, list[bool | None]
             _integer(port, f"{item_field}.auth_port", 1, 65535)
         secret_states.append(_boolean(server.get("shared_secret_configured"), f"{item_field}.shared_secret_configured"))
         addresses.add(address)
-    return len(addresses), secret_states
+    return len(addresses), secret_states, True
 
 
 def _finding(
@@ -271,7 +275,7 @@ def run(payload: dict) -> dict:
         captive_portal = _boolean(profile.get("captive_portal_enabled"), f"{field}.captive_portal_enabled")
         management_restricted = _boolean(profile.get("management_access_restricted"), f"{field}.management_access_restricted")
 
-        radius_count, radius_secret_states = _radius_inventory(profile.get("radius_servers", []), f"{field}.radius_servers")
+        radius_count, radius_secret_states, radius_evidence_provided = _radius_inventory(profile.get("radius_servers"), f"{field}.radius_servers")
         profile_findings: list[dict] = []
         profile_risk = 0
 
@@ -322,8 +326,10 @@ def run(payload: dict) -> dict:
                         elif client_cert_required is None:
                             add("EAP_TLS_CLIENT_CERT_UNKNOWN", "medium", "EAP-TLS client-certificate enforcement was not supplied.", "missing")
 
-                    if radius_count == 0:
-                        add("RADIUS_SERVERS_MISSING", "critical", "No RADIUS server records were supplied for an enterprise WLAN.")
+                    if not radius_evidence_provided:
+                        add("RADIUS_SERVER_EVIDENCE_MISSING", "medium", "RADIUS server inventory was not supplied for this enterprise WLAN.", "missing")
+                    elif radius_count == 0:
+                        add("RADIUS_SERVERS_MISSING", "critical", "The supplied configuration confirms that no RADIUS servers are configured.")
                     elif radius_count < policy["minimum_radius_servers"]:
                         add("RADIUS_REDUNDANCY_INSUFFICIENT", "high", "The number of distinct RADIUS servers is below the configured redundancy minimum.")
 
@@ -447,6 +453,7 @@ def run(payload: dict) -> dict:
         "PMF_NOT_REQUIRED": "Require Protected Management Frames where supported by the client estate.",
         "EAP_METHOD_NOT_ALLOWED": "Replace disallowed EAP methods with an approved method, preferably certificate-based EAP-TLS.",
         "RADIUS_SERVERS_MISSING": "Configure RADIUS authentication servers and verify reachability from every WLAN controller.",
+        "RADIUS_SERVER_EVIDENCE_MISSING": "Import the current RADIUS server inventory from the WLAN controller; do not treat an absent export as proof that no servers are configured.",
         "RADIUS_REDUNDANCY_INSUFFICIENT": "Provide the configured minimum number of distinct RADIUS servers or document an approved high-availability design.",
         "RADIUS_SHARED_SECRET_NOT_CONFIGURED": "Configure unique, high-entropy RADIUS shared secrets and store them in the controller's protected credential store.",
         "RADIUS_SERVER_CERT_VALIDATION_DISABLED": "Enable RADIUS server certificate and trusted-name validation to reduce credential interception risk.",

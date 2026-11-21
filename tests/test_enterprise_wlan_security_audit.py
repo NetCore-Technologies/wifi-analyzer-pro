@@ -68,6 +68,12 @@ class EnterpriseWlanSecurityAuditTests(unittest.TestCase):
         self.assertIsNone(result["summary"]["observed_risk_score"])
         self.assertIsNone(result["profiles"][0]["observed_risk_score"])
 
+    def test_explicitly_empty_radius_inventory_is_a_confirmed_violation(self):
+        result = run({"profiles": [corporate_profile(radius_servers=[])]})
+        finding = next(item for item in result["findings"] if item["code"] == "RADIUS_SERVERS_MISSING")
+        self.assertEqual(finding["evidence_state"], "violation")
+        self.assertEqual(finding["severity"], "critical")
+
     def test_profiles_with_both_known_violations_and_missing_evidence_have_unknown_risk(self):
         result = run({"profiles": [corporate_profile(
             security_mode="WPA2-Personal",
