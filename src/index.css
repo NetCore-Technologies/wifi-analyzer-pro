@@ -312,3 +312,25 @@ select option {
 }
 @media(max-width:430px){.wa-main{padding-left:10px!important;padding-right:10px!important}.wa-main [style*="repeat(4,1fr)"]{grid-template-columns:minmax(0,1fr)!important}}
 @media(prefers-reduced-motion:reduce){.wa-shell *,.wa-shell *::before,.wa-shell *::after{scroll-behavior:auto!important}}
+
+.wa-nav-empty {
+  display: grid;
+  justify-items: center;
+  gap: 9px;
+  margin: 16px 12px;
+  padding: 18px 12px;
+  border: 1px dashed rgba(125, 161, 205, .24);
+  border-radius: 10px;
+  color: #7892b2;
+  text-align: center;
+  font-size: 11px;
+}
+.wa-nav-empty button {
+  padding: 5px 9px;
+  border: 1px solid rgba(6, 214, 240, .28);
+  border-radius: 7px;
+  color: #7cecff;
+  background: rgba(6, 214, 240, .07);
+  font: inherit;
+  cursor: pointer;
+}
