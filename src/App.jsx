@@ -1118,7 +1118,10 @@ export default function App() {
         setLiveMode(scanSource==="live");
         if(Array.isArray(scanData.networks))setLiveNets(scanData.networks);
         if(Array.isArray(deviceData.devices))setLiveDevs(deviceData.devices);
-        setLiveSystem(systemData);
+        setLiveSystem({
+          ...systemData,
+          wifi_interface:scanData.interface||availability.interfaces?.[0]||null,
+        });
         setLiveDiag(diagnosticData);
         setLivePhy(phyData);
         setLiveLink(linkData);
