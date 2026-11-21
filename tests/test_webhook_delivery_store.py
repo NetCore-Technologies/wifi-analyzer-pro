@@ -156,6 +156,47 @@ class WebhookDeliveryStoreTests(unittest.TestCase):
             self.store.cancel(first["id"], now=NOW + timedelta(seconds=4))
         self.assertEqual(self.store.summary()["counts_by_status"]["cancelled"], 1)
 
+    def test_retention_prunes_only_old_terminal_rows(self):
+        retained_store = WebhookDeliveryStore(
+            Path(self.temp.name) / "retention.sqlite3",
+            retention_days=7,
+        )
+        old = NOW - timedelta(days=20)
+        delivered = retained_store.enqueue_many([prepared(batch_id="a" * 64)], now=old)["deliveries"][0]
+        delivered_lease = retained_store.claim_due("worker-one", now=old, lease_seconds=30)["jobs"][0]
+        retained_store.complete(
+            delivered["id"], delivered_lease["lease_id"], http_status=202,
+            now=old + timedelta(seconds=1),
+        )
+
+        dead = retained_store.enqueue_many([prepared(batch_id="d" * 64)], now=old)["deliveries"][0]
+        dead_lease = retained_store.claim_due("worker-two", now=old, lease_seconds=30)["jobs"][0]
+        retained_store.fail(dead["id"], dead_lease["lease_id"], "delivery_http_error", now=old + timedelta(seconds=1))
+
+        cancelled = retained_store.enqueue_many([prepared(batch_id="c" * 64)], now=old)["deliveries"][0]
+        retained_store.cancel(cancelled["id"], now=old + timedelta(seconds=1))
+
+        sending = retained_store.enqueue_many([prepared(batch_id="f" * 64)], now=old)["deliveries"][0]
+        sending_lease = retained_store.claim_due("worker-three", now=old, lease_seconds=3600)["jobs"][0]
+        pending = retained_store.enqueue_many([prepared(batch_id="e" * 64)], now=old)["deliveries"][0]
+
+        result = retained_store.prune(now=NOW)
+        self.assertEqual(result["deleted_count"], 3)
+        self.assertEqual(result["deleted_by_status"]["delivered"], 1)
+        self.assertEqual(result["deleted_by_status"]["dead_letter"], 1)
+        self.assertEqual(result["deleted_by_status"]["cancelled"], 1)
+        self.assertIsNone(retained_store.get(delivered["id"]))
+        self.assertIsNone(retained_store.get(dead["id"]))
+        self.assertIsNone(retained_store.get(cancelled["id"]))
+        self.assertIsNotNone(retained_store.get(pending["id"]))
+        self.assertIsNotNone(retained_store.get(sending["id"]))
+        self.assertEqual(sending_lease["status"], "sending")
+
+    def test_retention_configuration_is_bounded(self):
+        for value in (True, 0, 6, 3651):
+            with self.assertRaises(ValueError):
+                WebhookDeliveryStore(Path(self.temp.name) / f"invalid-{value}.sqlite3", retention_days=value)
+
     def test_completion_requires_2xx_and_an_active_lease(self):
         queued = self.store.enqueue_many([prepared()], now=NOW)["deliveries"][0]
         lease = self.store.claim_due("worker-one", now=NOW, lease_seconds=30)["jobs"][0]

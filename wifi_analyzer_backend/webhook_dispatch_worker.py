@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import socket
 import ssl
@@ -48,6 +49,7 @@ else:  # Direct execution in the minimal runtime image.
 
 
 MAX_WORKER_BATCH = 20
+MAX_CONNECTION_ATTEMPTS = 4
 SIGNED_HEADER_NAMES = {
     "Content-Type", "X-WiFiAnalyzer-Key-Id", "X-WiFiAnalyzer-Timestamp",
     "X-WiFiAnalyzer-Signature", "Idempotency-Key",
@@ -121,7 +123,7 @@ class WebhookDispatchWorker:
             raise _DeliveryFailure("delivery_envelope_invalid")
         if not isinstance(timestamp, str) or not timestamp.isdigit() or len(timestamp) > 12:
             raise _DeliveryFailure("delivery_envelope_invalid")
-        if not isinstance(signature, str) or not __import__("re").fullmatch(r"v1=[0-9a-f]{64}", signature):
+        if not isinstance(signature, str) or not re.fullmatch(r"v1=[0-9a-f]{64}", signature):
             raise _DeliveryFailure("delivery_envelope_invalid")
         if idempotency_key != job.get("batch_id"):
             raise _DeliveryFailure("delivery_envelope_invalid")
@@ -132,14 +134,29 @@ class WebhookDispatchWorker:
             decoded = json.loads(body)
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise _DeliveryFailure("delivery_envelope_invalid") from None
+        events = decoded.get("events") if isinstance(decoded, dict) else None
         if (
             not isinstance(decoded, dict)
             or decoded.get("schema_version") != "1.0"
             or decoded.get("batch_id") != job.get("batch_id")
             or decoded.get("key_id") != key_id
-            or not isinstance(decoded.get("events"), list)
-            or len(decoded["events"]) != job.get("event_count")
+            or not isinstance(events, list)
+            or len(events) != job.get("event_count")
         ):
+            raise _DeliveryFailure("delivery_envelope_invalid")
+        body_sites = set()
+        body_unscoped = False
+        for event in events:
+            if not isinstance(event, dict):
+                raise _DeliveryFailure("delivery_envelope_invalid")
+            site_id = event.get("site_id")
+            if site_id is None:
+                body_unscoped = True
+            elif isinstance(site_id, str):
+                body_sites.add(site_id)
+            else:
+                raise _DeliveryFailure("delivery_envelope_invalid")
+        if body_sites != set(job.get("site_ids", [])) or body_unscoped != bool(job.get("has_unscoped_events")):
             raise _DeliveryFailure("delivery_envelope_invalid")
         return host, endpoint, headers, body
 
@@ -182,9 +199,15 @@ class WebhookDispatchWorker:
                 raise _DeliveryFailure("dns_resolution_failed") from None
 
             last_error = None
-            for address in resolved:
+            # Bound sequential attempts even when DNS returns a large address set.
+            attempt_addresses = resolved[:MAX_CONNECTION_ATTEMPTS]
+            for address in attempt_addresses:
                 try:
-                    connection = self.connection_factory(host, address, self.timeout_seconds)
+                    per_attempt_timeout = min(
+                        self.timeout_seconds,
+                        max(1.0, self.lease_seconds / (MAX_CONNECTION_ATTEMPTS * 2)),
+                    )
+                    connection = self.connection_factory(host, address, per_attempt_timeout)
                     break
                 except ssl.SSLError as error:
                     last_error = error
@@ -255,12 +278,16 @@ class WebhookDispatchWorker:
             return self._fail(claimed, "delivery_transport_error")
         finally:
             if connection is not None:
-                connection.close()
+                try:
+                    connection.close()
+                except OSError:
+                    pass
 
     def run_once(self, *, now=None, max_jobs: int = 5) -> dict:
         if isinstance(max_jobs, bool) or not isinstance(max_jobs, int) or not 1 <= max_jobs <= MAX_WORKER_BATCH:
             raise ValueError(f"max_jobs must be from 1 to {MAX_WORKER_BATCH}")
         moment = _timestamp(now, "now") if now is not None else self._now()
+        pruned = self.store.prune(now=moment)
         claim = self.store.claim_due(
             self.worker_id, now=moment, lease_seconds=self.lease_seconds, limit=max_jobs,
         )
@@ -269,6 +296,7 @@ class WebhookDispatchWorker:
         failed = sum(item["status"] in {"retry_wait", "dead_letter", "lease_lost"} for item in results)
         return {
             "worker_id": self.worker_id,
+            "pruned_count": pruned["deleted_count"],
             "claimed_count": claim["claimed_count"],
             "processed_count": len(results),
             "delivered_count": delivered,

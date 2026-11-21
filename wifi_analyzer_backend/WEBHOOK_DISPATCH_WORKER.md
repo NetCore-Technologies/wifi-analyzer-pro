@@ -47,3 +47,14 @@ The worker claims rows with exclusive expiring leases. A worker crash leaves a l
 - The queue uses SQLite WAL mode and is designed for local disk with reliable file locking. Do not place it on NFS/SMB or a shared network filesystem unless the specific locking semantics have been tested. Use one local queue per API instance until a separately coordinated distributed queue is deployed.
 
 This is a single-workspace local delivery service, not a multi-tenant managed notification SaaS. Customer-specific storage, billing/entitlements and centralised dispatcher fleet management remain separate enterprise work.
+
+
+## Retention
+
+The outbox prunes only terminal rows (`delivered`, `dead_letter` and
+`cancelled`) after the configured retention window. Pending, retry-wait and
+currently leased rows are never removed by retention cleanup. The default is
+90 days. Set `WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS` to an integer
+between 7 and 3650 before starting the API/worker. The worker performs pruning
+at the start of each queue cycle and reports only a deleted-row count to logs;
+no event content is emitted.

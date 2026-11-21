@@ -18,6 +18,10 @@ MAX_EVENTS_PER_DELIVERY = 500
 MAX_SITE_IDS = 128
 MAX_LIST_LIMIT = 100
 MAX_ATTEMPTS = 20
+DEFAULT_RETENTION_DAYS = 90
+MIN_RETENTION_DAYS = 7
+MAX_RETENTION_DAYS = 3650
+TERMINAL_STATUSES = {"delivered", "dead_letter", "cancelled"}
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 SITE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -199,7 +203,30 @@ def _normalise_delivery(item: Any) -> dict[str, Any]:
 class WebhookDeliveryStore:
     """SQLite outbox with idempotent enqueue, exclusive leases and bounded retry state."""
 
-    def __init__(self, path: str | os.PathLike[str] | None = None):
+    def __init__(
+        self,
+        path: str | os.PathLike[str] | None = None,
+        *,
+        retention_days: int | None = None,
+    ):
+        if retention_days is None:
+            raw_retention = os.environ.get(
+                "WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS",
+                str(DEFAULT_RETENTION_DAYS),
+            )
+            try:
+                retention_days = int(raw_retention)
+            except (TypeError, ValueError) as error:
+                raise ValueError("WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS must be an integer") from error
+        if (
+            isinstance(retention_days, bool)
+            or not isinstance(retention_days, int)
+            or not MIN_RETENTION_DAYS <= retention_days <= MAX_RETENTION_DAYS
+        ):
+            raise ValueError(
+                f"retention_days must be between {MIN_RETENTION_DAYS} and {MAX_RETENTION_DAYS}"
+            )
+        self.retention_days = retention_days
         configured = path or os.environ.get("WIFI_ANALYZER_WEBHOOK_DELIVERY_DB")
         if configured:
             self.path = Path(configured).expanduser()
@@ -268,6 +295,7 @@ class WebhookDeliveryStore:
             """)
             connection.execute("CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_due ON webhook_deliveries(status, available_at, id)")
             connection.execute("CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_scope ON webhook_deliveries(status, id)")
+            connection.execute("CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_retention ON webhook_deliveries(status, updated_at)")
 
     @staticmethod
     def _public(row: sqlite3.Row) -> dict[str, Any]:
@@ -377,6 +405,32 @@ class WebhookDeliveryStore:
             "created_count": len(created),
             "duplicate_count": len(duplicates),
             "deliveries": created + duplicates,
+        }
+
+    def prune(self, *, now: Any = None) -> dict:
+        """Delete only terminal rows older than the configured retention window."""
+        moment = _now(now)
+        cutoff = (moment - timedelta(days=self.retention_days)).isoformat()
+        counts = {status: 0 for status in sorted(TERMINAL_STATUSES)}
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                "SELECT status, COUNT(*) AS count FROM webhook_deliveries "
+                "WHERE status IN ('delivered','dead_letter','cancelled') AND updated_at < ? "
+                "GROUP BY status",
+                (cutoff,),
+            ).fetchall()
+            counts.update({row["status"]: row["count"] for row in rows})
+            connection.execute(
+                "DELETE FROM webhook_deliveries "
+                "WHERE status IN ('delivered','dead_letter','cancelled') AND updated_at < ?",
+                (cutoff,),
+            )
+        return {
+            "retention_days": self.retention_days,
+            "cutoff": cutoff,
+            "deleted_count": sum(counts.values()),
+            "deleted_by_status": counts,
         }
 
     def get(self, delivery_id: Any, *, include_body: bool = False) -> dict | None:
@@ -567,4 +621,5 @@ class WebhookDeliveryStore:
 __all__ = [
     "WebhookDeliveryStore", "WebhookDeliveryConflictError",
     "WebhookDeliveryNotFoundError", "STATUSES",
+    "DEFAULT_RETENTION_DAYS", "MIN_RETENTION_DAYS", "MAX_RETENTION_DAYS",
 ]

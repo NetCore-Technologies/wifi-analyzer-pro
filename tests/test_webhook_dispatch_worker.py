@@ -155,6 +155,53 @@ class WebhookDispatchWorkerTests(unittest.TestCase):
         self.assertEqual(result["deliveries"][0]["error_code"], "delivery_http_error")
         self.assertEqual(self.store.summary()["counts_by_status"]["retry_wait"], 1)
 
+    def test_connection_attempts_are_bounded_even_with_many_public_dns_answers(self):
+        self.addresses = [
+            "1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4",
+            "9.9.9.9", "149.112.112.112", "208.67.222.222",
+        ]
+        attempts = []
+
+        def unavailable(host, address, timeout):
+            attempts.append((host, address, timeout))
+            raise OSError("connection unavailable")
+
+        worker = WebhookDispatchWorker(
+            self.store, "bounded-worker",
+            resolver=lambda _host: list(self.addresses),
+            connection_factory=unavailable,
+            clock=lambda: self.clock[0],
+            timeout_seconds=20,
+            lease_seconds=30,
+        )
+        result = worker.run_once(now=self.clock[0])
+        self.assertEqual(len(attempts), 4)
+        self.assertTrue(all(item[2] <= 3.75 for item in attempts))
+        self.assertEqual(result["deliveries"][0]["error_code"], "delivery_connection_failed")
+
+    def test_worker_prunes_expired_terminal_records_before_claiming(self):
+        old_store = WebhookDeliveryStore(
+            Path(self.temp.name) / "pruned-worker.sqlite3",
+            retention_days=7,
+        )
+        old_job = old_store.enqueue_many([prepared()], now=NOW - timedelta(days=20))["deliveries"][0]
+        old_lease = old_store.claim_due(
+            "old-worker", now=NOW - timedelta(days=20), lease_seconds=30,
+        )["jobs"][0]
+        old_store.complete(
+            old_lease["id"], old_lease["lease_id"], http_status=202,
+            now=NOW - timedelta(days=20) + timedelta(seconds=1),
+        )
+        worker = WebhookDispatchWorker(
+            old_store, "retention-worker",
+            resolver=lambda _host: self.fail("No DNS lookup expected"),
+            connection_factory=lambda *_args: self.fail("No socket expected"),
+            clock=lambda: NOW,
+        )
+        result = worker.run_once(now=NOW)
+        self.assertEqual(result["pruned_count"], 1)
+        self.assertIsNone(old_store.get(old_job["id"]))
+
     def test_empty_queue_never_resolves_or_connects(self):
         empty = WebhookDeliveryStore(Path(self.temp.name) / "empty.sqlite3")
         worker = WebhookDispatchWorker(
