@@ -143,6 +143,26 @@ export default function BillingPanel() {
     }
   };
 
+  const manageVendorSubscription = async () => {
+    setBusy("vendor-portal");
+    setError("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/license/portal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Vendor portal returned HTTP ${response.status}`);
+      openStripeUrl(data.portal?.url);
+    } catch (err) {
+      setError(err.message || "Could not open NetCore subscription management.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const activateVendorLicense = async () => {
     setBusy("license");
     setError("");
@@ -227,6 +247,11 @@ export default function BillingPanel() {
               <span style={{ color: "#64748b", fontSize: 10 }}>
                 The installation stores the signed token and renewal credential locally; vendor payment secrets remain on the licensing service.
               </span>
+              {productLicense.active && productLicense.renewal_configured ? (
+                <button type="button" disabled={!!busy} onClick={manageVendorSubscription} style={quietButton}>
+                  <ExternalLink size={13}/>{busy === "vendor-portal" ? "Opening…" : "Manage / cancel subscription"}
+                </button>
+              ) : null}
               {productLicense.renewal_configured ? (
                 <button type="button" disabled={!!busy} onClick={syncVendorLicense} style={quietButton}>
                   <RefreshCw size={13}/>{busy === "sync" ? "Syncing…" : "Sync / renew licence"}

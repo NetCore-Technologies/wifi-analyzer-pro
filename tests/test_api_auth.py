@@ -167,6 +167,30 @@ class AuthenticatedApiTests(unittest.TestCase):
             self.assertEqual(result["license"]["plan_id"], "business")
             sync.assert_called_once_with(installation_id=server.BILLING.instance_id())
 
+    def test_vendor_portal_is_owner_only_and_returns_only_validated_stripe_destination(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "vendor portal owner secure password",
+        })
+        owner_token = setup["token"]
+        with patch.object(
+            server.LICENSES,
+            "open_vendor_portal",
+            return_value={"url": "https://billing.stripe.com/p/session_123456"},
+        ) as open_portal:
+            status, result = self.request("POST", "/api/license/portal", {}, token=owner_token)
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["portal"]["url"], "https://billing.stripe.com/p/session_123456")
+        open_portal.assert_called_once_with(installation_id=server.BILLING.instance_id())
+
+        self.request("POST", "/api/users", {
+            "username": "portal.viewer",
+            "password": "portal viewer secure password",
+            "role": "viewer",
+        }, token=owner_token)
+        viewer_token = server.AUTH.login("portal viewer secure password", "portal.viewer")
+        status, denied = self.request("POST", "/api/license/portal", {}, token=viewer_token)
+        self.assertEqual(status, 403, denied)
+
     def test_vendor_license_activation_grants_signed_plan_without_customer_stripe_secrets(self):
         _, setup = self.request("POST", "/api/auth/setup", {
             "password": "vendor license owner secure password",
