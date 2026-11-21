@@ -1144,6 +1144,8 @@ export default function App() {
       if(scanSource==="unknown")throw new Error("The scan endpoint did not identify its observation source");
       setLiveNets(data.networks);
       setLiveMode(scanSource==="live");
+      setLiveError("");
+      setLastUpdated(Date.now());
       addToast(`${scanSource==="demo"?"Demo":"Live"} scan complete — ${data.networks.length} network(s) found`,scanSource==="demo"?"info":"success");
     }catch(error){
       addToast(`Scan failed: ${error.message||"local backend unavailable"}`,"warning");
@@ -1305,7 +1307,7 @@ export default function App() {
             <div>
               <div style={{fontSize:14,fontWeight:700,color:C.text}}>{current?.label||"Dashboard"}</div>
               <div style={{fontSize:10,color:C.muted,display:"flex",alignItems:"center",gap:5}}>
-                <PulseDot col={C.green} size={6}/>
+                <PulseDot col={liveMode?C.green:liveError?C.red:C.purple} size={6}/>
                 <span title={liveError || undefined}>
                   {liveMode
                     ? `LIVE · ${liveSystem?.wifi_interface || "Wi-Fi adapter detected"}`
