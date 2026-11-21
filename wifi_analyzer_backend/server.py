@@ -1943,7 +1943,7 @@ class Handler(BaseHTTPRequestHandler):
                     "rf_change.create_failed", target_type="rf_change_request",
                     target_id=request_fingerprint, outcome="failure", metadata=metadata,
                 )
-                print("[RF CHANGE ERROR] Could not create approval packet")
+                print(f"[RF CHANGE ERROR] {type(error).__name__}: {error}")
                 self.send_json({"error": "RF change approval request could not be created"}, 503)
                 return
             completed = self.audit_event(
