@@ -458,17 +458,43 @@ class WorkspaceBillingStore:
 
     def consume_monthly_feature_run(self) -> dict[str, Any]:
         """Atomically consume one diagnostic execution from the current UTC month."""
-        status = self.status()
-        plan_id = status["plan_id"]
-        limit = int(status["limits"]["feature_runs_monthly"])
         now = float(self._clock())
         usage_month = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m")
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            subscription = connection.execute(
+                """
+                SELECT plan_id, subscription_status, current_period_end, grace_until
+                FROM workspace_subscription WHERE id=1
+                """
+            ).fetchone()
             row = connection.execute(
                 "SELECT used FROM workspace_monthly_usage WHERE usage_month=? AND resource='feature_runs'",
                 (usage_month,),
             ).fetchone()
+
+            # Re-evaluate entitlements after acquiring the SQLite write lock.
+            # A concurrent Stripe cancellation/downgrade therefore wins before
+            # a new run is allowed, rather than racing a stale status() read.
+            subscription = dict(subscription) if subscription else {}
+            raw_status = subscription.get("subscription_status") or "inactive"
+            period_end = subscription.get("current_period_end")
+            grace_until = subscription.get("grace_until")
+            active = (
+                subscription.get("plan_id") in _PLAN_IDS - {"free"}
+                and raw_status in {"active", "trialing"}
+                and isinstance(period_end, (int, float))
+                and not isinstance(period_end, bool)
+                and period_end > now
+            ) or (
+                subscription.get("plan_id") in _PLAN_IDS - {"free"}
+                and raw_status == "past_due"
+                and isinstance(grace_until, (int, float))
+                and not isinstance(grace_until, bool)
+                and grace_until > now
+            )
+            plan_id = subscription.get("plan_id") if active else "free"
+            limit = int(PLAN_CATALOG[plan_id]["limits"]["feature_runs_monthly"])
             used = int(row["used"]) if row else 0
             if used >= limit:
                 return {

@@ -2261,7 +2261,21 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_site_access(_collect_site_ids(payload), require_explicit=True):
                 return
             try:
-                report = run_feature("consolidated_site_audit_report", payload)
+                with BILLING_QUOTA_LOCK:
+                    meter = BILLING.consume_monthly_feature_run()
+                    if not meter["allowed"]:
+                        self.send_json({
+                            "error": "The monthly diagnostic allowance has been reached",
+                            "code": "plan_limit_reached",
+                            **meter,
+                            "upgrade_required": True,
+                        }, 402)
+                        return
+                    try:
+                        report = run_feature("consolidated_site_audit_report", payload)
+                    except Exception:
+                        BILLING.refund_monthly_feature_run(meter["period"])
+                        raise
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return

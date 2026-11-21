@@ -1296,6 +1296,26 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(report["feature"], "F160")
         self.assertEqual(report["result"]["summary"]["site_count"], 1)
+        self.assertEqual(server.BILLING.status()["monthly_usage"]["feature_runs"], 1)
+
+    def test_site_audit_is_blocked_after_free_monthly_allowance_is_exhausted(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "site audit meter owner secure password",
+        })
+        token = setup["token"]
+        self.use_free_billing()
+        for _ in range(100):
+            self.assertTrue(server.BILLING.consume_monthly_feature_run()["allowed"])
+
+        status, result = self.request("POST", "/api/sites/audit", {
+            "sites": [{
+                "site_id": "home",
+                "access_points": [{"ap_id": "gw", "bssid": "00:11:22:33:44:55"}],
+                "links": [],
+            }]
+        }, token=token)
+        self.assertEqual(status, 402, result)
+        self.assertEqual(result["resource"], "feature_runs_monthly")
 
     def test_consolidated_site_audit_requires_authentication(self):
         status, response = self.request("POST", "/api/sites/audit", {"sites": []})
