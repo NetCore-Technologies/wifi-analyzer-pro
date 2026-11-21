@@ -440,6 +440,31 @@ class VendorLicenseServiceTests(unittest.TestCase):
             httpd.server_close()
             thread.join(timeout=3)
 
+    def test_admin_operations_page_has_nonce_csp_and_does_not_persist_token(self):
+        LicensingHandler.service = self.service
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), LicensingHandler)
+        thread = Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{httpd.server_port}"
+        try:
+            with urlopen(f"{base}/admin", timeout=3) as response:
+                html = response.read().decode("utf-8")
+                csp = response.headers.get("Content-Security-Policy", "")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-store")
+                self.assertIn("script-src 'nonce-", csp)
+                self.assertIn("connect-src 'self'", csp)
+                self.assertIn("/api/admin/summary", html)
+                self.assertIn("/api/admin/licenses?limit=100", html)
+                self.assertIn("NETCORE / LICENSING OPERATIONS", html)
+                self.assertNotIn("vendor-admin-token-for-tests", html)
+                self.assertNotIn("localStorage", html)
+                self.assertNotIn("sessionStorage", html)
+                self.assertNotIn("innerHTML", html)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=3)
+
     def test_public_key_exposes_only_verification_key_not_private_material(self):
         result = self.service.public_key()
         self.assertEqual(result["key_id"], "test-key")

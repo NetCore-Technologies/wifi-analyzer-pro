@@ -823,6 +823,99 @@ class VendorLicenseService:
         return {"key_id": self.key_id, "public_key": base64.b64encode(public).decode("ascii")}
 
 
+ADMIN_DASHBOARD_HTML = r"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><title>NetCore Licensing Operations</title>
+<style>
+:root{color-scheme:dark;--bg:#08111b;--panel:#0e1b29;--line:#23384a;--text:#e8f1f7;--muted:#8da2b4;--accent:#50e3d2;--warn:#ffc66d;--bad:#ff8b91}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#14324a 0,#08111b 48%);color:var(--text);font:14px system-ui,sans-serif}
+header{padding:24px clamp(18px,4vw,52px);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+h1{font-size:20px;margin:0;letter-spacing:.02em}header p{margin:5px 0 0;color:var(--muted);font-size:12px}main{max-width:1440px;margin:0 auto;padding:28px clamp(16px,4vw,52px) 60px}
+.card{background:linear-gradient(145deg,#112233ee,#0c1926ee);border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:0 12px 35px #0003}
+.login{max-width:520px;margin:9vh auto}.login h2{font-size:16px;margin:0 0 8px}.login p{color:var(--muted);font-size:12px;line-height:1.6}
+label{display:block;color:var(--muted);font-size:11px;margin:15px 0 7px}input{width:100%;padding:12px;border:1px solid #2c4458;border-radius:8px;background:#07121e;color:var(--text);font:13px ui-monospace,monospace}
+button{border:1px solid #50e3d2aa;background:#14323a;color:var(--accent);border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.secondary{border-color:var(--line);background:#102031;color:var(--text)}
+.toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}.status{min-height:18px;margin-top:10px;color:var(--muted);font-size:12px}.status.error{color:var(--bad)}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0 18px}.metric{min-height:105px}.metric .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}.metric .value{font:26px ui-monospace,monospace;margin-top:12px}.metric .hint{font-size:10px;color:var(--muted);margin-top:5px}
+.section{margin-top:18px}.section h2{font-size:15px;margin:0 0 12px}.section p{font-size:11px;color:var(--muted);margin:-4px 0 13px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:9px}
+table{width:100%;border-collapse:collapse;min-width:720px;font-size:11px}th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #223548;white-space:nowrap}th{background:#102031;color:var(--muted);font-weight:600;position:sticky;top:0}tr:last-child td{border-bottom:0}
+.pill{display:inline-block;border:1px solid #294356;border-radius:99px;padding:3px 7px;color:var(--accent);font-size:9px;text-transform:uppercase}.muted{color:var(--muted)}.warning{color:var(--warn)}.foot{margin-top:20px;color:var(--muted);font-size:10px;line-height:1.6}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.grid{grid-template-columns:1fr}header{align-items:flex-start}.toolbar{align-items:flex-start}}
+</style></head>
+<body>
+<header><div><h1>NETCORE / LICENSING OPERATIONS</h1><p>Vendor subscriptions · licence fleet · catalogue MRR</p></div><span class="pill">Vendor-only</span></header>
+<main>
+<section class="card login" id="login">
+<h2>Connect to vendor control plane</h2><p>Enter the vendor admin bearer token from the protected <code>.env.vendor</code> file. It remains in page memory and is never written to browser storage, cookies or URLs.</p>
+<form id="login-form"><label for="admin-token">Vendor admin token</label><input id="admin-token" type="password" autocomplete="off" minlength="32" required><div style="display:flex;justify-content:flex-end;margin-top:12px"><button id="connect" type="submit">Connect securely</button></div></form>
+<div id="login-status" class="status" role="status" aria-live="polite"></div>
+</section>
+<section id="dashboard" hidden>
+<div class="toolbar"><div><strong>Subscription overview</strong><div class="muted" style="font-size:11px;margin-top:4px">Read-only vendor licensing database view.</div></div><div style="display:flex;gap:8px"><button class="secondary" id="refresh">Refresh</button><button class="secondary" id="disconnect">Disconnect</button></div></div>
+<div id="status" class="status" role="status" aria-live="polite"></div>
+<div class="grid">
+<article class="card metric"><div class="label">Active subscriptions</div><div class="value" id="active">—</div><div class="hint" id="plans">Plan distribution pending</div></article>
+<article class="card metric"><div class="label">Pending checkouts</div><div class="value" id="pending">—</div><div class="hint">Awaiting Stripe confirmation</div></article>
+<article class="card metric"><div class="label">Payment grace</div><div class="value" id="grace">—</div><div class="hint">Past due inside grace window</div></article>
+<article class="card metric"><div class="label">Expired / cancelled</div><div class="value" id="expired">—</div><div class="hint" id="canceling">Scheduled cancellations: —</div></article>
+</div>
+<section class="card section"><h2>Catalogue MRR by currency</h2><p>Stripe recurring list-price value normalised monthly. This is not collected cash, net revenue or profit.</p><div class="table-wrap"><table><thead><tr><th>Currency</th><th>Active subscriptions</th><th>Catalogue MRR</th></tr></thead><tbody id="mrr-body"><tr><td colspan="3" class="muted">Connect to load data.</td></tr></tbody></table></div></section>
+<section class="card section"><h2>Recent customer licences</h2><p>Support and reconciliation view. Activation secrets, secret hashes and Checkout session IDs are never returned by this API.</p><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Plan</th><th>Status</th><th>Currency</th><th>Recurring price</th><th>Period end</th><th>Cancel at period end</th></tr></thead><tbody id="license-body"><tr><td colspan="7" class="muted">Connect to load licences.</td></tr></tbody></table></div></section>
+<div class="foot">Last Stripe event: <span id="last-event">—</span> · Calculated: <span id="calculated">—</span><br>Disconnect when finished. Restrict the service behind VPN/IP allowlists and a trusted TLS proxy. Rotate the token if exposed.</div>
+</section></main>
+<script nonce="__NONCE__">
+(() => {
+"use strict";
+let adminToken="";
+const $=id=>document.getElementById(id);
+const number=value=>Number.isFinite(Number(value))?Number(value).toLocaleString():"—";
+const date=value=>{if(!value)return "—";const parsed=new Date(Number(value)*1000);return Number.isNaN(parsed.getTime())?"—":parsed.toLocaleString();};
+const setStatus=(message,error=false)=>{const node=$("status");node.textContent=message||"";node.className=error?"status error":"status";};
+const formatMoney=(minor,currency)=>{
+ if(!currency||!Number.isFinite(Number(minor)))return "—";
+ try{const code=String(currency).toUpperCase();const digits=new Intl.NumberFormat(undefined,{style:"currency",currency:code}).resolvedOptions().maximumFractionDigits;return new Intl.NumberFormat(undefined,{style:"currency",currency:code}).format(Number(minor)/(10**digits));}
+ catch{return String(currency)+" "+String(minor);}
+};
+const cell=(row,value,className="")=>{const td=document.createElement("td");td.textContent=value===null||value===undefined||value===""?"—":String(value);if(className)td.className=className;row.appendChild(td);return td;};
+const request=async path=>{
+ const response=await fetch(path,{method:"GET",headers:{Authorization:"Bearer "+adminToken,Accept:"application/json"},cache:"no-store",credentials:"omit",redirect:"error"});
+ let data;try{data=await response.json();}catch{throw new Error("Vendor API returned HTTP "+response.status+" with invalid JSON");}
+ if(!response.ok)throw new Error(data.error||"Vendor API returned HTTP "+response.status);return data;
+};
+const renderSummary=summary=>{
+ $("active").textContent=number(summary.active_subscriptions);$("pending").textContent=number(summary.pending_checkouts);$("grace").textContent=number(summary.payment_grace_subscriptions);$("expired").textContent=number(summary.expired_or_cancelled);
+ $("canceling").textContent="Scheduled cancellations: "+number(summary.scheduled_cancellations);
+ const plans=Object.entries(summary.active_plan_counts||{}).map(([key,value])=>key+": "+number(value));$("plans").textContent=plans.join(" · ")||"No active paid plans";
+ $("last-event").textContent=date(summary.last_stripe_event_at);$("calculated").textContent=date(summary.calculated_at);
+ const body=$("mrr-body");body.replaceChildren();const totals=summary.catalog_mrr_by_currency||[];
+ if(!totals.length){const row=document.createElement("tr");const td=cell(row,"No priced active subscriptions","muted");td.colSpan=3;body.appendChild(row);}
+ for(const total of totals){const row=document.createElement("tr");cell(row,String(total.currency||"").toUpperCase());cell(row,number(total.active_subscriptions));cell(row,formatMoney(total.catalog_mrr_minor_units,total.currency));body.appendChild(row);}
+};
+const renderLicenses=result=>{
+ const body=$("license-body");body.replaceChildren();const records=result.licenses||[];
+ if(!records.length){const row=document.createElement("tr");const td=cell(row,"No licences found","muted");td.colSpan=7;body.appendChild(row);return;}
+ for(const item of records){const row=document.createElement("tr");cell(row,item.customer_email||item.installation_id);cell(row,item.plan_id);cell(row,item.subscription_status,item.subscription_status==="active"?"":"warning");cell(row,item.currency?String(item.currency).toUpperCase():"—");const recurring=item.unit_amount===null||item.unit_amount===undefined?"—":formatMoney(item.unit_amount,item.currency)+" / "+(item.billing_interval||"period");cell(row,recurring);cell(row,date(item.current_period_end));cell(row,item.cancel_at_period_end?"Yes":"No");body.appendChild(row);}
+};
+const refresh=async()=>{
+ $("refresh").disabled=true;setStatus("Refreshing vendor subscription data…");
+ try{const values=await Promise.all([request("/api/admin/summary"),request("/api/admin/licenses?limit=100")]);renderSummary(values[0].summary);renderLicenses(values[1]);setStatus("Vendor billing data refreshed.");}
+ catch(error){setStatus(error.message||"Could not load vendor subscription data.",true);}
+ finally{$("refresh").disabled=false;}
+};
+$("login-form").addEventListener("submit",async event=>{
+ event.preventDefault();const candidate=$("admin-token").value;
+ if(candidate.length<32){$("login-status").textContent="Admin token must contain at least 32 characters.";return;}
+ adminToken=candidate;$("connect").disabled=true;$("login-status").textContent="Authenticating…";
+ try{await request("/api/admin/summary");$("admin-token").value="";$("login").hidden=true;$("dashboard").hidden=false;await refresh();}
+ catch(error){adminToken="";$("login-status").textContent=error.message||"Authentication failed.";}
+ finally{$("connect").disabled=false;}
+});
+$("refresh").addEventListener("click",refresh);
+$("disconnect").addEventListener("click",()=>{adminToken="";$("dashboard").hidden=true;$("login").hidden=false;$("login-status").textContent="Disconnected.";$("admin-token").value="";});
+})();
+</script></body></html>""";
+
 MAX_VENDOR_REQUEST_BYTES = 64 * 1024
 
 
@@ -857,14 +950,17 @@ class LicensingHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def send_html(self, content: str, status: int = 200):
+    def send_html(self, content: str, status: int = 200, *, nonce: str | None = None):
         body = content.encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+        policy = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; object-src 'none'; form-action 'none'; frame-ancestors 'none'"
+        if nonce:
+            policy += f"; script-src 'nonce-{nonce}'; connect-src 'self'"
+        self.send_header("Content-Security-Policy", policy)
         self.end_headers()
         self.wfile.write(body)
 
@@ -909,6 +1005,13 @@ class LicensingHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
+        if path in {"/admin", "/admin/"}:
+            nonce = secrets.token_urlsafe(18)
+            self.send_html(
+                ADMIN_DASHBOARD_HTML.replace("__NONCE__", nonce),
+                nonce=nonce,
+            )
+            return
         if path == "/health":
             self.send_json({"status": "ok", "service": "wifi-analyzer-pro-licensing"})
             return
