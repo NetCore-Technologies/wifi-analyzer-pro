@@ -39,6 +39,7 @@ if __package__:
     from .rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
+    from .telemetry_store import WiFiTelemetryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
     from .router_adapters.health_store import (
         AgentAuthenticationError,
@@ -76,6 +77,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
+    from telemetry_store import WiFiTelemetryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
     from router_adapters.health_store import (
         AgentAuthenticationError,
@@ -101,6 +103,8 @@ CORS_ORIGINS = {
 
 AUTH = AuthManager()
 HISTORY = SiteHistoryStore()
+TELEMETRY = WiFiTelemetryStore()
+LOCAL_SITE_ID = os.getenv("WIFI_ANALYZER_LOCAL_SITE_ID", "local")
 AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
 AUDIT = SecurityAuditStore()
@@ -756,6 +760,36 @@ class Handler(BaseHTTPRequestHandler):
             print(f"[AUDIT ERROR] Could not persist event: {action}")
             return None
 
+    def scan_response(self):
+        networks = scan()
+        sampled_at = time.time()
+        interface = get_wifi_iface()
+        source = "demo" if DEMO_MODE else "live"
+        telemetry_status = "disabled_for_demo" if DEMO_MODE else "stored"
+        if not DEMO_MODE:
+            try:
+                TELEMETRY.record_scan(LOCAL_SITE_ID, networks, sampled_at=sampled_at)
+            except Exception:
+                telemetry_status = "unavailable"
+                print("[TELEMETRY ERROR] Could not persist scan rollup")
+        return {
+            "networks": networks,
+            "congestion": channel_congestion(networks),
+            "timestamp": sampled_at,
+            "source": source,
+            "interface": interface,
+            "telemetry": telemetry_status,
+        }
+
+    def diagnostics_response(self):
+        diagnostics = get_diagnostics()
+        if not DEMO_MODE and isinstance(diagnostics, dict):
+            try:
+                TELEMETRY.record_diagnostics(LOCAL_SITE_ID, diagnostics)
+            except Exception:
+                print("[TELEMETRY ERROR] Could not persist diagnostic rollup")
+        return diagnostics
+
     def enforce_rate_limit(self, policy_name, *, client_only=False):
         policy = RATE_LIMIT_POLICIES.get(policy_name)
         if policy is None:
@@ -974,7 +1008,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path == "/api/sites" or path.startswith("/api/sites/history"):
+            elif path == "/api/sites" or path.startswith("/api/sites/history") or path == "/api/telemetry/history":
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -1106,17 +1140,11 @@ class Handler(BaseHTTPRequestHandler):
         api_routes = {
             "/api/users": lambda: {"users": AUTH.list_users(self.bearer_token())},
             "/api/security/audit/summary": AUDIT.summary,
-            "/api/scan": lambda: {
-                "networks": (networks := scan()),
-                "congestion": channel_congestion(networks),
-                "timestamp": time.time(),
-                "source": "demo" if DEMO_MODE else "live",
-                "interface": get_wifi_iface(),
-            },
+            "/api/scan": self.scan_response,
             "/api/system": get_system,
             "/api/phy": get_phy,
             "/api/link": get_link,
-            "/api/diagnostics": get_diagnostics,
+            "/api/diagnostics": self.diagnostics_response,
             "/api/has_wifi": has_wifi,
             "/api/devices": lambda: {"devices": get_devices()},
             "/api/speedtest": run_speedtest,
@@ -1269,6 +1297,36 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"checkpoint": checkpoint})
             elif path == "/api/security/audit/summary":
                 self.send_json({"summary": AUDIT.summary()})
+            elif path == "/api/telemetry/history":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=5)
+                def telemetry_parameter(name):
+                    values = params.get(name, [])
+                    if len(values) > 1:
+                        raise ValueError(f"{name} may be supplied only once")
+                    return values[0] if values else None
+                try:
+                    raw_days = telemetry_parameter("days")
+                    raw_limit = telemetry_parameter("limit")
+                    days = 7 if raw_days is None else int(raw_days)
+                    limit = 5000 if raw_limit is None else int(raw_limit)
+                except ValueError as error:
+                    raise ValueError("days and limit must be integers") from error
+                raw_site_id = telemetry_parameter("site_id")
+                scope = AUTH.site_access(self.bearer_token())
+                if raw_site_id is not None:
+                    if not self.require_site_access([raw_site_id]):
+                        return
+                    site_filter = [raw_site_id]
+                else:
+                    site_filter = None if scope["all_sites"] else scope["site_ids"]
+                rollups = TELEMETRY.history(site_ids=site_filter, days=days, limit=limit)
+                self.send_json({
+                    "days": days,
+                    "retention_days": TELEMETRY.retention_days,
+                    "site_ids": sorted({item["site_id"] for item in rollups}),
+                    "rollups": rollups,
+                    "privacy": "Minute-level aggregate metrics only; SSIDs, BSSIDs and client identifiers are not retained.",
+                })
             elif path == "/api/sites":
                 scope = AUTH.site_access(self.bearer_token())
                 discovered = set(HISTORY.site_ids(limit=100))

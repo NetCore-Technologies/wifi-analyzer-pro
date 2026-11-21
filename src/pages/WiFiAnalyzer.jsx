@@ -20,6 +20,7 @@ import SpeedTestPanel from '../components/wifi/SpeedTestPanel';
 import RogueAPPanel from '../components/wifi/RogueAPPanel';
 import ChannelRecommendPanel from '../components/wifi/ChannelRecommendPanel';
 import PacketLossHistory from '../components/wifi/PacketLossHistory';
+import TelemetryHistoryPanel from '../components/wifi/TelemetryHistoryPanel';
 
 const TABS = [
   { id: 'networks', label: 'Networks', icon: Wifi },
@@ -36,6 +37,7 @@ const TABS = [
   { id: 'rogue', label: 'Rogue AP', icon: ShieldAlert },
   { id: 'recommend', label: 'Channel Candidates', icon: Radio },
   { id: 'losshist', label: 'Loss History', icon: Activity },
+  { id: 'trends', label: 'Historical Trends', icon: Activity },
 ];
 
 export default function WiFiAnalyzer() {
@@ -246,6 +248,12 @@ export default function WiFiAnalyzer() {
                   <div className="glass rounded-xl p-5">
                     <h2 className="text-sm font-semibold text-foreground mb-4">Observed Channel Candidates</h2>
                     <ChannelRecommendPanel congestion={congestion} networks={networks} />
+                  </div>
+                )}
+                {activeTab === 'trends' && (
+                  <div className="glass rounded-xl p-5">
+                    <h2 className="text-sm font-semibold text-foreground mb-4">Historical Site Telemetry</h2>
+                    <TelemetryHistoryPanel />
                   </div>
                 )}
                 {activeTab === 'losshist' && (

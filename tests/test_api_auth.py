@@ -22,6 +22,7 @@ from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJ
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
 from wifi_analyzer_backend.billing import WorkspaceBillingStore, verify_stripe_signature
 from wifi_analyzer_backend.license import VendorLicenseStore, create_signed_license
+from wifi_analyzer_backend.telemetry_store import WiFiTelemetryStore
 from wifi_analyzer_backend.billing import PLAN_CATALOG
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -32,6 +33,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.previous_auth = server.AUTH
         self.previous_history = server.HISTORY
+        self.previous_telemetry = server.TELEMETRY
         self.previous_agent_health = server.AGENT_HEALTH
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
@@ -85,6 +87,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.LIVE_CAPTURE.status.return_value = {"capture": None}
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
+        server.TELEMETRY = WiFiTelemetryStore(path=Path(self.temp.name) / "telemetry.sqlite3")
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
         server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
         server.AUDIT = __import__("wifi_analyzer_backend.audit_store", fromlist=["SecurityAuditStore"]).SecurityAuditStore(
@@ -102,6 +105,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.thread.join(timeout=2)
         server.AUTH = self.previous_auth
         server.HISTORY = self.previous_history
+        server.TELEMETRY = self.previous_telemetry
         server.AGENT_HEALTH = self.previous_agent_health
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
@@ -3319,6 +3323,81 @@ class AuthenticatedApiTests(unittest.TestCase):
         )
         self.assertEqual(history["negotiations"][0]["id"], first["id"])
 
+
+    def test_telemetry_history_persists_live_rollups_and_enforces_site_scope(self):
+        denied, _ = self.request("GET", "/api/telemetry/history")
+        self.assertEqual(denied, 401)
+
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "telemetry history owner secure password",
+        })
+        owner_token = setup["token"]
+        observations = [
+            {"ssid": "Private-SSID", "bssid": "AA:BB:CC:DD:EE:FF", "rssi": -54, "band": "5GHz", "security": "WPA3"},
+            {"ssid": "Guest", "bssid": "00:11:22:33:44:55", "rssi": -70, "band": "2.4GHz", "security": "Open"},
+        ]
+        with (
+            patch.object(server, "DEMO_MODE", False),
+            patch.object(server, "scan", return_value=observations),
+            patch.object(server, "get_wifi_iface", return_value="wlan0"),
+        ):
+            status, scan_result = self.request("GET", "/api/scan", token=owner_token)
+        self.assertEqual(status, 200, scan_result)
+        self.assertEqual(scan_result["telemetry"], "stored")
+
+        with patch.object(server, "get_diagnostics", return_value={
+            "latency_ms": 14.0,
+            "jitter_ms": 2.0,
+            "packet_loss_pct": 0.0,
+        }):
+            status, diagnostics = self.request("GET", "/api/diagnostics", token=owner_token)
+        self.assertEqual(status, 200, diagnostics)
+
+        status, history = self.request("GET", "/api/telemetry/history?days=7", token=owner_token)
+        self.assertEqual(status, 200, history)
+        self.assertEqual(history["site_ids"], ["local"])
+        self.assertEqual(len(history["rollups"]), 1)
+        rollup = history["rollups"][0]
+        self.assertEqual(rollup["sample_count"], 1)
+        self.assertEqual(rollup["average_network_count"], 2)
+        self.assertEqual(rollup["average_rssi_dbm"], -62)
+        self.assertEqual(rollup["average_latency_ms"], 14)
+        self.assertEqual(rollup["average_jitter_ms"], 2)
+        self.assertEqual(rollup["average_packet_loss_pct"], 0)
+        self.assertNotIn("Private-SSID", json.dumps(history))
+        self.assertNotIn("AA:BB:CC:DD:EE:FF", json.dumps(history))
+
+        status, created = self.request("POST", "/api/users", {
+            "username": "telemetry.viewer",
+            "password": "telemetry viewer secure password",
+            "role": "viewer",
+            "all_sites": False,
+            "site_ids": ["branch"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        viewer_token = server.AUTH.login("telemetry viewer secure password", "telemetry.viewer")
+        status, empty_history = self.request("GET", "/api/telemetry/history", token=viewer_token)
+        self.assertEqual(status, 200, empty_history)
+        self.assertEqual(empty_history["rollups"], [])
+        status, hidden_site = self.request(
+            "GET", "/api/telemetry/history?site_id=local", token=viewer_token,
+        )
+        self.assertEqual(status, 403, hidden_site)
+
+    def test_demo_scans_are_never_written_to_historical_telemetry(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "telemetry demo owner secure password",
+        })
+        token = setup["token"]
+        with patch.object(server, "DEMO_MODE", True), patch.object(
+            server, "scan", return_value=[{"ssid": "Synthetic", "rssi": -40}],
+        ):
+            status, result = self.request("GET", "/api/scan", token=token)
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["telemetry"], "disabled_for_demo")
+        status, history = self.request("GET", "/api/telemetry/history", token=token)
+        self.assertEqual(status, 200, history)
+        self.assertEqual(history["rollups"], [])
 
 if __name__ == "__main__":
     unittest.main()
