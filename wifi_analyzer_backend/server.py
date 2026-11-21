@@ -1901,32 +1901,28 @@ class Handler(BaseHTTPRequestHandler):
                             "code": "plan_limit_reached", **meter, "upgrade_required": True,
                         }, 402)
                         return
-                    try:
-                        plan = run_feature("radio_capability_regulatory_channel_planner", planner_input)
-                        packet = run_feature("rf_change_approval_packet", {
-                            "site_id": site_id,
-                            "adapter_id": adapter_id,
-                            "requested_by": actor,
-                            "created_at": now.isoformat(),
-                            "expires_at": (now + timedelta(minutes=expiry_minutes)).isoformat(),
-                            "required_approvals": 2,
-                            "dataset": {
-                                "dataset_ref": dataset_ref,
-                                "fingerprint_sha256": record["fingerprint_sha256"],
-                                "jurisdiction": dataset["jurisdiction"],
-                                "dataset_id": dataset["dataset_id"],
-                                "version": dataset["version"],
-                                "reviewer_id": acknowledgement["reviewer_id"],
-                                "review_reference": acknowledgement["review_reference"],
-                                "reviewed_at": acknowledgement["reviewed_at"],
-                            },
-                            "plan": plan["result"],
-                            "radios": radios,
-                        })
-                        created = RF_CHANGE_REQUESTS.create(site_id, packet["result"])
-                    except Exception:
-                        BILLING.refund_monthly_feature_run(meter["period"])
-                        raise
+                    plan = run_feature("radio_capability_regulatory_channel_planner", planner_input)
+                    packet = run_feature("rf_change_approval_packet", {
+                        "site_id": site_id,
+                        "adapter_id": adapter_id,
+                        "requested_by": actor,
+                        "created_at": now.isoformat(),
+                        "expires_at": (now + timedelta(minutes=expiry_minutes)).isoformat(),
+                        "required_approvals": 2,
+                        "dataset": {
+                            "dataset_ref": dataset_ref,
+                            "fingerprint_sha256": record["fingerprint_sha256"],
+                            "jurisdiction": dataset["jurisdiction"],
+                            "dataset_id": dataset["dataset_id"],
+                            "version": dataset["version"],
+                            "reviewer_id": acknowledgement["reviewer_id"],
+                            "review_reference": acknowledgement["review_reference"],
+                            "reviewed_at": acknowledgement["reviewed_at"],
+                        },
+                        "plan": plan["result"],
+                        "radios": radios,
+                    })
+                    created = RF_CHANGE_REQUESTS.create(site_id, packet["result"])
             except ValueError as error:
                 if meter and meter.get("allowed"):
                     BILLING.refund_monthly_feature_run(meter["period"])
@@ -1936,7 +1932,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 self.send_json({"error": str(error)}, 400)
                 return
-            except Exception:
+            except Exception as error:
                 if meter and meter.get("allowed"):
                     BILLING.refund_monthly_feature_run(meter["period"])
                 self.audit_event(
