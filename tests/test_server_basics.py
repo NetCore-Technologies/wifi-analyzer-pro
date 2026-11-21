@@ -1,5 +1,6 @@
 """Regression tests for measured Wi-Fi data and platform-independent helpers."""
 import unittest
+import json
 from unittest.mock import patch
 
 from wifi_analyzer_backend import server
@@ -86,6 +87,82 @@ class ScanParserTests(unittest.TestCase):
         self.assertEqual(networks[0]["security"], "WPA3")
 
 
+    def test_iw_parser_keeps_missing_measurements_unknown(self):
+        output = """BSS aa:bb:cc:dd:ee:04(on wlan0)
+        SSID: Partial-Scan
+        """
+        network = server.parse_iw(output)[0]
+        self.assertEqual(network["ssid"], "Partial-Scan")
+        self.assertIsNone(network["frequency"])
+        self.assertIsNone(network["channel"])
+        self.assertIsNone(network["band"])
+        self.assertIsNone(network["rssi"])
+        self.assertIsNone(network["quality"])
+        self.assertIsNone(network["snr"])
+
+    def test_iwlist_parser_derives_channel_only_from_reported_frequency(self):
+        output = """Cell 01 - Address: AA:BB:CC:DD:EE:05
+        ESSID:"Measured-Frequency"
+        Frequency:5.180 GHz
+        """
+        network = server.parse_iwlist(output)[0]
+        self.assertEqual(network["frequency"], 5.18)
+        self.assertEqual(network["channel"], 36)
+        self.assertEqual(network["band"], "5GHz")
+        self.assertIsNone(network["rssi"])
+        self.assertIsNone(network["quality"])
+
+    def test_netsh_signal_percentage_is_not_relabelled_as_measured_rssi(self):
+        output = """SSID 1 : Windows-Network
+            BSSID 1 : aa:bb:cc:dd:ee:06
+            Signal : 80%
+            Channel : 36
+            Authentication : WPA2-Personal
+        """
+        network = server.parse_netsh(output)[0]
+        self.assertEqual(network["signal_pct"], 80)
+        self.assertIsNone(network["rssi"])
+        self.assertIsNone(network["quality"])
+        self.assertEqual(network["channel"], 36)
+        self.assertIsNone(network["band"])
+        self.assertIsNone(network["frequency"])
+
+    def test_system_profiler_does_not_invent_signal_channel_or_band(self):
+        output = json.dumps({
+            "SPAirPortDataType": [{
+                "spairport_airport_other_local_wireless_networks": [{
+                    "_name": "Partial-Mac-Scan",
+                    "spairport_network_bssid": "AA:BB:CC:DD:EE:07",
+                }],
+            }],
+        })
+        network = server.parse_system_profiler(output)[0]
+        self.assertIsNone(network["rssi"])
+        self.assertIsNone(network["quality"])
+        self.assertIsNone(network["channel"])
+        self.assertIsNone(network["frequency"])
+        self.assertIsNone(network["band"])
+
+    def test_system_profiler_parses_explicit_band_and_signal_noise_pair(self):
+        output = json.dumps({
+            "SPAirPortDataType": [{
+                "spairport_airport_other_local_wireless_networks": [{
+                    "_name": "Measured-Mac-Scan",
+                    "spairport_network_bssid": "AA:BB:CC:DD:EE:08",
+                    "spairport_network_channel": "36 (5GHz, 80MHz)",
+                    "spairport_signal_noise": "-58 dBm / -95 dBm",
+                    "spairport_security_mode": "WPA2 Personal",
+                }],
+            }],
+        })
+        network = server.parse_system_profiler(output)[0]
+        self.assertEqual(network["band"], "5GHz")
+        self.assertEqual(network["channel"], 36)
+        self.assertEqual(network["frequency"], 5.18)
+        self.assertEqual(network["rssi"], -58)
+        self.assertEqual(network["noise"], -95)
+        self.assertEqual(network["snr"], 37)
+
 class ScanModeTests(unittest.TestCase):
     def test_missing_linux_adapter_returns_no_live_networks(self):
         with patch.object(server, "DEMO_MODE", False), patch.object(server, "OS", "Linux"), patch.object(server, "get_wifi_iface", return_value=None):
@@ -99,6 +176,21 @@ class ScanModeTests(unittest.TestCase):
 
 
 class ChannelCongestionTests(unittest.TestCase):
+    def test_ignores_malformed_channel_and_unknown_band_records(self):
+        networks = [
+            {"band": "2.4GHz", "channel": 6},
+            {"band": "2.4GHz", "channel": "not-a-channel"},
+            {"band": "2.4GHz", "channel": True},
+            {"band": "2.4GHz", "channel": 234},
+            {"band": None, "channel": 36},
+            {"band": "5GHz", "channel": 36},
+        ]
+        result = server.channel_congestion(networks)
+        self.assertEqual(result["2.4GHz"], {4: 1, 5: 1, 6: 1, 7: 1, 8: 1})
+        self.assertEqual(result["5GHz"], {36: 1})
+        self.assertEqual(result["6GHz"], {})
+
+
     def test_counts_channels_separately_by_band(self):
         networks = [
             {"band": "2.4GHz", "channel": 1},

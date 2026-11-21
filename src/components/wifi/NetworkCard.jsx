@@ -44,6 +44,7 @@ export default function NetworkCard({ network, index, isSelected, onClick }) {
             <Metric icon={Activity} label="RSRQ" value={metric(network?.rsrq, ' dB')} color={color.text} />
             <Metric icon={Radio} label="SNR" value={metric(network?.snr, ' dB')} color={color.text} />
             <Metric icon={Radio} label="SINR" value={metric(network?.sinr, ' dB')} color={color.text} />
+            <Metric icon={Radio} label="Signal Quality" value={metric(network?.signal_pct, '%')} color={color.text} />
             <Metric icon={Zap} label="Link Speed" value={metric(network?.link_speed, ' Mbps')} color={color.text} />
             <Metric icon={Wifi} label="Frequency" value={frequency(network?.frequency)} color={color.text} />
             <div className="col-span-2"><SignalStrengthBar rssi={network?.rssi} /></div>

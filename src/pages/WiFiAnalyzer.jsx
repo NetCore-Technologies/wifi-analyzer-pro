@@ -278,7 +278,7 @@ export default function WiFiAnalyzer() {
 
             <div className="glass rounded-xl p-4 space-y-3">
               <h2 className="text-sm font-semibold text-muted-foreground">Strongest Signals</h2>
-              {sorted.filter(net => net.rssi != null && Number.isFinite(Number(net.rssi))).slice(0, 5).map(net => {
+              {sorted.filter(net => net.rssi !== null && net.rssi !== undefined && net.rssi !== '' && Number.isFinite(Number(net.rssi)) && Number(net.rssi) >= -127 && Number(net.rssi) <= 0).slice(0, 5).map(net => {
                 const quality = Math.max(0, Math.min(100, 2 * (Number(net.rssi) + 100)));
                 const color = Number(net.rssi) >= -55 ? 'bg-green-400' : Number(net.rssi) >= -65 ? 'bg-cyan-400' : Number(net.rssi) >= -75 ? 'bg-yellow-400' : 'bg-red-400';
                 return (

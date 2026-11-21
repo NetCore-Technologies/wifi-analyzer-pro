@@ -6,7 +6,7 @@ Run:  sudo python3 server.py
 Then open:  http://<pi-ip>:199
 """
 
-import sys, os, json, platform, subprocess, re, time, mimetypes
+import sys, os, json, platform, subprocess, re, time, mimetypes, math
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
 from datetime import datetime, timezone
@@ -197,10 +197,30 @@ def link_speed(rssi, band):
         return 11
 
 def enrich(net):
-    """Calculate signal-to-noise only when a real noise measurement exists."""
-    net["quality"] = rssi_quality(net["rssi"])
-    if net.get("noise") is not None:
-        net["snr"] = net["rssi"] - net["noise"]
+    """Derive quality/SNR only from valid, measured RSSI and noise values."""
+    rssi = net.get("rssi")
+    valid_rssi = (
+        isinstance(rssi, (int, float))
+        and not isinstance(rssi, bool)
+        and math.isfinite(rssi)
+        and -127 <= rssi <= 0
+    )
+    net["quality"] = rssi_quality(rssi) if valid_rssi else None
+    noise = net.get("noise")
+    valid_noise = (
+        isinstance(noise, (int, float))
+        and not isinstance(noise, bool)
+        and math.isfinite(noise)
+        and -150 <= noise <= 0
+    )
+    if valid_rssi and valid_noise:
+        net["snr"] = rssi - noise
+    elif net.get("snr") is not None:
+        snr = net["snr"]
+        if not isinstance(snr, (int, float)) or isinstance(snr, bool) or not math.isfinite(snr) or not -20 <= snr <= 150:
+            net["snr"] = None
+    else:
+        net["snr"] = None
     return net
 
 # ── Scan ──────────────────────────────────────────────────────────────────────
@@ -284,96 +304,166 @@ def scan():
     return []
 
 def parse_iwlist(out):
-    nets=[]
+    nets = []
     for cell in re.split(r"Cell \d+ -", out)[1:]:
-        n={}
-        m=re.search(r'ESSID:"([^"]*)"',cell); n["ssid"]=m.group(1) if m else ""
-        m=re.search(r"Address: ([0-9A-Fa-f:]{17})",cell); n["bssid"]=m.group(1) if m else ""
-        m=re.search(r"Frequency:([\d.]+)",cell); n["frequency"]=float(m.group(1)) if m else 2.412
-        m=re.search(r"Channel:(\d+)",cell); n["channel"]=int(m.group(1)) if m else 0
-        m=re.search(r"Signal level=(-?\d+)",cell); n["rssi"]=int(m.group(1)) if m else -100
-        n["security"]=security_from_ies(cell)
-        n["security_detail"]=n["security"]
-        n["band"]=frequency_band(n["frequency"] * 1000)
-        nets.append(enrich(n))
+        network = {}
+        match = re.search(r'ESSID:"([^"]*)"', cell)
+        network["ssid"] = match.group(1) if match else ""
+        match = re.search(r"Address: ([0-9A-Fa-f:]{17})", cell)
+        network["bssid"] = match.group(1).upper() if match else None
+        match = re.search(r"Frequency:([\d.]+)", cell)
+        frequency_ghz = float(match.group(1)) if match else None
+        frequency_mhz = round(frequency_ghz * 1000) if frequency_ghz is not None else None
+        network["frequency"] = frequency_ghz
+        match = re.search(r"Channel:(\d+)", cell)
+        channel = int(match.group(1)) if match else freq_to_ch(frequency_mhz) if frequency_mhz is not None else None
+        network["channel"] = channel or None
+        match = re.search(r"Signal level=(-?\d+)", cell)
+        network["rssi"] = int(match.group(1)) if match else None
+        network["security"] = security_from_ies(cell)
+        network["security_detail"] = network["security"]
+        network["band"] = frequency_band(frequency_mhz) if frequency_mhz is not None else None
+        nets.append(enrich(network))
     return nets
 
 def parse_iw(out):
-    nets=[]
-    blocks=re.split(r"BSS ([0-9a-f:]{17})",out); i=1
-    while i<len(blocks):
-        bssid=blocks[i]; body=blocks[i+1] if i+1<len(blocks) else ""; i+=2
-        n={"bssid":bssid.upper()}
-        m=re.search(r"SSID: (.+)",body); n["ssid"]=m.group(1).strip() if m else ""
-        m=re.search(r"freq: (\d+)",body); fmhz=int(m.group(1)) if m else 2412
-        n["frequency"]=round(fmhz/1000,3)
-        m=re.search(r"DS Parameter set: channel (\d+)",body) or re.search(r"\* primary channel: (\d+)",body)
-        n["channel"]=int(m.group(1)) if m else freq_to_ch(fmhz)
-        m=re.search(r"signal: (-[\d.]+) dBm",body); n["rssi"]=int(float(m.group(1))) if m else -100
-        n["security"]=security_from_ies(body)
-        n["security_detail"]=n["security"]
-        n["band"]=frequency_band(fmhz)
-        nets.append(enrich(n))
+    nets = []
+    blocks = re.split(r"BSS ([0-9a-f:]{17})", out, flags=re.I)
+    index = 1
+    while index < len(blocks):
+        bssid = blocks[index]
+        body = blocks[index + 1] if index + 1 < len(blocks) else ""
+        index += 2
+        network = {"bssid": bssid.upper()}
+        match = re.search(r"SSID: (.+)", body)
+        network["ssid"] = match.group(1).strip() if match else ""
+        match = re.search(r"freq: (\d+)", body)
+        frequency_mhz = int(match.group(1)) if match else None
+        network["frequency"] = round(frequency_mhz / 1000, 3) if frequency_mhz is not None else None
+        match = re.search(r"DS Parameter set: channel (\d+)", body) or re.search(r"\* primary channel: (\d+)", body)
+        channel = int(match.group(1)) if match else freq_to_ch(frequency_mhz) if frequency_mhz is not None else None
+        network["channel"] = channel or None
+        match = re.search(r"signal: (-?[\d.]+) dBm", body)
+        network["rssi"] = float(match.group(1)) if match else None
+        network["security"] = security_from_ies(body)
+        network["security_detail"] = network["security"]
+        network["band"] = frequency_band(frequency_mhz) if frequency_mhz is not None else None
+        nets.append(enrich(network))
     return nets
 
 def parse_airport(out):
-    nets=[]
+    nets = []
     for line in out.strip().split("\n")[1:]:
-        p=line.split()
-        if len(p)<7: continue
-        n={"ssid":p[0],"bssid":p[1].upper(),"rssi":int(p[2]),"channel":int(p[3].split(",")[0])}
-        fmhz=ch_to_freq(n["channel"]); n["frequency"]=round(fmhz/1000,3)
-        n["security"]=p[6] if len(p)>6 else "Open"; n["security_detail"]=n["security"]
-        n["band"]=frequency_band(fmhz)
-        nets.append(enrich(n))
+        parts = line.split()
+        if len(parts) < 7:
+            continue
+        try:
+            rssi = int(parts[2])
+        except (ValueError, TypeError):
+            rssi = None
+        try:
+            channel = int(parts[3].split(",")[0])
+        except (ValueError, TypeError):
+            channel = None
+        # airport -s reports a channel but not an unambiguous band/frequency.
+        # 2.4/5/6 GHz channel numbers overlap, so do not invent a band mapping.
+        security = parts[6] if len(parts) > 6 else "Unknown"
+        network = {
+            "ssid": parts[0],
+            "bssid": parts[1].upper() if re.fullmatch(r"[0-9A-Fa-f:]{17}", parts[1]) else None,
+            "rssi": rssi,
+            "channel": channel,
+            "frequency": None,
+            "band": None,
+            "security": security,
+            "security_detail": security,
+        }
+        nets.append(enrich(network))
     return nets
 
 def parse_system_profiler(out):
     nets = []
     try:
         data = json.loads(out)
-        ifaces = data.get("SPAirPortDataType", [])
-        for iface in ifaces:
-            for net in iface.get("spairport_airport_other_local_wireless_networks", []):
-                n = {}
-                n["ssid"] = net.get("_name", "")
-                n["bssid"] = net.get("spairport_network_bssid", "N/A").upper()
-                rssi_str = net.get("spairport_signal_noise", "").split(" / ")[0]
-                try: n["rssi"] = int(rssi_str.replace("dBm","").strip())
-                except: n["rssi"] = -80
-                ch_str = net.get("spairport_network_channel", "0")
-                try: n["channel"] = int(re.search(r"\d+", ch_str).group())
-                except: n["channel"] = 6
-                fmhz = ch_to_freq(n["channel"])
-                n["frequency"] = round(fmhz / 1000, 3)
-                n["band"] = "5GHz" if fmhz > 3000 else "2.4GHz"
-                n["security"] = net.get("spairport_security_mode", "Open")
-                n["security_detail"] = n["security"]
-                nets.append(enrich(n))
-    except: pass
+        for interface in data.get("SPAirPortDataType", []):
+            for source in interface.get("spairport_airport_other_local_wireless_networks", []):
+                channel_text = source.get("spairport_network_channel", "")
+                channel_match = re.search(r"\b(\d{1,3})\b", str(channel_text))
+                channel = int(channel_match.group(1)) if channel_match else None
+                band_match = re.search(r"(2\.4|5|6)\s*GHz", str(channel_text), re.I)
+                band = {"2.4": "2.4GHz", "5": "5GHz", "6": "6GHz"}.get(band_match.group(1)) if band_match else None
+                frequency_mhz = None
+                if channel is not None and band == "2.4GHz" and 1 <= channel <= 14:
+                    frequency_mhz = 2484 if channel == 14 else 2407 + 5 * channel
+                elif channel is not None and band == "5GHz" and 32 <= channel <= 177:
+                    frequency_mhz = 5000 + 5 * channel
+                elif channel is not None and band == "6GHz" and 1 <= channel <= 233:
+                    frequency_mhz = 5935 if channel == 2 else 5950 + 5 * channel
+
+                signal_noise = str(source.get("spairport_signal_noise", ""))
+                signal_match = re.search(r"(-?\d+(?:\.\d+)?)\s*dBm", signal_noise, re.I)
+                noise_match = re.search(r"/\s*(-?\d+(?:\.\d+)?)\s*dBm", signal_noise, re.I)
+                rssi = float(signal_match.group(1)) if signal_match else None
+                noise = float(noise_match.group(1)) if noise_match else None
+                bssid = str(source.get("spairport_network_bssid", "")).upper()
+                security = source.get("spairport_security_mode") or "Unknown"
+                network = {
+                    "ssid": source.get("_name", ""),
+                    "bssid": bssid if re.fullmatch(r"[0-9A-F]{2}(?::[0-9A-F]{2}){5}", bssid) else None,
+                    "rssi": rssi,
+                    "noise": noise,
+                    "channel": channel,
+                    "frequency": round(frequency_mhz / 1000, 3) if frequency_mhz is not None else None,
+                    "band": band,
+                    "security": security,
+                    "security_detail": security,
+                }
+                nets.append(enrich(network))
+    except (TypeError, ValueError, AttributeError):
+        return nets
     return nets
 
 def parse_netsh(out):
-    nets=[]
-    for block in re.split(r"SSID \d+ :",out)[1:]:
-        n={}
-        m=re.search(r"^\s*(.+)",block); n["ssid"]=m.group(1).strip() if m else ""
-        m=re.search(r"BSSID \d+\s*:\s*([0-9a-f:]{17})",block,re.I); n["bssid"]=m.group(1).upper() if m else "N/A"
-        m=re.search(r"Signal\s*:\s*(\d+)%",block); pct=int(m.group(1)) if m else 50
-        n["rssi"]=int(pct/2)-100
-        m=re.search(r"Channel\s*:\s*(\d+)",block); n["channel"]=int(m.group(1)) if m else 6
-        fmhz=ch_to_freq(n["channel"]); n["frequency"]=round(fmhz/1000,3)
-        m=re.search(r"Authentication\s*:\s*(.+)",block); n["security"]=m.group(1).strip() if m else "Open"
-        n["security_detail"]=n["security"]; n["band"]=frequency_band(fmhz)
-        nets.append(enrich(n))
+    nets = []
+    for block in re.split(r"SSID \d+ :", out)[1:]:
+        network = {}
+        match = re.search(r"^\s*(.+)", block)
+        network["ssid"] = match.group(1).strip() if match else ""
+        match = re.search(r"BSSID \d+\s*:\s*([0-9a-f:]{17})", block, re.I)
+        network["bssid"] = match.group(1).upper() if match else None
+        match = re.search(r"Signal\s*:\s*(\d+)%", block)
+        network["signal_pct"] = int(match.group(1)) if match else None
+        # netsh reports a percentage, not dBm. Do not turn it into a fabricated RSSI value.
+        network["rssi"] = None
+        match = re.search(r"Channel\s*:\s*(\d+)", block)
+        network["channel"] = int(match.group(1)) if match else None
+        match = re.search(r"Band\s*:\s*(2\.4|5|6)\s*GHz", block, re.I)
+        if match:
+            band_number = match.group(1)
+            network["band"] = {"2.4": "2.4GHz", "5": "5GHz", "6": "6GHz"}[band_number]
+        else:
+            network["band"] = None
+        network["frequency"] = None
+        match = re.search(r"Authentication\s*:\s*(.+)", block)
+        network["security"] = match.group(1).strip() if match else "Unknown"
+        network["security_detail"] = network["security"]
+        nets.append(enrich(network))
     return nets
 
 def channel_congestion(networks):
     congestion = {"2.4GHz": {}, "5GHz": {}, "6GHz": {}}
     for network in networks:
-        channel = int(network.get("channel") or 0)
-        band = network.get("band", "2.4GHz")
-        if channel < 1:
+        raw_channel = network.get("channel")
+        if isinstance(raw_channel, bool):
+            continue
+        try:
+            channel = int(raw_channel)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if channel < 1 or channel > 233 or str(raw_channel).strip() != str(channel):
+            continue
+        band = network.get("band")
+        if band not in {"2.4GHz", "5GHz", "6GHz"}:
             continue
         if band == "2.4GHz":
             for adjacent in range(max(1, channel - 2), min(14, channel + 3)):
