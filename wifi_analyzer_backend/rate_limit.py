@@ -27,6 +27,7 @@ DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "api.webhook.enqueue": (20, 60),
     "api.webhook.manage": (30, 60),
     "api.webhook.probe": (10, 300),
+    "api.billing.webhook": (120, 60),
 }
 
 

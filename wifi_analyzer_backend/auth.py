@@ -41,14 +41,14 @@ class MFARequiredError(PermissionError):
 
 ROLE_PERMISSIONS = {
     "owner": frozenset({
-        "users.manage", "agents.manage", "agents.read",
+        "users.manage", "billing.manage", "agents.manage", "agents.read",
         "reports.manage", "reports.read",
         "webhooks.manage", "webhooks.read",
         "sites.manage", "sites.read",
         "diagnostics.run", "diagnostics.read",
     }),
     "admin": frozenset({
-        "users.manage", "agents.manage", "agents.read",
+        "users.manage", "billing.manage", "agents.manage", "agents.read",
         "reports.manage", "reports.read",
         "webhooks.manage", "webhooks.read",
         "sites.manage", "sites.read",
@@ -730,7 +730,7 @@ class AuthManager:
 
     def has_permission(self, token: str | None, permission: str) -> bool:
         if permission not in {
-            "users.manage", "agents.manage", "agents.read",
+            "users.manage", "billing.manage", "agents.manage", "agents.read",
             "reports.manage", "reports.read", "webhooks.manage", "webhooks.read",
             "sites.manage", "sites.read",
             "diagnostics.run", "diagnostics.read",

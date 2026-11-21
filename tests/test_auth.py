@@ -175,6 +175,16 @@ class AuthManagerTests(unittest.TestCase):
         self.assertFalse(self.auth.has_permission(viewer_token, "diagnostics.run"))
         self.assertFalse(self.auth.has_permission(viewer_token, "users.manage"))
 
+    def test_billing_management_is_limited_to_workspace_owners_and_administrators(self):
+        owner = self.auth.setup("owner passphrase is secure")
+        self.assertTrue(self.auth.has_permission(owner, "billing.manage"))
+        admin = self.auth.create_user(owner, "billing.admin", "billing admin password", "admin")
+        admin_token = self.auth.login("billing admin password", "billing.admin")
+        self.assertTrue(self.auth.has_permission(admin_token, "billing.manage"))
+        analyst = self.auth.create_user(owner, "billing.analyst", "billing analyst password", "analyst")
+        analyst_token = self.auth.login("billing analyst password", "billing.analyst")
+        self.assertFalse(self.auth.has_permission(analyst_token, "billing.manage"))
+
     def test_network_admin_can_manage_network_operations_but_not_people(self):
         owner = self.auth.setup("owner passphrase is secure")
         self.auth.create_user(owner, "netadmin", "network admin passphrase", "network_admin")
