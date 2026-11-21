@@ -169,6 +169,8 @@ export default function FloorplanRfSurveyPanel() {
   const [historyReports, setHistoryReports] = useState([]);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState('');
+  const [historyCanManage, setHistoryCanManage] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState('');
   const [activeReport, setActiveReport] = useState(null);
   const [reportLabel, setReportLabel] = useState('');
 
@@ -203,8 +205,10 @@ export default function FloorplanRfSurveyPanel() {
       if (!response.ok) throw new Error(data.error || 'Unable to load saved RF surveys for this site.');
       if (!Array.isArray(data.reports)) throw new Error('The RF survey history response is invalid.');
       setHistoryReports(data.reports);
+      setHistoryCanManage(data.can_manage === true);
     } catch (loadError) {
       setHistoryReports([]);
+      setHistoryCanManage(false);
       setHistoryError(loadError.message || 'Unable to load RF survey history.');
     } finally {
       setHistoryBusy(false);
@@ -235,6 +239,37 @@ export default function FloorplanRfSurveyPanel() {
       setError('');
     } catch (loadError) {
       setHistoryError(loadError.message || 'Unable to retrieve the saved RF survey.');
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
+  async function deleteSavedReport(report) {
+    if (!report?.survey_id || !historySiteId) return;
+    setHistoryBusy(true);
+    setHistoryError('');
+    try {
+      const response = await apiFetch(apiBase() + '/api/sites/rf-surveys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation: 'delete',
+          site_id: historySiteId,
+          survey_id: report.survey_id,
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to delete the saved RF survey.');
+      if (activeReport?.survey_id === report.survey_id) {
+        setActiveReport(null);
+        setResult(null);
+      }
+      setDeleteTarget('');
+      await loadHistory();
+      if (data.audit_status) setHistoryError(data.audit_status);
+    } catch (deleteError) {
+      setHistoryError(deleteError.message || 'Unable to delete the saved RF survey.');
     } finally {
       setHistoryBusy(false);
     }
@@ -400,10 +435,29 @@ export default function FloorplanRfSurveyPanel() {
                     {report.floorplan_id} · {report.measurement_count} measurements · {new Date(report.created_at).toLocaleString()}
                   </div>
                 </div>
-                <button type="button" onClick={() => void openSavedReport(report)} disabled={historyBusy}
-                  className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs disabled:opacity-50">
-                  Open report
-                </button>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => void openSavedReport(report)} disabled={historyBusy}
+                    className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs disabled:opacity-50">
+                    Open report
+                  </button>
+                  {historyCanManage && (
+                    <button type="button" onClick={() => setDeleteTarget(current => current === report.survey_id ? '' : report.survey_id)}
+                      disabled={historyBusy} className="px-3 py-1.5 rounded-lg border border-red-400/30 text-red-400 text-xs disabled:opacity-50">
+                      Remove
+                    </button>
+                  )}
+                </div>
+                {historyCanManage && deleteTarget === report.survey_id && (
+                  <div className="w-full rounded-lg border border-red-400/25 bg-red-400/5 p-2 flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">Permanently remove this saved report from the site history?</span>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => void deleteSavedReport(report)} disabled={historyBusy}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-400/30 text-red-400 text-xs disabled:opacity-50">Delete report</button>
+                      <button type="button" onClick={() => setDeleteTarget('')} disabled={historyBusy}
+                        className="px-3 py-1.5 rounded-lg bg-secondary border border-border text-xs text-foreground disabled:opacity-50">Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

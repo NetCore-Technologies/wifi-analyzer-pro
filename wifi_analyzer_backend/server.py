@@ -1493,6 +1493,7 @@ class Handler(BaseHTTPRequestHandler):
                     "reports": reports,
                     "report_count": len(reports),
                     "retention_days": RF_SURVEYS.retention_days,
+                    "can_manage": AUTH.has_permission(self.bearer_token(), "sites.manage"),
                 })
             elif path.startswith("/api/sites/rf-surveys/"):
                 survey_id = unquote(path[len("/api/sites/rf-surveys/"):])
@@ -1699,6 +1700,65 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/sites/rf-surveys" and payload.get("operation") == "delete":
+            site_id = payload.get("site_id")
+            survey_id = payload.get("survey_id")
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            if not isinstance(survey_id, str) or not survey_id:
+                self.send_json({"error": "survey_id is required"}, 400)
+                return
+            fingerprint = hashlib.sha256(
+                (str(site_id) + "\\0" + survey_id).encode("utf-8")
+            ).hexdigest()[:24]
+            metadata = {"site_id": site_id, "report_fingerprint": fingerprint}
+            requested = self.audit_event(
+                "rf_survey.delete_requested",
+                target_type="rf_survey_report",
+                target_id=fingerprint,
+                metadata=metadata,
+            )
+            if requested is None:
+                self.send_json({
+                    "error": "The security audit ledger is unavailable; no report was deleted"
+                }, 503)
+                return
+            try:
+                deleted = RF_SURVEYS.delete(site_id, survey_id)
+            except ValueError as error:
+                self.audit_event(
+                    "rf_survey.delete_rejected",
+                    target_type="rf_survey_report",
+                    target_id=fingerprint,
+                    outcome="failure",
+                    metadata=metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+                return
+            if deleted:
+                completed = self.audit_event(
+                    "rf_survey.deleted",
+                    target_type="rf_survey_report",
+                    target_id=fingerprint,
+                    metadata=metadata,
+                )
+                if completed is None:
+                    self.send_json({
+                        "deleted": True,
+                        "audit_status": "report deleted; outcome audit event could not be persisted",
+                    }, 202)
+                    return
+            else:
+                self.audit_event(
+                    "rf_survey.delete_not_found",
+                    target_type="rf_survey_report",
+                    target_id=fingerprint,
+                    outcome="failure",
+                    metadata=metadata,
+                )
+            self.send_json({"deleted": deleted})
             return
 
         if path == "/api/sites/rf-surveys":

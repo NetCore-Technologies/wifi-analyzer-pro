@@ -220,6 +220,20 @@ class RfSurveyHistoryStore:
             raise RuntimeError("saved RF survey report integrity verification failed")
         return {"report": self._summary(row), "result": json.loads(row["result_json"])}
 
+    def delete(self, site_id: str, survey_id: str) -> bool:
+        """Delete exactly one report from the requested site."""
+        site_id = _site_id(site_id)
+        try:
+            survey_id = str(uuid.UUID(survey_id))
+        except (TypeError, ValueError, AttributeError) as error:
+            raise ValueError("survey_id must be a valid UUID") from error
+        with self._db() as db:
+            cursor = db.execute(
+                "DELETE FROM rf_survey_reports WHERE site_id = ? AND survey_id = ?",
+                (site_id, survey_id),
+            )
+            return cursor.rowcount == 1
+
     def site_ids(self, *, limit: int = 100) -> list[str]:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
             raise ValueError("limit must be an integer between 1 and 100")

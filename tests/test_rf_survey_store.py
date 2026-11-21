@@ -82,6 +82,15 @@ class RfSurveyHistoryStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "retention_days"):
             RfSurveyHistoryStore(self.path, retention_days=False)
 
+    def test_delete_is_site_scoped_and_idempotent(self):
+        saved = self.store.save("head-office", result_for())
+        self.assertFalse(self.store.delete("branch", saved["survey_id"]))
+        self.assertIsNotNone(self.store.get("head-office", saved["survey_id"]))
+        self.assertTrue(self.store.delete("head-office", saved["survey_id"]))
+        self.assertFalse(self.store.delete("head-office", saved["survey_id"]))
+        with self.assertRaisesRegex(ValueError, "UUID"):
+            self.store.delete("head-office", "../outside")
+
     def test_reports_include_only_sites_with_saved_data(self):
         self.store.save("head-office", result_for())
         self.store.save("branch", result_for("branch"))

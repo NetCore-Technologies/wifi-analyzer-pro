@@ -190,7 +190,7 @@ The local HTTP service exposes:
 | `POST /api/trusted-aps` | Add or remove a trusted BSSID with `sites.manage`; writes are audited |
 | `GET /api/sites/rf-surveys?site_id=...` | List retained F203 survey reports for an assigned site |
 | `GET /api/sites/rf-surveys/{survey_id}?site_id=...` | Retrieve a saved survey report and its immutable result |
-| `POST /api/sites/rf-surveys` | Execute F203 and retain its report; requires diagnostics and site-management permissions |
+| `POST /api/sites/rf-surveys` | Execute and retain F203, or delete one report with `operation=delete`; requires site-management permissions |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
 | `GET /api/security/audit/verify` | Verify the local append-only hash chain and report the verified event count |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |

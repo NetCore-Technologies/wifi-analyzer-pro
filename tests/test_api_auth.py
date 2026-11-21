@@ -3679,5 +3679,18 @@ class AuthenticatedApiTests(unittest.TestCase):
         }, token=token)
         self.assertEqual(status, 403, forbidden)
 
+        status, deleted = self.request("POST", "/api/sites/rf-surveys", {
+            "operation": "delete",
+            "site_id": "head-office",
+            "survey_id": report_id,
+        }, token=token)
+        self.assertEqual(status, 200, deleted)
+        self.assertTrue(deleted["deleted"])
+        self.assertEqual(len(server.AUDIT.list_events(action="rf_survey.deleted")), 1)
+        status, not_found = self.request(
+            "GET", "/api/sites/rf-surveys/" + report_id + "?site_id=head-office", token=token,
+        )
+        self.assertEqual(status, 404, not_found)
+
 if __name__ == "__main__":
     unittest.main()

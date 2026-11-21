@@ -81,9 +81,10 @@ database. The authenticated API provides:
   The request supplies site_id, survey and an optional label.
 - GET /api/sites/rf-surveys?site_id=SITE to list up to 100 reports.
 - GET /api/sites/rf-surveys/REPORT_UUID?site_id=SITE to retrieve a report.
+- POST /api/sites/rf-surveys with operation=delete, site_id and survey_id to remove one report.
 
 Saving requires both diagnostics.run and sites.manage plus explicit access to
-the requested site. Reads require sites.read and explicit site access. Writes
+the requested site. Reads require sites.read and explicit site access. Report removal requires the same site-management scope as saving. Every delete request is audited before the row is removed and successful deletions receive an outcome event. If the request audit cannot be recorded, no report is deleted. Writes
 are audited before and after persistence; if the request audit cannot be
 recorded, no report is saved. The save endpoint consumes one normal F203
 feature-run allowance; it does not run the feature twice.
