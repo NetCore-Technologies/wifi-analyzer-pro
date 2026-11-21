@@ -47,6 +47,7 @@ export default function RadioRegulatoryEvidencePanel() {
   const [registryError, setRegistryError] = useState('');
   const [registryCanManage, setRegistryCanManage] = useState(false);
   const [revokeReason, setRevokeReason] = useState('');
+  const [revokeTarget, setRevokeTarget] = useState('');
 
   async function loadRegistry() {
     if (!siteId.trim() || siteId.length > 128) {
@@ -138,6 +139,7 @@ export default function RadioRegulatoryEvidencePanel() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Unable to revoke the regulatory dataset.');
       setRevokeReason('');
+      setRevokeTarget('');
       await loadRegistry();
       if (data.audit_status) setRegistryError(data.audit_status);
     } catch (revokeError) {
@@ -234,6 +236,8 @@ export default function RadioRegulatoryEvidencePanel() {
               setRegistryRows([]);
               setRegistryCanManage(false);
               setRegistryError('');
+              setRevokeTarget('');
+              setRevokeReason('');
             }}
               maxLength={128} placeholder="e.g. head-office"
               className="mt-1 w-full px-3 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
@@ -263,10 +267,27 @@ export default function RadioRegulatoryEvidencePanel() {
                 </div>
                 {record.revoked && <div className="text-xs text-rose-300">{record.revocation_reason} · {record.revoked_by} · {new Date(record.revoked_at).toLocaleString()}</div>}
                 {registryCanManage && !record.revoked && (
-                  <button type="button" onClick={() => void revokeDataset(record)} disabled={registryBusy || revokeReason.trim().length < 12}
+                  <button type="button" onClick={() => setRevokeTarget(record.dataset_ref)} disabled={registryBusy}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-400/30 text-red-400 text-xs disabled:opacity-40">
-                    <Trash2 className="w-3.5 h-3.5" /> Revoke this version
+                    <Trash2 className="w-3.5 h-3.5" /> Request revocation
                   </button>
+                )}
+                {registryCanManage && revokeTarget === record.dataset_ref && !record.revoked && (
+                  <div className="rounded-lg border border-red-400/30 bg-red-500/5 p-3 space-y-2">
+                    <div className="text-xs font-semibold text-red-300">Confirm permanent revocation</div>
+                    <p className="text-xs text-muted-foreground">This version will remain in the audit history but cannot be retrieved or used for future F207 production planning.</p>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => void revokeDataset(record)}
+                        disabled={registryBusy || revokeReason.trim().length < 12}
+                        className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-400/30 text-red-300 text-xs disabled:opacity-40">
+                        Confirm revoke
+                      </button>
+                      <button type="button" onClick={() => setRevokeTarget('')} disabled={registryBusy}
+                        className="px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground text-xs">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
