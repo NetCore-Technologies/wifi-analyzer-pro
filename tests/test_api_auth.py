@@ -27,6 +27,8 @@ from wifi_analyzer_backend.telemetry_store import WiFiTelemetryStore
 from wifi_analyzer_backend.trusted_ap_store import TrustedAccessPointStore
 from wifi_analyzer_backend.rf_survey_store import RfSurveyHistoryStore
 from wifi_analyzer_backend.regulatory_dataset_store import RegulatoryDatasetStore
+from wifi_analyzer_backend.rf_change_approval_store import RfChangeApprovalStore
+from wifi_analyzer_backend.feature_plugins import run as run_feature_tool
 from wifi_analyzer_backend.billing import PLAN_CATALOG
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -41,6 +43,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_trusted_aps = server.TRUSTED_APS
         self.previous_rf_surveys = server.RF_SURVEYS
         self.previous_regulatory_datasets = server.REGULATORY_DATASETS
+        self.previous_rf_change_requests = server.RF_CHANGE_REQUESTS
         self.previous_agent_health = server.AGENT_HEALTH
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
@@ -98,6 +101,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.TRUSTED_APS = TrustedAccessPointStore(path=Path(self.temp.name) / "trusted-aps.sqlite3")
         server.RF_SURVEYS = RfSurveyHistoryStore(path=Path(self.temp.name) / "rf-surveys.sqlite3")
         server.REGULATORY_DATASETS = RegulatoryDatasetStore(path=Path(self.temp.name) / "regulatory-datasets.sqlite3")
+        server.RF_CHANGE_REQUESTS = RfChangeApprovalStore(path=Path(self.temp.name) / "rf-change-requests.sqlite3")
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
         server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
         server.AUDIT = __import__("wifi_analyzer_backend.audit_store", fromlist=["SecurityAuditStore"]).SecurityAuditStore(
@@ -119,6 +123,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.TRUSTED_APS = self.previous_trusted_aps
         server.RF_SURVEYS = self.previous_rf_surveys
         server.REGULATORY_DATASETS = self.previous_regulatory_datasets
+        server.RF_CHANGE_REQUESTS = self.previous_rf_change_requests
         server.AGENT_HEALTH = self.previous_agent_health
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
@@ -1091,8 +1096,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 207)
-        self.assertEqual(len(catalog["features"]), 207)
+        self.assertEqual(catalog["count"], 208)
+        self.assertEqual(len(catalog["features"]), 208)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -3083,7 +3088,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 207)
+        self.assertEqual(catalog["count"], 208)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,
@@ -4002,6 +4007,154 @@ class AuthenticatedApiTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, history)
         self.assertTrue(history["datasets"][0]["revoked"])
+
+    def test_rf_change_workflow_requires_two_independent_approvers_and_blocks_read_only_deployment(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "rf change workflow owner secure password",
+        })
+        owner_token = setup["token"]
+        accounts = [
+            ("rf.requester", "RF requester secure password 2026"),
+            ("rf.approver.one", "RF approver one secure password 2026"),
+            ("rf.approver.two", "RF approver two secure password 2026"),
+        ]
+        tokens = {}
+        for username, password in accounts:
+            _, created = self.request("POST", "/api/users", {
+                "username": username,
+                "password": password,
+                "role": "network_admin",
+                "all_sites": False,
+                "site_ids": ["head-office"],
+            }, token=owner_token)
+            self.assertEqual(created["user"]["username"], username)
+            tokens[username] = server.AUTH.login(password, username)
+
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        dataset_ref = "25a5e4a2-1f72-4d95-9d30-2e54c8c2cb45"
+        retained = {
+            "record": {"fingerprint_sha256": "a" * 64, "revoked_at": None},
+            "dataset": {
+                "status": "validated",
+                "dataset_id": "ACMA-RLAN",
+                "version": "2026.11",
+                "jurisdiction": "AU",
+            },
+            "acknowledgement": {
+                "reviewer_id": "regulatory.reviewer",
+                "review_reference": "ACMA-REVIEW-2026-001",
+                "reviewed_at": (now - timedelta(days=1)).isoformat(),
+            },
+        }
+        plan = {
+            "status": "eligible",
+            "site_id": "head-office",
+            "dataset": {"fingerprint_sha256": "a" * 64},
+            "change_application": {"applied": False, "execution_method": "preview_only"},
+            "radio_count": 1,
+            "eligible_radio_count": 1,
+            "rule_evaluation_count": 4,
+            "radios": [{
+                "radio_id": "radio-01",
+                "ap_id": "ap-01",
+                "status": "eligible",
+                "recommended_configuration": {
+                    "channel": 40,
+                    "channel_width_mhz": 20,
+                    "proposed_eirp_dbm": 20,
+                    "eirp_ceiling_dbm": 23,
+                    "rule_id": "au-5g-001",
+                    "source_references": [{"source_id": "acma-1", "clause": "RLAN.1"}],
+                    "dfs_required": False,
+                    "requires_dfs_cac_before_activation": False,
+                    "afc_required": False,
+                    "change_required": True,
+                },
+            }],
+        }
+        radios = [{
+            "radio_id": "radio-01",
+            "ap_id": "ap-01",
+            "site_id": "head-office",
+            "jurisdiction": "AU",
+            "installation_reference": "hq-level-1",
+            "band": "5GHz",
+            "capability_source": "controller",
+            "capabilities_observed_at": (now - timedelta(minutes=5)).isoformat(),
+            "current_channel": 36,
+            "current_channel_width_mhz": 20,
+            "current_eirp_dbm": 20,
+        }]
+        original_run = run_feature_tool
+
+        def fake_run(slug, payload):
+            if slug == "radio_capability_regulatory_channel_planner":
+                return {"feature": "F207", "result": plan}
+            return original_run(slug, payload)
+
+        with patch.object(server.REGULATORY_DATASETS, "get", return_value=retained), \
+             patch.object(server, "run_feature", side_effect=fake_run):
+            status, created = self.request("POST", "/api/sites/rf-change-requests", {
+                "site_id": "head-office",
+                "dataset_ref": dataset_ref,
+                "adapter_id": "openwrt",
+                "radios": radios,
+                "expiry_minutes": 60,
+            }, token=tokens["rf.requester"])
+            self.assertEqual(status, 201, created)
+            request_id = created["request"]["request_id"]
+            self.assertEqual(created["request"]["status"], "pending_approval")
+            self.assertFalse(created["execution_allowed"])
+            self.assertEqual(created["packet"]["change_count"], 1)
+
+            status, self_vote = self.request(
+                "POST", f"/api/sites/rf-change-requests/{request_id}/decision",
+                {"site_id": "head-office", "decision": "approve"},
+                token=tokens["rf.requester"],
+            )
+            self.assertEqual(status, 400, self_vote)
+            self.assertIn("requester cannot", self_vote["error"])
+
+            status, first = self.request(
+                "POST", f"/api/sites/rf-change-requests/{request_id}/decision",
+                {"site_id": "head-office", "decision": "approve", "comment": "Independent review"},
+                token=tokens["rf.approver.one"],
+            )
+            self.assertEqual(status, 200, first)
+            self.assertEqual(first["request"]["status"], "pending_approval")
+            self.assertEqual(first["request"]["approval_count"], 1)
+
+            status, second = self.request(
+                "POST", f"/api/sites/rf-change-requests/{request_id}/decision",
+                {"site_id": "head-office", "decision": "approve"},
+                token=tokens["rf.approver.two"],
+            )
+            self.assertEqual(status, 200, second)
+            self.assertEqual(second["request"]["status"], "approved_not_applied")
+            self.assertFalse(second["execution_allowed"])
+
+            status, blocked = self.request(
+                "POST", f"/api/sites/rf-change-requests/{request_id}/execute",
+                {"site_id": "head-office"},
+                token=tokens["rf.approver.two"],
+            )
+            self.assertEqual(status, 409, blocked)
+            self.assertEqual(blocked["code"], "write_adapter_unavailable")
+            self.assertFalse(blocked["applied"])
+            self.assertEqual(blocked["request"]["status"], "approved_not_applied")
+
+            status, denied = self.request(
+                "GET", f"/api/sites/rf-change-requests/{request_id}?site_id=branch",
+                token=tokens["rf.approver.one"],
+            )
+            self.assertEqual(status, 403, denied)
+            status, history = self.request(
+                "GET", "/api/sites/rf-change-requests?site_id=head-office",
+                token=tokens["rf.approver.one"],
+            )
+            self.assertEqual(status, 200, history)
+            self.assertEqual(history["request_count"], 1)
+            self.assertEqual(history["requests"][0]["request_id"], request_id)
 
 if __name__ == "__main__":
     unittest.main()

@@ -1714,6 +1714,23 @@
     }
   },
   {
+    "slug": "rf_change_approval_packet",
+    "name": "RF controller change approval packet",
+    "category": "RF change management",
+    "description": "Bind F207 radio recommendations to an immutable retained F206 dataset and exact controller capability snapshot; require two independent site managers before any future deployment, which remains blocked while adapters are read-only.",
+    "parameters": {
+      "site_id": "Site identifier owning the dataset and radios",
+      "adapter_id": "Registered adapter: openwrt, unifi or mikrotik",
+      "dataset": "Retained F206 dataset reference, fingerprint and review metadata",
+      "plan": "Fully eligible, non-applied F207 result",
+      "radios": "Exact source capability snapshots used for F207",
+      "requested_by": "Authenticated requester username",
+      "created_at": "Timezone-aware packet creation timestamp",
+      "expires_at": "Timestamp 1 minute to 24 hours after creation",
+      "required_approvals": "Exactly two distinct approvers other than requester"
+    }
+  },
+  {
     "slug": "client_roam_transaction_analyzer",
     "name": "Client roam transaction analyzer",
     "category": "Roaming",

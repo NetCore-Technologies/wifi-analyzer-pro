@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 207 callable feature tools (F001–F168, F172–F207 and F291–F293), local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 208 callable feature tools (F001–F168, F172–F208 and F291–F293), local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 207 distinct callable feature modules (F001–F168, F172–F207 and F291–F293), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
+- ✅ 208 distinct callable feature modules (F001–F168, F172–F208 and F291–F293), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
@@ -192,7 +192,8 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 - ✅ F202–F206 now deliver RF evidence normalisation, floor-plan-aligned measured surveys, immutable site-scoped survey history, repeat-survey comparison, customer acceptance scoring and jurisdiction-aware regulatory source provenance validation.
 - ✅ F207 adds read-only DFS/PSC-aware eligibility planning against fresh controller/agent radio capabilities and fingerprint-verified, operator-reviewed F206 rule datasets. It checks band/channel/width, device class, indoor/outdoor, DFS channel state, location-scoped AFC grants and EIRP ceilings, then proposes a lowest-change preview without applying configuration.
 - ✅ The site registry retains immutable F206 dataset versions, reviewer/fingerprint metadata and audited revocation; F207 can consume a registry reference and blocks revoked versions.
-- 📋 Remaining RF wave: controller-specific change adapters with an explicit approval workflow. F206/F207 do not independently authenticate regulator documents or establish legal compliance.
+- ✅ F208 adds a site-scoped two-person RF change approval workflow bound to the retained F206 fingerprint and exact F207 radio capability snapshot. Requests expire within 24 hours, the requester cannot self-approve, and approval/rejection/cancellation/invalidation events are durably retained. Two approvals result in `approved_not_applied`; execution remains blocked with HTTP 409 until a verified write-capable adapter is implemented.
+- ⚠️ Registered OpenWrt, UniFi and MikroTik adapters remain read-only. F208 records organisational approval only; it does not apply router changes or establish legal compliance.
 
 
 ### F202 delivered — RF observation evidence normalisation

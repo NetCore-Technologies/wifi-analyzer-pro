@@ -1,5 +1,6 @@
 """Regression tests for the independently registered feature tools."""
 import hashlib
+import copy
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -1400,18 +1401,47 @@ PAYLOADS["radio_capability_regulatory_channel_planner"] = {
 }
 
 
+_F208_BASE_PLAN = run(
+    "radio_capability_regulatory_channel_planner",
+    PAYLOADS["radio_capability_regulatory_channel_planner"],
+)["result"]
+_F208_PLAN = copy.deepcopy(_F208_BASE_PLAN)
+_F208_PLAN["radios"][0]["recommended_configuration"]["channel"] = 1
+_F208_PLAN["radios"][0]["recommended_configuration"]["change_required"] = True
+PAYLOADS["rf_change_approval_packet"] = {
+    "site_id": "head-office",
+    "adapter_id": "openwrt",
+    "requested_by": "request.user",
+    "created_at": _SURVEY_NOW.isoformat(),
+    "expires_at": (_SURVEY_NOW + timedelta(hours=1)).isoformat(),
+    "required_approvals": 2,
+    "dataset": {
+        "dataset_ref": "25a5e4a2-1f72-4d95-9d30-2e54c8c2cb45",
+        "fingerprint_sha256": _F207_NORMALIZED_DATASET["dataset_fingerprint_sha256"],
+        "jurisdiction": "AU",
+        "dataset_id": _F207_NORMALIZED_DATASET["dataset_id"],
+        "version": _F207_NORMALIZED_DATASET["version"],
+        "reviewer_id": "netops.reviewer",
+        "review_reference": "CHG-2026-1101",
+        "reviewed_at": _SURVEY_NOW.isoformat(),
+    },
+    "plan": _F208_PLAN,
+    "radios": PAYLOADS["radio_capability_regulatory_channel_planner"]["radios"],
+}
+
+
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 207)
-        self.assertEqual(len(set(FEATURE_MODULES)), 207)
-        self.assertEqual(count(), 207)
-        self.assertEqual(len(entries), 207)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 207)
+        self.assertEqual(len(FEATURE_MODULES), 208)
+        self.assertEqual(len(set(FEATURE_MODULES)), 208)
+        self.assertEqual(count(), 208)
+        self.assertEqual(len(entries), 208)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 208)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F205", "F206", "F207", "F291", "F292", "F293"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F205", "F206", "F207", "F208", "F291", "F292", "F293"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1801,6 +1831,35 @@ class FeatureCatalogTests(unittest.TestCase):
             run("client_roam_transaction_analyzer", {"events": [bad_reason]})
         with self.assertRaisesRegex(ValueError, "slow_roam_threshold_ms"):
             run("client_roam_transaction_analyzer", {"events": [payload["events"][0]], "slow_roam_threshold_ms": 1})
+
+    def test_f208_creates_fingerprint_bound_two_person_change_packet(self):
+        result = run("rf_change_approval_packet", PAYLOADS["rf_change_approval_packet"])["result"]
+        self.assertEqual(result["status"], "approval_packet_created")
+        self.assertEqual(result["required_approvals"], 2)
+        self.assertFalse(result["execution_allowed"])
+        self.assertEqual(result["packet"]["execution"]["status"], "blocked_no_write_capable_adapter")
+        self.assertEqual(result["packet"]["changes"][0]["before"]["channel"], 6)
+        self.assertEqual(result["packet"]["changes"][0]["after"]["channel"], 1)
+        self.assertEqual(result["packet"]["dataset"]["fingerprint_sha256"],
+                         _F207_NORMALIZED_DATASET["dataset_fingerprint_sha256"])
+
+    def test_f208_rejects_partial_plans_fingerprint_mismatch_and_invalid_expiry(self):
+        payload = copy.deepcopy(PAYLOADS["rf_change_approval_packet"])
+        payload["plan"]["status"] = "partial"
+        with self.assertRaisesRegex(ValueError, "fully eligible"):
+            run("rf_change_approval_packet", payload)
+        payload = copy.deepcopy(PAYLOADS["rf_change_approval_packet"])
+        payload["plan"]["dataset"]["fingerprint_sha256"] = "b" * 64
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            run("rf_change_approval_packet", payload)
+        payload = copy.deepcopy(PAYLOADS["rf_change_approval_packet"])
+        payload["required_approvals"] = 1
+        with self.assertRaisesRegex(ValueError, "exactly 2"):
+            run("rf_change_approval_packet", payload)
+        payload = copy.deepcopy(PAYLOADS["rf_change_approval_packet"])
+        payload["dataset"]["dataset_ref"] = "../dataset"
+        with self.assertRaisesRegex(ValueError, "valid UUID"):
+            run("rf_change_approval_packet", payload)
 
     def test_f207_plans_only_controller_supported_channels_under_reviewed_rule_dataset(self):
         result = run(

@@ -42,6 +42,7 @@ if __package__:
     from .telemetry_store import WiFiTelemetryStore
     from .trusted_ap_store import TrustedAccessPointStore
     from .rf_survey_store import RfSurveyHistoryStore
+    from .rf_change_approval_store import RfChangeApprovalStore
     from .regulatory_dataset_store import RegulatoryDatasetStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
     from .router_adapters.health_store import (
@@ -83,6 +84,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from telemetry_store import WiFiTelemetryStore
     from trusted_ap_store import TrustedAccessPointStore
     from rf_survey_store import RfSurveyHistoryStore
+    from rf_change_approval_store import RfChangeApprovalStore
     from regulatory_dataset_store import RegulatoryDatasetStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
     from router_adapters.health_store import (
@@ -113,6 +115,7 @@ TELEMETRY = WiFiTelemetryStore()
 TRUSTED_APS = TrustedAccessPointStore()
 RF_SURVEYS = RfSurveyHistoryStore()
 REGULATORY_DATASETS = RegulatoryDatasetStore()
+RF_CHANGE_REQUESTS = RfChangeApprovalStore()
 LOCAL_SITE_ID = os.getenv("WIFI_ANALYZER_LOCAL_SITE_ID", "local")
 AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
@@ -1051,6 +1054,7 @@ class Handler(BaseHTTPRequestHandler):
         site_ids.update(TELEMETRY.site_ids(limit=100))
         site_ids.update(RF_SURVEYS.site_ids(limit=100))
         site_ids.update(REGULATORY_DATASETS.site_ids(limit=100))
+        site_ids.update(RF_CHANGE_REQUESTS.site_ids(limit=100))
         for credential in AGENT_HEALTH.list_agent_credentials():
             site_id = credential.get("site_id")
             if isinstance(site_id, str) and site_id.strip():
@@ -1122,7 +1126,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys", "/api/sites/regulatory-datasets"} or path.startswith("/api/sites/rf-surveys/") or path.startswith("/api/sites/regulatory-datasets/"):
+            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys", "/api/sites/regulatory-datasets", "/api/sites/rf-change-requests"} or path.startswith("/api/sites/rf-surveys/") or path.startswith("/api/sites/regulatory-datasets/") or path.startswith("/api/sites/rf-change-requests/"):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -1464,6 +1468,7 @@ class Handler(BaseHTTPRequestHandler):
                 discovered.update(TRUSTED_APS.site_ids(limit=100))
                 discovered.update(RF_SURVEYS.site_ids(limit=100))
                 discovered.update(REGULATORY_DATASETS.site_ids(limit=100))
+                discovered.update(RF_CHANGE_REQUESTS.site_ids(limit=100))
                 discovered.update(scope["site_ids"])
                 if scope["all_sites"]:
                     discovered.add(LOCAL_SITE_ID)
@@ -1477,6 +1482,45 @@ class Handler(BaseHTTPRequestHandler):
                     site_id for site_id in ordered_sites if site_id in scope["site_ids"]
                 ]
                 self.send_json({"site_ids": site_ids, "all_sites": scope["all_sites"]})
+            elif path == "/api/sites/rf-change-requests":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=3)
+                site_values = params.get("site_id", [])
+                limit_values = params.get("limit", [])
+                if len(site_values) != 1 or not site_values[0].strip():
+                    raise ValueError("site_id must be supplied exactly once")
+                if len(limit_values) > 1:
+                    raise ValueError("limit may be supplied only once")
+                try:
+                    limit = 50 if not limit_values else int(limit_values[0])
+                except ValueError as error:
+                    raise ValueError("limit must be an integer") from error
+                site_id = site_values[0].strip()
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                requests = RF_CHANGE_REQUESTS.list_for_site(site_id, limit=limit)
+                self.send_json({
+                    "site_id": site_id,
+                    "requests": requests,
+                    "request_count": len(requests),
+                    "can_manage": AUTH.has_permission(self.bearer_token(), "sites.manage"),
+                })
+            elif path.startswith("/api/sites/rf-change-requests/"):
+                request_id = unquote(path[len("/api/sites/rf-change-requests/"):])
+                if not request_id or "/" in request_id:
+                    self.send_json({"error": "RF change request not found"}, 404)
+                    return
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=2)
+                site_values = params.get("site_id", [])
+                if len(site_values) != 1 or not site_values[0].strip():
+                    raise ValueError("site_id must be supplied exactly once")
+                site_id = site_values[0].strip()
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                saved = RF_CHANGE_REQUESTS.get(site_id, request_id, include_packet=True)
+                if saved is None:
+                    self.send_json({"error": "RF change request not found"}, 404)
+                    return
+                self.send_json(saved)
             elif path == "/api/sites/rf-surveys":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=3)
                 site_values = params.get("site_id", [])
@@ -1710,6 +1754,11 @@ class Handler(BaseHTTPRequestHandler):
                 return
         if path == "/api/sites/regulatory-datasets" and not self.require_auth("sites.manage"):
             return
+        if path == "/api/sites/rf-change-requests":
+            if not self.require_auth("diagnostics.run") or not self.require_auth("sites.manage"):
+                return
+        if path.startswith("/api/sites/rf-change-requests/") and not self.require_auth("sites.manage"):
+            return
         if path == "/api/sites/rf-surveys/compare" and not self.require_auth("diagnostics.run"):
             return
 
@@ -1730,6 +1779,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/sites/rf-surveys": ("api.rf_surveys.manage", False),
             "/api/sites/rf-surveys/compare": ("api.rf_surveys.compare", False),
             "/api/sites/regulatory-datasets": ("api.regulatory_datasets.manage", False),
+            "/api/sites/rf-change-requests": ("api.rf_change.create", False),
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
@@ -1740,6 +1790,8 @@ class Handler(BaseHTTPRequestHandler):
             "/api/license/portal": ("api.license.portal", False),
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
+            return
+        if path.startswith("/api/sites/rf-change-requests/") and not self.enforce_rate_limit("api.rf_change.decision"):
             return
         if path.startswith("/api/webhooks/subscriptions/") and path.endswith("/probe"):
             if not self.enforce_rate_limit("api.webhook.probe"):
@@ -1763,6 +1815,270 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/sites/rf-change-requests":
+            site_id = payload.get("site_id")
+            dataset_ref = payload.get("dataset_ref")
+            adapter_id = payload.get("adapter_id")
+            radios = payload.get("radios")
+            expiry_minutes = payload.get("expiry_minutes", 60)
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            if not isinstance(dataset_ref, str) or not dataset_ref.strip():
+                self.send_json({"error": "dataset_ref is required"}, 400)
+                return
+            if isinstance(expiry_minutes, bool) or not isinstance(expiry_minutes, int) or not 1 <= expiry_minutes <= 1440:
+                self.send_json({"error": "expiry_minutes must be an integer from 1 to 1440"}, 400)
+                return
+            adapter = next(
+                (item for item in router_adapter_manifests() if item.get("adapter_id") == adapter_id),
+                None,
+            )
+            if adapter is None:
+                self.send_json({"error": "adapter_id is not a registered router adapter"}, 400)
+                return
+            identity = AUTH.identity(self.bearer_token()) or {}
+            actor = identity.get("username")
+            if not isinstance(actor, str) or not actor:
+                self.send_json({"error": "Authenticated requester identity is unavailable"}, 401)
+                return
+            try:
+                radio_json = json.dumps(
+                    radios, sort_keys=True, ensure_ascii=False,
+                    separators=(",", ":"), allow_nan=False,
+                )
+            except (TypeError, ValueError):
+                self.send_json({"error": "radios must be finite JSON-compatible capability records"}, 400)
+                return
+            request_fingerprint = hashlib.sha256(json.dumps(
+                [site_id, dataset_ref, adapter_id, hashlib.sha256(radio_json.encode("utf-8")).hexdigest()],
+                ensure_ascii=False, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()[:24]
+            metadata = {
+                "site_id": site_id,
+                "request_fingerprint": request_fingerprint,
+                "dataset_ref": dataset_ref,
+                "adapter_id": adapter_id,
+            }
+            requested = self.audit_event(
+                "rf_change.requested", target_type="rf_change_request",
+                target_id=request_fingerprint, metadata=metadata,
+            )
+            if requested is None:
+                self.send_json({"error": "The security audit ledger is unavailable; no change request was created"}, 503)
+                return
+            meter = None
+            try:
+                retained = REGULATORY_DATASETS.get(site_id, dataset_ref)
+                if retained is None:
+                    self.send_json({"error": "Retained regulatory dataset was not found for this site"}, 404)
+                    return
+                record = retained["record"]
+                if record.get("revoked_at") is not None:
+                    self.send_json({"error": "Revoked regulatory datasets cannot be used for a change request"}, 409)
+                    return
+                now = datetime.now(timezone.utc).replace(microsecond=0)
+                dataset = retained["dataset"]
+                acknowledgement = retained["acknowledgement"]
+                planner_input = {
+                    "site_id": site_id,
+                    "as_of": now.isoformat(),
+                    "regulatory_dataset": dataset,
+                    "dataset_acknowledgement": acknowledgement,
+                    "radios": radios,
+                    "maximum_capability_age_days": payload.get("maximum_capability_age_days", 7),
+                }
+                with BILLING_QUOTA_LOCK:
+                    meter = BILLING.consume_monthly_feature_run()
+                    if not meter["allowed"]:
+                        self.audit_event(
+                            "rf_change.rejected", target_type="rf_change_request",
+                            target_id=request_fingerprint, outcome="failure", metadata=metadata,
+                        )
+                        self.send_json({
+                            "error": "The monthly diagnostic allowance has been reached",
+                            "code": "plan_limit_reached", **meter, "upgrade_required": True,
+                        }, 402)
+                        return
+                    try:
+                        plan = run_feature("radio_capability_regulatory_channel_planner", planner_input)
+                        packet = run_feature("rf_change_approval_packet", {
+                            "site_id": site_id,
+                            "adapter_id": adapter_id,
+                            "requested_by": actor,
+                            "created_at": now.isoformat(),
+                            "expires_at": (now + timedelta(minutes=expiry_minutes)).isoformat(),
+                            "required_approvals": 2,
+                            "dataset": {
+                                "dataset_ref": dataset_ref,
+                                "fingerprint_sha256": record["fingerprint_sha256"],
+                                "jurisdiction": dataset["jurisdiction"],
+                                "dataset_id": dataset["dataset_id"],
+                                "version": dataset["version"],
+                                "reviewer_id": acknowledgement["reviewer_id"],
+                                "review_reference": acknowledgement["review_reference"],
+                                "reviewed_at": acknowledgement["reviewed_at"],
+                            },
+                            "plan": plan["result"],
+                            "radios": radios,
+                        })
+                        created = RF_CHANGE_REQUESTS.create(site_id, packet["result"])
+                    except Exception:
+                        BILLING.refund_monthly_feature_run(meter["period"])
+                        raise
+            except ValueError as error:
+                if meter and meter.get("allowed"):
+                    BILLING.refund_monthly_feature_run(meter["period"])
+                self.audit_event(
+                    "rf_change.create_failed", target_type="rf_change_request",
+                    target_id=request_fingerprint, outcome="failure", metadata=metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception:
+                if meter and meter.get("allowed"):
+                    BILLING.refund_monthly_feature_run(meter["period"])
+                self.audit_event(
+                    "rf_change.create_failed", target_type="rf_change_request",
+                    target_id=request_fingerprint, outcome="failure", metadata=metadata,
+                )
+                print("[RF CHANGE ERROR] Could not create approval packet")
+                self.send_json({"error": "RF change approval request could not be created"}, 503)
+                return
+            completed = self.audit_event(
+                "rf_change.created", target_type="rf_change_request",
+                target_id=created["request_id"],
+                metadata={**metadata, "request_id": created["request_id"],
+                          "packet_sha256": created["packet_sha256"],
+                          "change_count": packet["result"]["packet"]["change_count"]},
+            )
+            response = {
+                "request": created,
+                "packet": packet["result"]["packet"],
+                "plan": plan["result"],
+                "execution_allowed": False,
+            }
+            if completed is None:
+                response["audit_status"] = "request created; outcome audit event could not be persisted"
+                self.send_json(response, 202)
+            else:
+                self.send_json(response, 201)
+            return
+
+        if path.startswith("/api/sites/rf-change-requests/"):
+            suffix = path[len("/api/sites/rf-change-requests/"):]
+            parts = suffix.split("/")
+            if len(parts) != 2 or not parts[0] or parts[1] not in {"decision", "cancel", "execute"}:
+                self.send_json({"error": "Unknown RF change request action"}, 404)
+                return
+            request_id, action = unquote(parts[0]), parts[1]
+            site_id = payload.get("site_id")
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            identity = AUTH.identity(self.bearer_token()) or {}
+            actor = identity.get("username")
+            if not isinstance(actor, str) or not actor:
+                self.send_json({"error": "Authenticated actor identity is unavailable"}, 401)
+                return
+            current = RF_CHANGE_REQUESTS.get(site_id, request_id, include_packet=True)
+            if current is None:
+                self.send_json({"error": "RF change request not found"}, 404)
+                return
+            dataset_ref = current["packet"]["dataset"]["dataset_ref"]
+            retained = REGULATORY_DATASETS.get(site_id, dataset_ref)
+            if retained is None or retained["record"].get("revoked_at") is not None:
+                if current["status"] in {"pending_approval", "approved_not_applied"}:
+                    invalidated = RF_CHANGE_REQUESTS.invalidate(
+                        site_id, request_id, actor="system",
+                        reason="retained regulatory dataset is missing or revoked",
+                    )
+                else:
+                    invalidated = current
+                self.audit_event(
+                    "rf_change.invalidated", actor=identity,
+                    target_type="rf_change_request", target_id=request_id,
+                    outcome="failure", metadata={"site_id": site_id, "dataset_ref": dataset_ref},
+                )
+                self.send_json({
+                    "error": "The retained regulatory dataset is missing or revoked; no further approval or deployment is permitted",
+                    "request": invalidated,
+                }, 409)
+                return
+            request_fingerprint = hashlib.sha256(json.dumps(
+                [site_id, request_id, action, actor], separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()[:24]
+            metadata = {"site_id": site_id, "request_fingerprint": request_fingerprint}
+            requested = self.audit_event(
+                "rf_change." + action + "_requested",
+                target_type="rf_change_request", target_id=request_id, metadata=metadata,
+            )
+            if requested is None:
+                self.send_json({"error": "The security audit ledger is unavailable; no approval transition was applied"}, 503)
+                return
+            try:
+                if action == "decision":
+                    updated = RF_CHANGE_REQUESTS.decide(
+                        site_id, request_id, actor=actor,
+                        decision=payload.get("decision"), comment=payload.get("comment", ""),
+                    )
+                elif action == "cancel":
+                    updated = RF_CHANGE_REQUESTS.cancel(site_id, request_id, actor=actor)
+                else:
+                    if current["status"] != "approved_not_applied":
+                        self.send_json({
+                            "error": "Two independent approvals are required before entering the deployment gate",
+                            "request": current,
+                        }, 409)
+                        return
+                    manifest = next(
+                        (item for item in router_adapter_manifests()
+                         if item.get("adapter_id") == current["adapter_id"]),
+                        None,
+                    )
+                    reason = "no write-capable controller adapter is registered"
+                    if manifest is not None and manifest.get("read_only") is not True:
+                        reason = "controller adapter lacks the required verified deployment contract"
+                    updated = RF_CHANGE_REQUESTS.record_execution_blocked(
+                        site_id, request_id, actor=actor, reason=reason,
+                    )
+                    self.audit_event(
+                        "rf_change.execution_blocked", actor=identity,
+                        target_type="rf_change_request", target_id=request_id,
+                        outcome="failure", metadata={**metadata, "reason": reason},
+                    )
+                    self.send_json({
+                        "error": reason, "code": "write_adapter_unavailable",
+                        "request": updated, "applied": False, "execution_allowed": False,
+                    }, 409)
+                    return
+                if updated is None:
+                    self.send_json({"error": "RF change request not found"}, 404)
+                    return
+            except ValueError as error:
+                self.audit_event(
+                    "rf_change." + action + "_rejected", actor=identity,
+                    target_type="rf_change_request", target_id=request_id,
+                    outcome="failure", metadata=metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+                return
+            completed_action = (
+                "approved" if action == "decision" and payload.get("decision") == "approve"
+                else "rejected" if action == "decision"
+                else "cancelled"
+            )
+            completed = self.audit_event(
+                "rf_change." + completed_action, actor=identity,
+                target_type="rf_change_request", target_id=request_id,
+                metadata={**metadata, "status": updated["status"]},
+            )
+            response = {"request": updated, "execution_allowed": False}
+            if completed is None:
+                response["audit_status"] = "approval state updated; outcome audit event could not be persisted"
+                self.send_json(response, 202)
+            else:
+                self.send_json(response)
             return
 
         if path == "/api/sites/rf-surveys/compare":
