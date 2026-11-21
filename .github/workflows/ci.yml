@@ -83,6 +83,7 @@ jobs:
           WIFI_ANALYZER_VENDOR_STRIPE_PRICE_PRO=price_ci_pro1234
           WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS=
           WIFI_ANALYZER_VENDOR_STRIPE_PRICE_ENTERPRISE=
+          WIFI_ANALYZER_VENDOR_ADMIN_TOKEN=vendor-admin-ci-token-0123456789abcdef
           EOF
           docker compose --env-file /tmp/vendor-compose.env -f compose.vendor-licensing.yaml config --quiet
       - name: Build the production container image
