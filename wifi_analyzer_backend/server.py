@@ -9,7 +9,7 @@ Then open:  http://<pi-ip>:199
 import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Runtime dependencies must be installed by the installer or bundled by PyInstaller.
 # Never mutate the user's Python environment when the application starts.
