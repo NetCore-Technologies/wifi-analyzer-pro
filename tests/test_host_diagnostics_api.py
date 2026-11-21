@@ -23,13 +23,15 @@ class HostDiagnosticsApiTests(unittest.TestCase):
             patch.object(server.subprocess, "check_output", return_value=b"") as command,
             patch("socket.getaddrinfo"),
             patch.object(server, "get_wifi_iface", return_value=None),
+            patch.dict("os.environ", {"WIFI_ANALYZER_DIAGNOSTIC_DNS_TARGET": ""}),
         ):
             result = server.get_diagnostics()
 
         self.assertEqual(result["host_capabilities"], host_report)
         diagnose.assert_called_once_with("TestOS")
-        self.assertEqual(command.call_count, 1)
-        self.assertEqual(command.call_args.args[0][0], "ping")
+        command.assert_not_called()
+        self.assertEqual(result["gateway_probe_status"], "skipped_no_gateway")
+        self.assertEqual(result["dns_resolution_status"], "not_configured")
         self.assertNotIn("permission_granted", result["host_capabilities"])
 
 

@@ -14,6 +14,7 @@ class HostDiagnosticsTests(unittest.TestCase):
         result = diagnose_host(
             "Linux",
             find_executable=self._probe({"ip", "ping", "nmcli", "rfkill"}),
+            executable_check=lambda path, mode: True,
         )
         self.assertEqual(result["platform"], "Linux")
         self.assertEqual(result["scan_backend_status"], "limited")
@@ -47,6 +48,7 @@ class HostDiagnosticsTests(unittest.TestCase):
         result = diagnose_host(
             "Darwin",
             find_executable=self._probe({"system_profiler", "networksetup", "ping"}),
+            executable_check=lambda path, mode: True,
         )
         self.assertEqual(result["scan_backend_status"], "limited")
         self.assertEqual(result["available_wireless_tools"], ["system_profiler"])
@@ -58,6 +60,7 @@ class HostDiagnosticsTests(unittest.TestCase):
         result = diagnose_host(
             "Windows",
             find_executable=self._probe({"netsh", "ipconfig", "ping"}),
+            executable_check=lambda path, mode: True,
         )
         self.assertEqual(result["scan_backend_status"], "limited")
         self.assertEqual(result["available_wireless_tools"], ["netsh"])

@@ -6,7 +6,7 @@ Run:  sudo python3 server.py
 Then open:  http://<pi-ip>:199
 """
 
-import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib
+import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib, ipaddress, socket
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
 from datetime import datetime, timezone, timedelta
@@ -545,56 +545,147 @@ def get_link():
             except: pass
     return stats
 
+def _valid_dns_probe_target(value):
+    if not isinstance(value, str):
+        return False
+    target = value.strip().rstrip(".")
+    if not target or len(target) > 253 or any(ord(char) <= 32 for char in target):
+        return False
+    try:
+        ipaddress.ip_address(target)
+        return True
+    except ValueError:
+        pass
+    labels = target.split(".")
+    return all(
+        1 <= len(label) <= 63
+        and re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?", label)
+        for label in labels
+    )
+
+
 def get_diagnostics():
-    diag={}; gw=None
+    diag = {}
+    gateway = None
     try:
-        if OS=="Linux":
-            out=subprocess.check_output(["ip","route","show","default"],stderr=subprocess.DEVNULL,timeout=3).decode()
-            m=re.search(r"default via ([\d.]+)",out);
-            if m: gw=m.group(1)
-        elif OS=="Darwin":
-            out=subprocess.check_output(["netstat","-rn"],stderr=subprocess.DEVNULL,timeout=3).decode()
-            m=re.search(r"default\s+([\d.]+)",out)
-            if m: gw=m.group(1)
-        elif OS=="Windows":
-            out=subprocess.check_output(["ipconfig"],stderr=subprocess.DEVNULL,timeout=3).decode("utf-8","ignore")
-            m=re.search(r"Default Gateway.*?:\s*([\d.]+)",out)
-            if m: gw=m.group(1)
-    except: pass
-    diag["gateway"] = gw
+        if OS == "Linux":
+            output = subprocess.check_output(
+                ["ip", "route", "show", "default"],
+                stderr=subprocess.DEVNULL,
+                timeout=3,
+            ).decode("utf-8", "ignore")
+            match = re.search(r"default via ([\d.]+)", output)
+            if match:
+                gateway = match.group(1)
+        elif OS == "Darwin":
+            output = subprocess.check_output(
+                ["netstat", "-rn"], stderr=subprocess.DEVNULL, timeout=3
+            ).decode("utf-8", "ignore")
+            match = re.search(r"default\s+([\d.]+)", output)
+            if match:
+                gateway = match.group(1)
+        elif OS == "Windows":
+            output = subprocess.check_output(
+                ["ipconfig"], stderr=subprocess.DEVNULL, timeout=3
+            ).decode("utf-8", "ignore")
+            match = re.search(r"Default Gateway.*?:\s*([\d.]+)", output)
+            if match:
+                gateway = match.group(1)
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        gateway = None
+
+    diag["gateway"] = gateway
+    if gateway is None:
+        # Never substitute a public IP: a missing default route should not
+        # trigger unsolicited Internet traffic or look like a successful LAN test.
+        diag["gateway_probe_status"] = "skipped_no_gateway"
+    else:
+        try:
+            ping_count = 3
+            if OS == "Windows":
+                command = ["ping", "-n", str(ping_count), gateway]
+            else:
+                command = ["ping", "-c", str(ping_count), gateway]
+            ping_result = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=7,
+                check=False,
+            )
+            raw_output = ping_result.stdout or b""
+            output = raw_output.decode("utf-8", "ignore") if isinstance(raw_output, bytes) else str(raw_output)
+            times = [
+                float(value)
+                for value in re.findall(r"time[=<]([\d.]+)\s*ms", output, re.I)
+            ]
+            if times:
+                diag["latency_ms"] = round(sum(times) / len(times), 2)
+                diag["latency_min_ms"] = round(min(times), 2)
+                diag["latency_max_ms"] = round(max(times), 2)
+                deltas = [abs(times[index] - times[index - 1]) for index in range(1, len(times))]
+                diag["jitter_ms"] = round(sum(deltas) / len(deltas), 2) if deltas else 0
+            loss_match = re.search(r"(\d+(?:\.\d+)?)% packet loss", output, re.I)
+            windows_loss = re.search(r"\((\d+(?:\.\d+)?)% loss\)", output, re.I)
+            if loss_match:
+                diag["packet_loss_pct"] = float(loss_match.group(1))
+            elif windows_loss:
+                diag["packet_loss_pct"] = float(windows_loss.group(1))
+            output_lower = output.lower()
+            if times or loss_match or windows_loss:
+                diag["gateway_probe_status"] = "measured"
+            elif "permission denied" in output_lower or "operation not permitted" in output_lower:
+                diag["gateway_probe_status"] = "permission_denied"
+            elif "network is unreachable" in output_lower or "no route to host" in output_lower:
+                diag["gateway_probe_status"] = "network_unreachable"
+            else:
+                diag["gateway_probe_status"] = "unavailable"
+        except PermissionError:
+            diag["gateway_probe_status"] = "permission_denied"
+        except subprocess.TimeoutExpired:
+            diag["gateway_probe_status"] = "timed_out"
+        except FileNotFoundError:
+            diag["gateway_probe_status"] = "tool_missing"
+        except (OSError, subprocess.SubprocessError, UnicodeError):
+            diag["gateway_probe_status"] = "unavailable"
+
+    dns_target = os.getenv("WIFI_ANALYZER_DIAGNOSTIC_DNS_TARGET", "").strip()
+    if not dns_target:
+        diag["dns_resolution_status"] = "not_configured"
+    elif not _valid_dns_probe_target(dns_target):
+        diag["dns_resolution_status"] = "invalid_configuration"
+    else:
+        diag["dns_resolution_target"] = dns_target.rstrip(".")
+        try:
+            started = time.monotonic()
+            socket.getaddrinfo(dns_target, None)
+            diag["dns_resolution_ms"] = round((time.monotonic() - started) * 1000, 2)
+            diag["dns_resolution_status"] = "resolved"
+        except (OSError, socket.gaierror):
+            diag["dns_resolution_status"] = "failed"
+
     try:
-        target=gw or "8.8.8.8"
-        cmd=["ping","-n","10",target] if OS=="Windows" else ["ping","-c","10","-i","0.2",target]
-        out=subprocess.check_output(cmd,stderr=subprocess.DEVNULL,timeout=15).decode("utf-8","ignore")
-        times=[float(x) for x in re.findall(r"time[=<]?([\d.]+)\s*ms",out)]
-        if times:
-            diag["latency_ms"]=round(sum(times)/len(times),2)
-            diag["latency_min_ms"]=round(min(times),2)
-            diag["latency_max_ms"]=round(max(times),2)
-            jv=[abs(times[i]-times[i-1]) for i in range(1,len(times))]
-            diag["jitter_ms"]=round(sum(jv)/len(jv),2) if jv else 0
-            m=re.search(r"(\d+)% packet loss",out)
-            diag["packet_loss_pct"]=int(m.group(1)) if m else 0
-    except: pass
+        interface = get_wifi_iface()
+        if interface:
+            for address in psutil.net_if_addrs().get(interface, []):
+                if str(address.family) in ("AddressFamily.AF_INET", "2"):
+                    diag["local_ip"] = address.address
+                    diag["subnet_mask"] = address.netmask
+    except Exception:
+        pass
+
     try:
-        import socket; t0=time.time(); socket.getaddrinfo("google.com",80)
-        diag["dns_resolution_ms"]=round((time.time()-t0)*1000,2)
-    except: pass
-    try:
-        iface=get_wifi_iface()
-        if iface:
-            for addr in psutil.net_if_addrs().get(iface,[]):
-                if str(addr.family) in ("AddressFamily.AF_INET","2"):
-                    diag["local_ip"]=addr.address; diag["subnet_mask"]=addr.netmask
-    except: pass
-    try:
-        if OS=="Linux":
-            with open("/etc/resolv.conf") as f:
-                diag["dns_servers"]=re.findall(r"nameserver ([\d.]+)",f.read())
-    except: pass
+        if OS == "Linux":
+            with open("/etc/resolv.conf", encoding="utf-8") as resolver_file:
+                diag["dns_servers"] = re.findall(
+                    r"(?m)^\s*nameserver\s+([^\s#]+)",
+                    resolver_file.read(),
+                )
+    except (OSError, UnicodeError):
+        pass
+
     diag["host_capabilities"] = diagnose_host(OS)
     return diag
-
 
 def lookup_vendor(mac):
     OUI = {

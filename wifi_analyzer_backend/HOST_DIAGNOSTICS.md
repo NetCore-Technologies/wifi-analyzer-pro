@@ -54,3 +54,27 @@ because a command exists.
 The capability report is refreshed with the normal Diagnostics API response.
 It performs only local executable lookup and does not send command output,
 host executable paths, user account names or Wi-Fi credentials to the server.
+
+## Network reachability probe policy
+
+The normal Diagnostics refresh never selects a public ping target. If a default
+gateway is discovered, the backend sends three ICMP echo requests only to that
+local gateway. When no gateway is available, the probe is skipped and the API
+returns `gateway_probe_status: skipped_no_gateway`; it does not substitute a
+public address.
+
+External DNS resolution is disabled unless the operator explicitly sets
+`WIFI_ANALYZER_DIAGNOSTIC_DNS_TARGET` in the server environment. The value
+must be a valid hostname or IP address. When configured, the backend resolves
+only that target and reports the target, elapsed time and result status. An
+invalid value is rejected without making a DNS request. DNS server addresses
+listed in the host resolver configuration are read locally and are not queried
+as part of this capability report.
+
+Gateway probe failures are reported distinctly: `permission_denied`, `timed_out`,
+`tool_missing`, `network_unreachable` or `unavailable`. Packet loss is retained even
+when every echo request is lost, rather than being mislabeled as a healthy or
+unmeasured gateway.
+
+These checks are designed for local-first installations where periodic
+Diagnostics refreshes should not silently generate Internet-bound probes.

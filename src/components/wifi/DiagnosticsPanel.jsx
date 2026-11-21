@@ -33,13 +33,29 @@ export default function DiagnosticsPanel({ diag, loading }) {
   const loss = statusFor(diag.packet_loss_pct, 1, 5);
   const dns = statusFor(diag.dns_resolution_ms, 50, 100);
   const route = statusFor(diag.route_hops, 5, 15);
-  const gateway = diag.gateway ? 'good' : diag.gateway == null || diag.gateway === '' ? 'unknown' : 'bad';
+  const gateway = diag.gateway_probe_status === 'skipped_no_gateway'
+    ? 'unknown'
+    : diag.gateway_probe_status === 'unavailable'
+      ? 'bad'
+      : statusFor(diag.packet_loss_pct, 1, 5);
   const summary = [
     { label: 'Latency', status: latency, detail: present(diag.latency_ms, ' ms') },
     { label: 'Jitter', status: jitter, detail: present(diag.jitter_ms, ' ms') },
     { label: 'Packet loss', status: loss, detail: present(diag.packet_loss_pct, '%') },
-    { label: 'DNS', status: dns, detail: present(diag.dns_resolution_ms, ' ms') },
-    { label: 'Gateway', status: gateway, detail: diag.gateway || 'Not reported' },
+    { label: 'DNS', status: dns, detail: diag.dns_resolution_status === 'not_configured'
+      ? 'External probe disabled'
+      : diag.dns_resolution_status === 'invalid_configuration'
+        ? 'Invalid target'
+        : present(diag.dns_resolution_ms, ' ms') },
+    { label: 'Gateway', status: gateway, detail: diag.gateway_probe_status === 'permission_denied'
+      ? 'Ping permission denied'
+      : diag.gateway_probe_status === 'timed_out'
+        ? 'Probe timed out'
+        : diag.gateway_probe_status === 'network_unreachable'
+          ? 'Network unreachable'
+          : diag.gateway_probe_status === 'tool_missing'
+            ? 'Ping utility missing'
+            : diag.gateway || (diag.gateway_probe_status === 'skipped_no_gateway' ? 'No default route; probe skipped' : 'Not reported') },
     { label: 'Route', status: route, detail: diag.route_hops == null ? 'Not reported' : String(diag.route_hops) + ' hops' },
   ];
   const StatusIcon = ({ status }) => status === 'good'
@@ -67,6 +83,13 @@ export default function DiagnosticsPanel({ diag, loading }) {
           <Row label="Local IP" value={diag.local_ip} color="text-primary" />
           <Row label="Subnet Mask" value={diag.subnet_mask} />
           <Row label="Default Gateway" value={diag.gateway} color="text-cyan-400" />
+          <Row label="Gateway probe" value={diag.gateway_probe_status === 'skipped_no_gateway' ? 'Skipped — no default route'
+            : diag.gateway_probe_status === 'measured' ? 'Local gateway measured'
+              : diag.gateway_probe_status === 'permission_denied' ? 'Permission denied'
+              : diag.gateway_probe_status === 'timed_out' ? 'Timed out'
+                : diag.gateway_probe_status === 'network_unreachable' ? 'Network unreachable'
+                  : diag.gateway_probe_status === 'tool_missing' ? 'Ping utility missing'
+                    : diag.gateway_probe_status === 'unavailable' ? 'Unavailable' : 'Not reported'} mono={false} />
           <Row label="Gateway MAC" value={diag.gateway_mac} />
           <Row label="MTU" value={present(diag.mtu)} />
         </Section>
@@ -74,6 +97,11 @@ export default function DiagnosticsPanel({ diag, loading }) {
           {Array.isArray(diag.dns_servers) && diag.dns_servers.length
             ? diag.dns_servers.map((server, index) => <Row key={server || index} label={'DNS ' + (index + 1)} value={server} color="text-purple" />)
             : <Row label="Resolver configuration" value="Not reported" mono={false} />}
+          <Row label="External DNS probe" value={diag.dns_resolution_status === 'not_configured' ? 'Disabled (opt-in)'
+            : diag.dns_resolution_status === 'resolved' ? 'Resolved'
+              : diag.dns_resolution_status === 'failed' ? 'Failed'
+                : diag.dns_resolution_status === 'invalid_configuration' ? 'Invalid target configuration' : 'Not reported'} mono={false} />
+          <Row label="DNS target" value={diag.dns_resolution_target || 'Not configured'} mono={false} />
           <Row label="Resolution Time" value={present(diag.dns_resolution_ms, ' ms')} color={dns === 'good' ? 'text-green-400' : dns === 'unknown' ? 'text-muted-foreground' : 'text-yellow-400'} />
         </Section>
       </div>
