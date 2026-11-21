@@ -144,7 +144,7 @@ class RadioCapabilityRegulatoryPlannerTests(unittest.TestCase):
             "channel_numbers": [36, 40],
             "dfs_required": True,
         })
-        dataset = validate_regulatory_dataset(raw)["result"]
+        dataset = validate_regulatory_dataset(raw)
         payload = make_payload()
         payload["regulatory_dataset"] = dataset
         payload["dataset_acknowledgement"]["dataset_fingerprint_sha256"] = dataset["dataset_fingerprint_sha256"]
@@ -183,7 +183,7 @@ class RadioCapabilityRegulatoryPlannerTests(unittest.TestCase):
         raw = copy.deepcopy(_RAW_DATASET)
         raw["rules"][0]["device_classes"] = ["SP"]
         raw["rules"][0]["afc_required"] = True
-        dataset = validate_regulatory_dataset(raw)["result"]
+        dataset = validate_regulatory_dataset(raw)
         payload = make_payload()
         payload["regulatory_dataset"] = dataset
         payload["dataset_acknowledgement"]["dataset_fingerprint_sha256"] = dataset["dataset_fingerprint_sha256"]

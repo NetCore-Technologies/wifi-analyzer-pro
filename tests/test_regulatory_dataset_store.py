@@ -122,8 +122,12 @@ class RegulatoryDatasetStoreTests(unittest.TestCase):
         modified["rules"][0]["maximum_eirp_dbm"] = 60
         with self.assertRaisesRegex(ValueError, "fingerprint does not match"):
             self.store.save("head-office", modified, acknowledgement)
-        expired, expired_ack = validated_dataset("expired-v1", effective_to="2020-01-01")
-        with self.assertRaisesRegex(ValueError, "status validated"):
+        expired, expired_ack = validated_dataset("expired-v1")
+        expired["effective_to"] = (_NOW.date() - timedelta(days=1)).isoformat()
+        from wifi_analyzer_backend.feature_plugins.feature_207_radio_capability_regulatory_planner import _fingerprint_dataset
+        expired["dataset_fingerprint_sha256"] = _fingerprint_dataset(expired)
+        expired_ack["dataset_fingerprint_sha256"] = expired["dataset_fingerprint_sha256"]
+        with self.assertRaisesRegex(ValueError, "not effective for the assessment date"):
             self.store.save("head-office", expired, expired_ack)
 
     def test_per_site_limit_does_not_overwrite_existing_versions(self):
