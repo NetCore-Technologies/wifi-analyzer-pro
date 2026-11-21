@@ -96,6 +96,9 @@ export default function WebhookDeliveryPanel() {
   const [editingSubscriptionId, setEditingSubscriptionId] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState("");
   const [signingKeyDrafts, setSigningKeyDrafts] = useState({});
+  const [probeEvidence, setProbeEvidence] = useState({});
+  const [probeResults, setProbeResults] = useState({});
+  const [probingSubscriptionId, setProbingSubscriptionId] = useState("");
 
   const loadQueue = useCallback(async () => {
     setQueueBusy(true);
@@ -175,6 +178,8 @@ export default function WebhookDeliveryPanel() {
       );
       setSubscriptionDraft(emptySubscriptionDraft());
       setEditingSubscriptionId("");
+      setProbeEvidence({});
+      setProbeResults({});
       await loadSubscriptions();
     } catch (requestError) {
       setSubscriptionError(
@@ -229,6 +234,16 @@ export default function WebhookDeliveryPanel() {
         }
       );
       await readResponse(response);
+      setProbeEvidence(current => {
+        const next = { ...current };
+        delete next[item.subscription_id];
+        return next;
+      });
+      setProbeResults(current => {
+        const next = { ...current };
+        delete next[item.subscription_id];
+        return next;
+      });
       setSubscriptionNotice(item.subscription_id + (item.enabled ? " disabled." : " enabled."));
       await loadSubscriptions();
     } catch (requestError) {
@@ -260,10 +275,82 @@ export default function WebhookDeliveryPanel() {
         setSubscriptionDraft(emptySubscriptionDraft());
       }
       setConfirmDeleteId("");
+      setProbeEvidence(current => {
+        const next = { ...current };
+        delete next[item.subscription_id];
+        return next;
+      });
+      setProbeResults(current => {
+        const next = { ...current };
+        delete next[item.subscription_id];
+        return next;
+      });
       setSubscriptionNotice("Deleted " + item.subscription_id + ".");
       await loadSubscriptions();
     } catch (requestError) {
       setSubscriptionError(requestError instanceof Error ? requestError.message : "Could not delete subscription.");
+    }
+  };
+
+  const probeSubscription = async item => {
+    setProbingSubscriptionId(item.subscription_id);
+    setSubscriptionError("");
+    setSubscriptionNotice("");
+    setProbeResults(current => ({
+      ...current,
+      [item.subscription_id]: { status: "checking", message: "Resolving DNS and verifying TLS…" },
+    }));
+    try {
+      const response = await apiFetch(
+        API_BASE + "/api/webhooks/subscriptions/" + encodeURIComponent(item.subscription_id) + "/probe",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+      const data = await readResponse(response);
+      setProbeResults(current => ({
+        ...current,
+        [item.subscription_id]: {
+          status: data.approved ? "approved" : "blocked",
+          message: data.approved
+            ? "Fresh DNS and TLS evidence approved."
+            : (data.verification?.reasons || ["Endpoint egress policy blocked"]).join(", "),
+        },
+      }));
+      if (data.approved && data.evidence) {
+        setProbeEvidence(current => ({ ...current, [item.subscription_id]: data.evidence }));
+        setSubscriptionNotice(
+          "Endpoint verified for " + item.subscription_id + ". Evidence is short-lived and will be cleared after preparation."
+        );
+      } else {
+        setProbeEvidence(current => {
+          const next = { ...current };
+          delete next[item.subscription_id];
+          return next;
+        });
+        setSubscriptionError("The endpoint did not pass the egress policy. Review the reported reasons before preparing.");
+      }
+    } catch (requestError) {
+      setProbeResults(current => ({
+        ...current,
+        [item.subscription_id]: {
+          status: "failed",
+          message: requestError instanceof Error ? requestError.message : "Endpoint probe failed.",
+        },
+      }));
+      setProbeEvidence(current => {
+        const next = { ...current };
+        delete next[item.subscription_id];
+        return next;
+      });
+      setSubscriptionError(
+        requestError instanceof Error ? requestError.message : "Could not probe the saved webhook endpoint."
+      );
+    } finally {
+      setProbingSubscriptionId("");
     }
   };
 
@@ -307,10 +394,17 @@ export default function WebhookDeliveryPanel() {
     request.subscriptions = subscriptionsForRequest;
     request.signing_keys = signingKeys;
     request.events = Array.isArray(request.events) ? request.events : [];
-    request.egress_evidence = Array.isArray(request.egress_evidence) ? request.egress_evidence : [];
+    const freshEvidence = enabled
+      .map(item => probeEvidence[item.subscription_id])
+      .filter(Boolean);
+    request.egress_evidence = freshEvidence.length
+      ? freshEvidence
+      : (Array.isArray(request.egress_evidence) ? request.egress_evidence : []);
     setPayloadText(JSON.stringify(request, null, 2));
+    const evidenceCount = enabled.filter(item => probeEvidence[item.subscription_id]).length;
     setSubscriptionNotice(
-      "Inserted " + enabled.length + " enabled subscription(s). Add real event data and fresh egress evidence before preparation."
+      "Inserted " + enabled.length + " enabled subscription(s) and " + evidenceCount +
+      " fresh endpoint probe(s). Add event data and probe any remaining endpoints before preparation."
     );
     setSubscriptionError("");
   };
@@ -386,7 +480,9 @@ export default function WebhookDeliveryPanel() {
         setPayloadText(JSON.stringify(payload, null, 2));
       }
       setSigningKeyDrafts({});
-      setNotice("Preparation completed. Signing keys were cleared from the editor and saved subscription definitions were left unchanged.");
+      setProbeEvidence({});
+      setProbeResults({});
+      setNotice("Preparation completed. Signing keys and short-lived endpoint evidence were cleared; saved subscription definitions were unchanged.");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Webhook delivery preparation failed.");
     } finally { setBusy(false); }
@@ -550,12 +646,26 @@ export default function WebhookDeliveryPanel() {
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button type="button" style={{ ...button, padding: "6px 8px" }} onClick={() => editSubscription(item)}>Edit</button>
+                      <button type="button" style={{ ...button, padding: "6px 8px", background: "rgba(6,214,240,.08)" }}
+                        disabled={!item.enabled || probingSubscriptionId === item.subscription_id}
+                        onClick={() => probeSubscription(item)}>
+                        {probingSubscriptionId === item.subscription_id ? "Testing…" : "Test TLS"}
+                      </button>
                       <button type="button" style={{ ...button, padding: "6px 8px", background: "transparent", borderColor: "#475569", color: "#cbd5e1" }}
                         onClick={() => changeSubscriptionState(item)}>{item.enabled ? "Disable" : "Enable"}</button>
                       <button type="button" style={{ ...button, padding: "6px 8px", background: "transparent", borderColor: confirmDeleteId === item.subscription_id ? "#f87171" : "#475569", color: "#fca5a5" }}
                         onClick={() => deleteSubscription(item)}>{confirmDeleteId === item.subscription_id ? "Confirm delete" : "Delete"}</button>
                     </div>
                   </div>
+                  {probeResults[item.subscription_id] ? (
+                    <div role="status" style={{
+                      color: probeResults[item.subscription_id].status === "approved" ? "#4ade80" :
+                        probeResults[item.subscription_id].status === "checking" ? "#06d6f0" : "#fbbf24",
+                      fontSize: 10,
+                    }}>
+                      Endpoint probe · {probeResults[item.subscription_id].message}
+                    </div>
+                  ) : null}
                   <label style={{ ...muted, display: "grid", gap: 5 }}>
                     One-time HMAC signing secret for {item.key_id}
                     <input
@@ -573,7 +683,7 @@ export default function WebhookDeliveryPanel() {
           )}
         </div>
         <p style={{ ...muted, margin: "10px 0 0" }}>
-          Subscription records contain routing metadata only. Signing secrets remain transient in this page, are added to the request only when you insert saved subscriptions, and are cleared after a successful preparation.
+          Subscription records contain routing metadata only. Signing secrets remain transient in this page and are cleared after a successful preparation. Test TLS performs a DNS lookup and TLS handshake only; it sends no HTTP payload. The resulting F187 evidence is short-lived and automatically inserted into the next request.
         </p>
       </section>
       <section style={panel}>
