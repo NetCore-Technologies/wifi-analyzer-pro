@@ -22,6 +22,7 @@ import SecurityAuditPanel from "./components/SecurityAuditPanel.jsx";
 import AccountSecurityPanel from "./components/AccountSecurityPanel.jsx";
 import WebhookDeliveryPanel from "./components/WebhookDeliveryPanel.jsx";
 import BillingPanel from "./components/BillingPanel.jsx";
+import { PhyTelemetryPanel, InterfaceTelemetryPanel } from "./components/LiveRadioPanels.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -1038,6 +1039,10 @@ export default function App() {
   const [liveDevs,setLiveDevs]=useState(null);
   const [liveSystem,setLiveSystem]=useState(null);
   const [liveDiag,setLiveDiag]=useState(null);
+  const [livePhy,setLivePhy]=useState(null);
+  const [liveLink,setLiveLink]=useState(null);
+  const [linkRates,setLinkRates]=useState(null);
+  const linkSampleRef=useRef(null);
   const [checking,setChecking]=useState(true);
   const [liveError,setLiveError]=useState("");
   const [lastUpdated,setLastUpdated]=useState(null);
@@ -1072,6 +1077,10 @@ export default function App() {
             setLiveDevs(null);
             setLiveSystem(null);
             setLiveDiag(null);
+            setLivePhy(null);
+            setLiveLink(null);
+            setLinkRates(null);
+            linkSampleRef.current=null;
             setLiveError("");
             setLastUpdated(null);
           }
@@ -1082,9 +1091,11 @@ export default function App() {
           apiFetch(`${API_BASE}/api/devices`,{signal:AbortSignal.timeout(10000)}),
           apiFetch(`${API_BASE}/api/system`,{signal:AbortSignal.timeout(5000)}),
           apiFetch(`${API_BASE}/api/diagnostics`,{signal:AbortSignal.timeout(18000)}),
+          apiFetch(`${API_BASE}/api/phy`,{signal:AbortSignal.timeout(8000)}),
+          apiFetch(`${API_BASE}/api/link`,{signal:AbortSignal.timeout(8000)}),
         ]);
         if(responses.some(response=>!response.ok))throw new Error("One or more local API requests failed");
-        const [scanData,deviceData,systemData,diagnosticData]=await Promise.all(responses.map(response=>response.json()));
+        const [scanData,deviceData,systemData,diagnosticData,phyData,linkData]=await Promise.all(responses.map(response=>response.json()));
         if(disposed)return;
         const scanSource=getScanSource(scanData);
         if(scanSource==="unknown")throw new Error("The scan endpoint did not identify its observation source");
@@ -1093,6 +1104,32 @@ export default function App() {
         if(Array.isArray(deviceData.devices))setLiveDevs(deviceData.devices);
         setLiveSystem(systemData);
         setLiveDiag(diagnosticData);
+        setLivePhy(phyData);
+        setLiveLink(linkData);
+        const sampledAt=Date.now();
+        const rxBytes=Number(linkData?.rx_bytes);
+        const txBytes=Number(linkData?.tx_bytes);
+        const previousSample=linkSampleRef.current;
+        if(
+          previousSample
+          && sampledAt>previousSample.sampledAt
+          && Number.isFinite(rxBytes)
+          && Number.isFinite(txBytes)
+          && rxBytes>=previousSample.rxBytes
+          && txBytes>=previousSample.txBytes
+        ){
+          const elapsedMs=sampledAt-previousSample.sampledAt;
+          setLinkRates({
+            rxMbps:((rxBytes-previousSample.rxBytes)*8)/(elapsedMs*1000),
+            txMbps:((txBytes-previousSample.txBytes)*8)/(elapsedMs*1000),
+            sampledAt,
+          });
+        }else{
+          setLinkRates(null);
+        }
+        linkSampleRef.current=Number.isFinite(rxBytes)&&Number.isFinite(txBytes)
+          ?{sampledAt,rxBytes,txBytes}
+          :null;
         setLiveError("");
         setLastUpdated(Date.now());
       }catch(error){
@@ -1102,6 +1139,10 @@ export default function App() {
           setLiveDevs(null);
           setLiveSystem(null);
           setLiveDiag(null);
+          setLivePhy(null);
+          setLiveLink(null);
+          setLinkRates(null);
+          linkSampleRef.current=null;
           setLiveError(error instanceof Error ? error.message : "The local API could not be reached");
           setLastUpdated(null);
         }
@@ -1176,10 +1217,8 @@ export default function App() {
     alerts:      <AlertsPanel alerts={observedAlerts}/>,
     system:      <SystemPanel sysInfo={liveSystem}/>,
     ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem} isLive={liveMode}/>,
-    phy:         <FeatureGrid title="PHY Information" badge="v1.0.5" col={C.cyan}
-      features={["MCS index display","NSS spatial streams","Channel width","Short guard interval","Bitrate TX/RX","TX power (dBm)","RX sensitivity","PHY type (HT/VHT/HE/EHT)","Antenna chains","Radio capabilities","Regulatory domain","Max EIRP"]} />,
-    interface:   <FeatureGrid title="Interface Monitor" badge="v1.0.5" col={C.purple}
-      features={["RX packet counter","TX packet counter","RX error counter","TX error counter","RX drop counter","TX drop counter","Retry counter","Collision stats","Per-interface throughput","Live graph","Multi-interface","Auto-refresh"]} />,
+    phy:         <PhyTelemetryPanel data={livePhy} interfaceName={liveSystem?.wifi_interface}/>,
+    interface:   <InterfaceTelemetryPanel data={liveLink} rates={linkRates} interfaceName={liveSystem?.wifi_interface}/>,
     diagnostics: <FeatureGrid title="Network Diagnostics" badge="v1.0.5" col={C.green}
       features={["Gateway latency","Internet latency","DNS lookup timing","Packet loss %","MTU path discovery","Traceroute","Route visualisation","IPv4 analysis","IPv6 analysis","DNS benchmarking","Gateway health","Bufferbloat test"]} />,
     router:      <FeatureGrid title="Router Support" badge="v1.0.5" col={C.blue}
