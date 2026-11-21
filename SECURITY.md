@@ -9,6 +9,22 @@ HackerOne: https://hackerone.com/irule675
 
 I will respond within 48 hours.
 
+ 
+## Continuous dependency vulnerability checks
+
+The Quality gates workflow audits the complete npm lockfile with
+`npm audit --audit-level=high` and scans the Python runtime requirements,
+including resolved dependencies, with `pip-audit` 2.10.1. These checks run
+on pushes and pull requests to `main`, manual workflow dispatches and the
+weekly scheduled build. A reported high/critical npm advisory or a known
+Python package vulnerability fails the dependency-audit job.
+
+The audit tools query their configured public advisory services at run time.
+A clean result means no matching known advisory was reported for the resolved
+dependency versions at that time; it is not a proof that dependencies are
+free from unknown vulnerabilities, malicious packages, or vulnerable native
+system libraries in the container base image.
+
 
 ## Local security audit trail
 
