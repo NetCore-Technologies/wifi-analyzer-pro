@@ -5,6 +5,7 @@ import io
 import json
 import tempfile
 import unittest
+import concurrent.futures
 from pathlib import Path
 from urllib.parse import parse_qs
 
@@ -128,6 +129,22 @@ class BillingStoreTests(unittest.TestCase):
         reset = self.store.consume_monthly_feature_run()
         self.assertTrue(reset["allowed"])
         self.assertEqual(reset["used"], 1)
+
+    def test_monthly_diagnostic_allowance_cannot_be_exceeded_by_concurrent_requests(self):
+        # Initialise the schema before concurrent consumers contend for the
+        # same SQLite transaction lock.
+        self.store.status()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            decisions = list(pool.map(
+                lambda _index: self.store.consume_monthly_feature_run(),
+                range(120),
+            ))
+        allowed = [item for item in decisions if item["allowed"]]
+        denied = [item for item in decisions if not item["allowed"]]
+        self.assertEqual(len(allowed), 100)
+        self.assertEqual(len(denied), 20)
+        self.assertEqual(self.store.status()["monthly_usage"]["feature_runs"], 100)
+        self.assertTrue(all(item["limit"] == 100 for item in denied))
 
     def test_site_quota_is_present_on_each_plan(self):
         self.assertEqual(self.store.status()["limits"]["sites"], 1)
