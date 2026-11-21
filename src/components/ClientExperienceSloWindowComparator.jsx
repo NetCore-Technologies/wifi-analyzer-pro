@@ -73,6 +73,10 @@ export default function ClientExperienceSloWindowComparator() {
       if (!Number.isInteger(age) || age < 1 || age > 30) throw new Error('Freshness window must be a whole number from 1 to 30 days.');
       if (!Number.isInteger(minimum) || minimum < 1 || minimum > 10000) throw new Error('Minimum eligible samples must be a whole number from 1 to 10000.');
       if (!Number.isFinite(regression) || regression < 0.1 || regression > 100) throw new Error('Regression threshold must be from 0.1 to 100 percentage points.');
+      if (!requiredMetrics.length) throw new Error('Select at least one required metric so incomplete samples cannot be treated as healthy.');
+      if (requiredMetrics.includes('throughput_mbps') && !thresholdOverrides.throughput_mbps?.trim()) {
+        throw new Error('Set a minimum throughput threshold before making throughput a required metric.');
+      }
       const thresholds = {};
       for (const [key] of METRICS) {
         const value = thresholdOverrides[key]?.trim();
