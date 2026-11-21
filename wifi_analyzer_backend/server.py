@@ -20,6 +20,7 @@ if __package__:
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
     from .live_capture import LiveCaptureManager
+    from .report_worker import _PinnedHTTPSConnection, _resolve_public_addresses
     from .webhook_delivery_store import (
         WebhookDeliveryConflictError, WebhookDeliveryNotFoundError, WebhookDeliveryStore,
     )
@@ -47,6 +48,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
     from live_capture import LiveCaptureManager
+    from report_worker import _PinnedHTTPSConnection, _resolve_public_addresses
     from webhook_delivery_store import (
         WebhookDeliveryConflictError, WebhookDeliveryNotFoundError, WebhookDeliveryStore,
     )
@@ -1272,7 +1274,10 @@ class Handler(BaseHTTPRequestHandler):
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
             return
-        if path.startswith("/api/webhooks/subscriptions") and not self.enforce_rate_limit("api.webhook.manage"):
+        if path.startswith("/api/webhooks/subscriptions/") and path.endswith("/probe"):
+            if not self.enforce_rate_limit("api.webhook.probe"):
+                return
+        elif path.startswith("/api/webhooks/subscriptions") and not self.enforce_rate_limit("api.webhook.manage"):
             return
         if path.startswith("/api/features/") and not self.enforce_rate_limit("api.feature.execution"):
             return
@@ -1513,6 +1518,96 @@ class Handler(BaseHTTPRequestHandler):
                 metadata={"enabled": subscription["enabled"], "site_count": len(subscription["site_allowlist"])},
             )
             self.send_json({"subscription": subscription}, 201)
+            return
+
+        subscription_probe = re.fullmatch(
+            r"/api/webhooks/subscriptions/([A-Za-z0-9][A-Za-z0-9._:-]{0,63})/probe",
+            path,
+        )
+        if subscription_probe:
+            if not self.require_auth("webhooks.manage"):
+                return
+            subscription_id = subscription_probe.group(1)
+            scope = AUTH.site_access(self.bearer_token())
+            site_filter = None if scope["all_sites"] else scope["site_ids"]
+            subscription = WEBHOOK_SUBSCRIPTIONS.get(subscription_id, site_ids=site_filter)
+            if subscription is None:
+                self.send_json({"error": "Subscription not found"}, 404)
+                return
+            host = urlparse(subscription["endpoint"]).hostname
+            if not host:
+                self.send_json({"error": "Saved endpoint does not contain a DNS hostname"}, 400)
+                return
+            resolved_at = datetime.now(timezone.utc)
+            connection = None
+            resolved_addresses = []
+            try:
+                resolved_addresses = _resolve_public_addresses(host)
+                for address in resolved_addresses[:4]:
+                    try:
+                        connection = _PinnedHTTPSConnection(host, address, 5)
+                        break
+                    except Exception:
+                        continue
+                if connection is None:
+                    self.send_json({
+                        "error": "Could not establish a verified TLS connection to the allow-listed endpoint",
+                        "code": "tls_connect_failed",
+                    }, 503)
+                    return
+                connected_at = datetime.now(timezone.utc)
+                evidence = {
+                    "subscription_id": subscription_id,
+                    "endpoint": subscription["endpoint"],
+                    "allowed_hosts": subscription["allowed_hosts"],
+                    "resolution_at": resolved_at.isoformat(),
+                    "connected_at": connected_at.isoformat(),
+                    "resolved_addresses": resolved_addresses,
+                    "peer_ip": connection.peer_ip,
+                    "connected_port": connection.connected_port,
+                    "tls_version": connection.tls_version,
+                    "tls_verified": connection.tls_verified,
+                    "hostname_verified": connection.hostname_verified,
+                    "redirect_location": None,
+                }
+                verification_response = run_feature(
+                    "router_webhook_egress_policy_verifier", evidence
+                )
+                verification = verification_response.get("result", {})
+                self.audit_event(
+                    "webhook.subscription.egress_probed",
+                    target_type="webhook_subscription",
+                    target_id=subscription_id,
+                    metadata={
+                        "approved": bool(verification.get("approved")),
+                        "tls_version": evidence["tls_version"],
+                        "resolved_address_count": len(resolved_addresses),
+                    },
+                )
+                self.send_json({
+                    "subscription_id": subscription_id,
+                    "approved": bool(verification.get("approved")),
+                    "evidence": evidence if verification.get("approved") else None,
+                    "verification": verification,
+                    "note": "TLS handshake only; no HTTP request was sent to the webhook endpoint.",
+                })
+            except Exception:
+                self.audit_event(
+                    "webhook.subscription.egress_probe_failed",
+                    target_type="webhook_subscription",
+                    target_id=subscription_id,
+                    outcome="denied",
+                )
+                self.send_json({
+                    "error": "DNS or pinned TLS verification failed for the configured endpoint",
+                    "code": "egress_probe_failed",
+                }, 503)
+            finally:
+                if connection is not None:
+                    try:
+                        connection.close()
+                    except OSError:
+                        pass
             return
 
         subscription_update = re.fullmatch(

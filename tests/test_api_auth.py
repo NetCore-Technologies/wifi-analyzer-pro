@@ -9,7 +9,7 @@ import threading
 import unittest
 from pathlib import Path
 from http.client import HTTPConnection
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
@@ -500,6 +500,56 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, remaining = self.request("GET", "/api/webhooks/subscriptions", token=scoped_token)
         self.assertEqual(status, 200)
         self.assertEqual(remaining["subscriptions"], [])
+
+    def test_saved_webhook_subscription_egress_probe_uses_pinned_tls_without_http(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+        configuration = {
+            "subscription_id": "office-probe",
+            "endpoint": "https://hooks.example.net/router/events",
+            "allowed_hosts": ["hooks.example.net"],
+            "key_id": "office-probe-key",
+            "event_types": ["router.health"],
+            "minimum_severity": "warning",
+            "site_allowlist": ["office"],
+            "maximum_events_per_batch": 100,
+            "maximum_batches": 5,
+            "enabled": True,
+        }
+        status, created = self.request(
+            "POST", "/api/webhooks/subscriptions",
+            {"subscription": configuration}, token=owner_token,
+        )
+        self.assertEqual(status, 201, created)
+
+        class FakeConnection:
+            peer_ip = "1.1.1.1"
+            connected_port = 443
+            tls_version = "TLSv1.3"
+            tls_verified = True
+            hostname_verified = True
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeConnection()
+        with patch.object(server, "_resolve_public_addresses", return_value=["1.1.1.1"]), \
+             patch.object(server, "_PinnedHTTPSConnection", return_value=fake) as connect, \
+             patch.object(server, "run_feature", return_value={"result": {"approved": True, "reasons": []}}) as verify:
+            status, result = self.request(
+                "POST", "/api/webhooks/subscriptions/office-probe/probe", {}, token=owner_token,
+            )
+        self.assertEqual(status, 200, result)
+        self.assertTrue(result["approved"])
+        self.assertEqual(result["evidence"]["peer_ip"], "1.1.1.1")
+        self.assertEqual(result["evidence"]["tls_version"], "TLSv1.3")
+        self.assertIn("no HTTP request was sent", result["note"])
+        connect.assert_called_once_with("hooks.example.net", "1.1.1.1", 5)
+        verify.assert_called_once()
+        self.assertTrue(fake.closed)
 
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")
