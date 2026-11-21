@@ -1543,6 +1543,55 @@ class AuthenticatedApiTests(unittest.TestCase):
         }, token=viewer_token)
         self.assertEqual(status, 403)
         self.assertEqual(server.HISTORY.get(home["id"])["site_id"], "home")
+    def test_f201_channel_planner_enforces_assigned_site_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "planner scope owner secure password",
+        })
+        owner_token = setup["token"]
+        self.request("POST", "/api/users", {
+            "username": "office.planner",
+            "password": "office planner secure password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["home"],
+        }, token=owner_token)
+        _, login = self.request("POST", "/api/auth/login", {
+            "username": "office.planner",
+            "password": "office planner secure password",
+        })
+        planner_token = login["token"]
+
+        payload = {
+            "radios": [
+                {"radio_id":"home-ap1-24","ap_id":"home-ap1","site_id":"home","band":"2.4GHz",
+                 "channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+                {"radio_id":"home-ap2-24","ap_id":"home-ap2","site_id":"home","band":"2.4GHz",
+                 "channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+            ],
+            "interference_edges": [
+                {"radio_ids":["home-ap1-24","home-ap2-24"],"weight":0.8,"evidence_source":"survey"},
+            ],
+        }
+        status, allowed = self.request(
+            "POST", "/api/features/multi_ap_channel_reuse_planner", payload, token=planner_token,
+        )
+        self.assertEqual(status, 200, allowed)
+        self.assertEqual(allowed["feature"], "F201")
+        self.assertEqual(allowed["result"]["status"], "planned")
+
+        cross_site = {
+            **payload,
+            "radios": [
+                payload["radios"][0],
+                {**payload["radios"][1], "site_id": "branch"},
+            ],
+        }
+        status, denied = self.request(
+            "POST", "/api/features/multi_ap_channel_reuse_planner", cross_site, token=planner_token,
+        )
+        self.assertEqual(status, 403, denied)
+        self.assertIn("outside your assigned access scope", denied["error"])
+
     def test_saved_history_report_requires_auth_and_limits_site_count(self):
         status, denied = self.request("GET", "/api/sites/history/report")
         self.assertEqual(status, 401)
