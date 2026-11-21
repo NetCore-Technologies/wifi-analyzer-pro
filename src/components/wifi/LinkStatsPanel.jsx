@@ -7,6 +7,10 @@ function measuredNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
+function counterColor(value, warning) {
+  const number = measuredNumber(value);
+  return number === null ? 'text-muted-foreground' : number > 0 ? warning : 'text-green-400';
+}
 function StatCard({ label, value, sub, color = 'text-foreground', icon: Icon }) {
   return <div className="glass rounded-xl p-3"><div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">{Icon && <Icon className="w-3 h-3" />}{label}</div><div className={`text-lg font-bold font-mono ${color}`}>{value}</div>{sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}</div>;
 }
@@ -43,15 +47,15 @@ export default function LinkStatsPanel({ link, loading }) {
         <StatCard label="RX Data" value={formatBytes(link.rx_bytes)} icon={ArrowDown} color="text-purple" />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="TX Errors" value={formatCount(link.tx_errors)} color={measuredNumber(link.tx_errors) > 0 ? 'text-orange-400' : 'text-green-400'} icon={AlertTriangle} />
-        <StatCard label="RX Errors" value={formatCount(link.rx_errors)} color={measuredNumber(link.rx_errors) > 0 ? 'text-orange-400' : 'text-green-400'} icon={AlertTriangle} />
-        <StatCard label="TX Dropped" value={formatCount(link.tx_dropped)} color={measuredNumber(link.tx_dropped) > 0 ? 'text-yellow-400' : 'text-green-400'} />
-        <StatCard label="RX Dropped" value={formatCount(link.rx_dropped)} color={measuredNumber(link.rx_dropped) > 0 ? 'text-yellow-400' : 'text-green-400'} />
+        <StatCard label="TX Errors" value={formatCount(link.tx_errors)} color={counterColor(link.tx_errors, 'text-orange-400')} icon={AlertTriangle} />
+        <StatCard label="RX Errors" value={formatCount(link.rx_errors)} color={counterColor(link.rx_errors, 'text-orange-400')} icon={AlertTriangle} />
+        <StatCard label="TX Dropped" value={formatCount(link.tx_dropped)} color={counterColor(link.tx_dropped, 'text-yellow-400')} />
+        <StatCard label="RX Dropped" value={formatCount(link.rx_dropped)} color={counterColor(link.rx_dropped, 'text-yellow-400')} />
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <StatCard label="TX Retries" value={formatCount(link.tx_retries)} sub={retryRate + ' retry rate'} color="text-yellow-400" icon={Activity} />
-        <StatCard label="TX Failed" value={formatCount(link.tx_failed)} color={measuredNumber(link.tx_failed) > 0 ? 'text-red-400' : 'text-green-400'} icon={AlertTriangle} />
-        <StatCard label="Missed Beacons" value={formatCount(link.missed_beacons)} color={measuredNumber(link.missed_beacons) > 5 ? 'text-orange-400' : 'text-green-400'} />
+        <StatCard label="TX Retries" value={formatCount(link.tx_retries)} sub={retryRate + ' retry rate'} color={counterColor(link.tx_retries, 'text-yellow-400')} icon={Activity} />
+        <StatCard label="TX Failed" value={formatCount(link.tx_failed)} color={counterColor(link.tx_failed, 'text-red-400')} icon={AlertTriangle} />
+        <StatCard label="Missed Beacons" value={formatCount(link.missed_beacons)} color={counterColor(link.missed_beacons, 'text-orange-400')} />
       </div>
       <div className="glass rounded-xl p-4 grid grid-cols-2 gap-4">
         <div>

@@ -43,6 +43,11 @@ test("CSV neutralises spreadsheet formulas but preserves negative numeric measur
   }));
   assert.match(csv, /"'=HYPERLINK/);
   assert.match(csv, /"-73"/);
+
+  const leadingWhitespace = buildScanCsv(buildScanExport({
+    networks: [{ ssid: "  =HYPERLINK(\"https://attacker.invalid\")" }],
+  }));
+  assert.match(leadingWhitespace, /"'  =HYPERLINK/);
 });
 
 test("empty exports remain valid CSV with the metadata contract", () => {

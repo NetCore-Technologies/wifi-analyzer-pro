@@ -1,4 +1,4 @@
-const FORMULA_PREFIX = /^[=+@]/;
+const FORMULA_PREFIX = /^[=+@-]/;
 
 function csvValue(value) {
   if (value === null || value === undefined) return "";

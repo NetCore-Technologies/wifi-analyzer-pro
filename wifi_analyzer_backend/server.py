@@ -766,7 +766,9 @@ class Handler(BaseHTTPRequestHandler):
         interface = get_wifi_iface()
         source = "demo" if DEMO_MODE else "live"
         telemetry_status = "disabled_for_demo" if DEMO_MODE else "stored"
-        if not DEMO_MODE:
+        if not DEMO_MODE and OS == "Linux" and not interface:
+            telemetry_status = "unavailable_no_wifi_interface"
+        elif not DEMO_MODE:
             try:
                 TELEMETRY.record_scan(LOCAL_SITE_ID, networks, sampled_at=sampled_at)
             except Exception:
@@ -937,6 +939,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def managed_site_ids(self):
         site_ids = set(HISTORY.site_ids(limit=100))
+        site_ids.update(TELEMETRY.site_ids(limit=100))
         for credential in AGENT_HEALTH.list_agent_credentials():
             site_id = credential.get("site_id")
             if isinstance(site_id, str) and site_id.strip():
@@ -1330,6 +1333,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/sites":
                 scope = AUTH.site_access(self.bearer_token())
                 discovered = set(HISTORY.site_ids(limit=100))
+                discovered.update(TELEMETRY.site_ids(limit=100))
                 discovered.update(
                     credential["site_id"]
                     for credential in AGENT_HEALTH.list_agent_credentials()

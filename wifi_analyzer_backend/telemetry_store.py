@@ -311,9 +311,12 @@ class WiFiTelemetryStore:
                     updated_at = excluded.updated_at
             """, (
                 site_id, minute,
-                values["latency"][1], values["latency"][2], values["latency"][3], values["latency"][4],
-                values["jitter"][1], values["jitter"][2], values["jitter"][3], values["jitter"][4],
-                values["packet_loss"][1], values["packet_loss"][2], values["packet_loss"][3], values["packet_loss"][4],
+                metrics["latency"] if metrics["latency"] is not None else 0,
+                int(metrics["latency"] is not None), metrics["latency"], metrics["latency"],
+                metrics["jitter"] if metrics["jitter"] is not None else 0,
+                int(metrics["jitter"] is not None), metrics["jitter"], metrics["jitter"],
+                metrics["packet_loss"] if metrics["packet_loss"] is not None else 0,
+                int(metrics["packet_loss"] is not None), metrics["packet_loss"], metrics["packet_loss"],
                 now_text,
             ))
             self._prune(db, site_id, moment)

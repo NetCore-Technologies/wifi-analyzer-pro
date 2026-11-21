@@ -100,16 +100,18 @@ class WiFiTelemetryStoreTests(unittest.TestCase):
         old = datetime.now(timezone.utc) - timedelta(days=9)
         with self.assertRaisesRegex(ValueError, "retention window"):
             self.store.record_scan("office", [], sampled_at=old)
+        base = datetime.now(timezone.utc).replace(second=0, microsecond=0) - timedelta(minutes=20)
         for minute in range(12):
-            self.store.record_scan("office", [], sampled_at=self.timestamp(seconds=minute * 60))
+            self.store.record_scan("office", [], sampled_at=base + timedelta(minutes=minute))
         rows = self.store.history(site_ids=["office"], days=7)
         self.assertEqual(len(rows), 10)
 
     def test_invalid_metrics_and_unbounded_inputs_are_rejected_or_excluded(self):
         self.store.record_scan("office", [{"rssi": -200}, {"rssi": True}, {"rssi": -60}], sampled_at=self.timestamp())
         row = self.store.history(site_ids=["office"], days=1)[0]
-        self.assertEqual(row["rssi_count"], 1)
         self.assertEqual(row["average_rssi_dbm"], -60)
+        self.assertEqual(row["rssi_min"], -60)
+        self.assertEqual(row["rssi_max"], -60)
         with self.assertRaisesRegex(ValueError, "no more than 512"):
             self.store.record_scan("office", [{}] * 513, sampled_at=self.timestamp())
         with self.assertRaisesRegex(ValueError, "timezone"):
