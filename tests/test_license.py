@@ -134,7 +134,7 @@ class VendorLicenseTests(unittest.TestCase):
         self.assertTrue(result["grace_period"])
         with self.assertRaisesRegex(LicenseVerificationError, "expired"):
             verify_license_token(
-                self.token(expires_at=expiry),
+                self.token(issued_at=NOW - 7 * 24 * 60 * 60, expires_at=expiry),
                 public_keys=self.public_keys,
                 expected_installation_id=INSTALLATION_ID,
                 now=expiry + 72 * 60 * 60 + 1,
