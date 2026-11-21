@@ -1118,6 +1118,14 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertLess(first["planned_interference_cost"], first["baseline_interference_cost"])
         self.assertEqual(first["channel_change_count"], 1)
 
+    def test_f201_planner_reports_heuristic_method_and_convergence(self):
+        result = run("multi_ap_channel_reuse_planner", PAYLOADS["multi_ap_channel_reuse_planner"])["result"]
+        self.assertEqual(result["optimization_method"], "deterministic_greedy_coordinate_descent")
+        self.assertGreaterEqual(result["optimization_iterations"], 1)
+        self.assertLessEqual(result["optimization_iterations"], 12)
+        self.assertIsInstance(result["optimization_converged"], bool)
+        self.assertIn("not a proof of global optimality", result["note"])
+
     def test_f201_planner_fails_closed_without_explicit_interference_evidence(self):
         payload = PAYLOADS["multi_ap_channel_reuse_planner"]
         result = run("multi_ap_channel_reuse_planner", {"radios": payload["radios"]})["result"]

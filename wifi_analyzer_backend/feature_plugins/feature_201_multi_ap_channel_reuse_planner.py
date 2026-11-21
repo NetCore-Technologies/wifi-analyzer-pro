@@ -220,7 +220,10 @@ def run(payload: dict) -> dict:
 
     for radio_id in order:
         assignments[radio_id] = choose(radio_id)
-    for _ in range(12):
+    iterations_performed = 0
+    converged = False
+    for iteration in range(12):
+        iterations_performed = iteration + 1
         changed = False
         for radio_id in order:
             selected = choose(radio_id)
@@ -228,6 +231,7 @@ def run(payload: dict) -> dict:
                 assignments[radio_id] = selected
                 changed = True
         if not changed:
+            converged = True
             break
 
     baseline_available = all(
@@ -283,6 +287,9 @@ def run(payload: dict) -> dict:
     change_cost = change_count * change_penalty
     return {
         "status": "planned", "radio_count": len(radios), "evidence_edge_count": len(edges),
+        "optimization_method": "deterministic_greedy_coordinate_descent",
+        "optimization_iterations": iterations_performed,
+        "optimization_converged": converged,
         "conflict_count": len(conflict_edges),
         "co_channel_conflict_count": sum(item["type"] == "co_channel" for item in conflict_edges),
         "partial_overlap_count": sum(item["type"] == "partial_channel_overlap" for item in conflict_edges),
@@ -301,7 +308,7 @@ def run(payload: dict) -> dict:
             "interference weights. Channel options must already be validated for the deployment's regulatory "
             "domain, radio capabilities and DFS rules. The weights are not measured by this tool; the result "
             "is a planning recommendation, not a propagation simulation, spectrum measurement or compliance "
-            "certification. No router configuration is changed."
+            "certification. The search is a bounded heuristic, not a proof of global optimality; review the result and validate the regulatory plan before use. No router configuration is changed."
         ),
     }
 

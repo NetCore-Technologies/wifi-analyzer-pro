@@ -247,4 +247,4 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 
 | F200 | Enterprise network security evidence report (`enterprise_network_security_evidence_report`) | Security | Combine F194–F199 audits into a deterministic, privacy-minimised report with evidence gaps, severity rollups and a SHA-256 integrity digest. |
 
-| F201 | Multi-AP RF channel reuse planner (`multi_ap_channel_reuse_planner`) | RF planning | Optimise same-site AP radio channels using operator-supplied regulatory-approved options and explicit weighted interference evidence from surveys/controllers; quantify baseline improvement and channel changes without applying configuration. |
+| F201 | Multi-AP RF channel reuse planner (`multi_ap_channel_reuse_planner`) | RF planning | Use supplied permitted channel options and explicit weighted survey/controller/operator relationships to calculate a deterministic, bounded coordinate-descent plan, baseline cost and residual overlaps. Reports convergence and heuristic limitations; never applies configuration. |
