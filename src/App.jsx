@@ -1028,6 +1028,7 @@ export default function App() {
   const [scanning,setScanning]=useState(false);
   const [preferences,setPreferences]=useState(loadPreferences);
   const [settingsOpen,setSettingsOpen]=useState(false);
+  const [navQuery,setNavQuery]=useState("");
   const collapsed=preferences.compactSidebar;
   const [toasts,setToasts]=useState([]);
   const [rssiData]=useState(genRSSI);
@@ -1177,7 +1178,7 @@ export default function App() {
   const current=allItems.find(n=>n.id===tab);
 
   return (
-    <div style={{display:"flex",height:"100vh",background:C.bg,color:C.text,fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
+    <div className="wa-shell" style={{display:"flex",height:"100vh",background:C.bg,color:C.text,fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
       <style>{ANIM}{preferences.reducedMotion?`
         *,*::before,*::after {
           animation-duration: 0.001ms !important;
@@ -1191,10 +1192,10 @@ export default function App() {
         onChange={updates=>setPreferences(current=>({...current,...updates}))}
         onClose={()=>setSettingsOpen(false)}/>}
 
-      <aside style={{width:collapsed?54:210,flexShrink:0,background:C.card,
+      <aside className="wa-sidebar" data-collapsed={collapsed} style={{width:collapsed?54:210,flexShrink:0,background:C.card,
         borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",
         transition:"width 0.25s cubic-bezier(.4,0,.2,1)",overflow:"hidden"}}>
-        <div style={{padding:"12px 10px",borderBottom:`1px solid ${C.border}`,
+        <div className="wa-brandbar" style={{padding:"12px 10px",borderBottom:`1px solid ${C.border}`,
           display:"flex",alignItems:"center",gap:10,height:54,flexShrink:0}}>
           <div style={{width:30,height:30,borderRadius:8,background:C.cyanFaint,
             display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
@@ -1214,24 +1215,27 @@ export default function App() {
           )}
         </div>
 
-        <div style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
+        {!collapsed&&<div className="wa-nav-search"><Search size={14} aria-hidden="true"/><input type="search" value={navQuery} onChange={event=>setNavQuery(event.target.value)} placeholder="Find a workspace…" aria-label="Search navigation"/></div>}
+
+        <div className="wa-nav-list" style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
           {NAV
             .map(group => ({ ...group, items: group.items.filter(item =>
               (!["teamAccess", "securityAudit", "billing"].includes(item.id) || ["owner", "admin"].includes(identity?.role))
               && (item.id !== "webhookDelivery" || ["owner", "admin", "network_admin", "analyst"].includes(identity?.role))
+              && (!navQuery.trim() || `${item.label} ${group.g}`.toLowerCase().includes(navQuery.trim().toLowerCase()))
             ) }))
             .filter(group => group.items.length > 0)
             .map(group=>(
-            <div key={group.g}>
+            <div key={group.g} className="wa-nav-group">
               {!collapsed&&(
-                <div style={{fontSize:8,color:C.muted,letterSpacing:1.2,padding:"8px 12px 3px",
+                <div className="wa-nav-group-label" style={{fontSize:8,color:C.muted,letterSpacing:1.2,padding:"8px 12px 3px",
                   fontWeight:700,userSelect:"none"}}>{group.g}</div>
               )}
               {group.items.map(item=>{
                 const active=tab===item.id;
                 return (
                   <button key={item.id}
-                    className={`nav-btn${active?" active":""}`}
+                    className={`nav-btn wa-nav-item${active?" active":""}`} aria-current={active?"page":undefined}
                     onClick={()=>switchTab(item.id)}
                     title={collapsed?item.label:undefined}
                     style={{width:"100%",display:"flex",alignItems:"center",gap:9,
@@ -1252,7 +1256,7 @@ export default function App() {
           ))}
         </div>
 
-        <div style={{padding:"8px 8px",borderTop:`1px solid ${C.border}`}}>
+        <div className="wa-sidebar-footer" style={{padding:"8px 8px",borderTop:`1px solid ${C.border}`}}>
           <button onClick={()=>setPreferences(current=>({...current,compactSidebar:!current.compactSidebar}))}
             style={{width:"100%",padding:"7px",background:C.card2,
               border:`1px solid ${C.border}`,borderRadius:7,
@@ -1264,8 +1268,8 @@ export default function App() {
         </div>
       </aside>
 
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <header style={{padding:"0 18px",borderBottom:`1px solid ${C.border}`,
+      <div className="wa-workspace" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <header className="wa-topbar" style={{padding:"0 18px",borderBottom:`1px solid ${C.border}`,
           background:C.card,display:"flex",alignItems:"center",
           justifyContent:"space-between",height:54,flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
@@ -1278,8 +1282,8 @@ export default function App() {
               </div>
             </div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.textSec,
+          <div className="wa-topbar-actions" style={{display:"flex",alignItems:"center",gap:8}}>
+            <div className="wa-interface-chip" style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.textSec,
               padding:"4px 10px",background:C.card2,border:`1px solid ${C.border}`,borderRadius:6}}>
               <Signal size={11} color={C.cyan}/>
               <span style={{fontFamily:"monospace"}}>{liveSystem?.wifi_interface||"No connected interface reported"}</span>
@@ -1296,7 +1300,7 @@ export default function App() {
                 {liveMode?"LIVE":"DEMO"}
               </div>
             )}
-            <button onClick={scan} disabled={scanning}
+            <button className="wa-scan-button" onClick={scan} disabled={scanning}
               style={{display:"flex",alignItems:"center",gap:6,padding:"6px 14px",
                 background:scanning?C.cyanFaint:C.cyan+"22",
                 border:`1px solid ${C.cyan}55`,borderRadius:7,
@@ -1320,7 +1324,7 @@ export default function App() {
           </div>
         </header>
 
-        <main style={{flex:1,overflowY:"auto",padding:14}}>
+        <main className="wa-main" style={{flex:1,overflowY:"auto",padding:14}}>
           <div key={tab} style={{animation:"fadeSlideIn 0.28s ease both"}}>
             {panels[tab]||<div style={{color:C.muted,display:"flex",alignItems:"center",justifyContent:"center",height:"60vh"}}>Coming soon</div>}
           </div>
