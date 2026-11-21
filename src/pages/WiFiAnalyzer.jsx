@@ -39,7 +39,7 @@ const TABS = [
 export default function WiFiAnalyzer() {
   const [refreshInterval, setRefreshInterval] = useState(5000);
   const [diagHistory, setDiagHistory] = useState([]);
-  const { networks, congestion, systemInfo, phyInfo, linkStats, diagnostics, devices, loading, error, backendConnected, lastScan, history, refresh } = useWifiData(true, refreshInterval);
+  const { networks, congestion, systemInfo, phyInfo, linkStats, diagnostics, devices, loading, error, backendConnected, observationSource, lastScan, history, refresh } = useWifiData(true, refreshInterval);
   React.useEffect(() => {
     if (diagnostics) setDiagHistory(h => [...h.slice(-59), diagnostics]);
   }, [diagnostics]);
@@ -74,7 +74,11 @@ export default function WiFiAnalyzer() {
                 <h1 className="text-lg font-bold text-foreground tracking-tight">WiFi Analyzer Pro</h1>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Circle className={`w-2 h-2 fill-current ${backendConnected ? 'text-green-400' : 'text-yellow-400'} pulse-signal`} />
-                  {backendConnected ? `Live · ${systemInfo?.os || 'Connected'}` : 'Demo Mode · Start backend for live data'}
+                  {backendConnected
+                    ? observationSource === 'live'
+                      ? `Live · ${systemInfo?.os || 'Connected'}`
+                      : 'Demo observations · backend connected'
+                    : 'Demo Mode · Start backend for live data'}
                   {lastScan && <span>· {lastScan.toLocaleTimeString()}</span>}
                 </div>
               </div>
@@ -83,7 +87,7 @@ export default function WiFiAnalyzer() {
               {error && (
                 <div className="hidden sm:flex items-center gap-2 text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-3 py-1.5">
                   <Terminal className="w-3 h-3" />
-                  Run: python wifi_analyzer.py
+                  Local API unavailable · live data paused
                 </div>
               )}
               <select value={refreshInterval} onChange={e => setRefreshInterval(Number(e.target.value))} className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm font-medium">
