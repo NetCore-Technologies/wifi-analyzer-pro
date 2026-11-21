@@ -300,6 +300,18 @@ class VendorLicenseTests(unittest.TestCase):
         })
         self.assertNotIn("private remote response", json.dumps(result))
 
+    def test_automatic_renewal_worker_start_is_idempotent_and_stops_cleanly(self):
+        worker = VendorLicenseRenewalWorker(
+            self.store,
+            INSTALLATION_ID,
+            check_interval_seconds=60,
+            clock=lambda: self.clock[0],
+        )
+        self.assertTrue(worker.start())
+        self.assertFalse(worker.start())
+        worker.stop(timeout=2)
+        self.assertFalse(worker._thread.is_alive())
+
     def test_automatic_renewal_worker_validates_safe_intervals(self):
         with self.assertRaises(ValueError):
             VendorLicenseRenewalWorker(self.store, INSTALLATION_ID, check_interval_seconds=1)

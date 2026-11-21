@@ -730,7 +730,12 @@ class VendorLicenseRenewalWorker:
 
     def _run(self) -> None:
         while not self._stop_event.is_set():
-            result = self.run_once()
+            try:
+                result = self.run_once()
+            except Exception as error:
+                # A local database or filesystem problem must not permanently
+                # terminate the renewal worker. Log only the exception class.
+                result = {"state": "deferred", "error_code": type(error).__name__}
             if result["state"] == "renewed":
                 print(f"[LICENCE] Vendor licence renewed for plan {result.get('plan_id')}")
             elif result["state"] == "deferred":
@@ -751,7 +756,7 @@ class VendorLicenseRenewalWorker:
         self._thread.start()
         return True
 
-    def stop(self, timeout: float = 5.0) -> None:
+    def stop(self, timeout: float = 17.0) -> None:
         """Signal the worker and wait briefly for any in-flight HTTPS call."""
         self._stop_event.set()
         if self._thread is not None and self._thread.is_alive():
