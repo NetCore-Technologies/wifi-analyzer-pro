@@ -22,6 +22,7 @@ DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "api.speedtest": (2, 300),
     "api.feature.execution": (30, 60),
     "api.site.audit": (5, 60),
+    "api.trusted_aps.manage": (60, 60),
     "api.capture.start": (4, 900),
     "api.report.enqueue": (20, 60),
     "api.webhook.enqueue": (20, 60),

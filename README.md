@@ -186,6 +186,8 @@ The local HTTP service exposes:
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/telemetry/history` | Read minute-level historical scan/diagnostic aggregates within the caller's site scope |
+| `GET /api/trusted-aps?site_id=...` | Read the shared trusted BSSID baseline for one assigned site |
+| `POST /api/trusted-aps` | Add or remove a trusted BSSID with `sites.manage`; writes are audited |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
 | `GET /api/security/audit/verify` | Verify the local append-only hash chain and report the verified event count |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
@@ -228,7 +230,7 @@ The local HTTP service exposes:
 | `GET /api/agents/snapshots/{agent_id}/diff` | Compare the two most recent retained snapshots and list board/network/wireless/client/route changes |
 | `GET /api/has_wifi`, `/api/scan`, `/api/system`, `/api/phy`, `/api/link`, `/api/diagnostics`, `/api/devices`, `/api/speedtest` | Authenticated local diagnostics and observations |
 
-After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token. The Settings panel stores local preferences for refresh cadence, compact navigation, hiding demo observations when offline and reduced motion; preferences stay in the current browser profile. Persistent site trends use local SQLite one-minute rollups for live RSSI, network density, diagnostics and completed speed tests. They store no raw SSIDs/BSSIDs/client identifiers, exclude demo observations and enforce the same site scopes; see [Telemetry history](wifi_analyzer_backend/TELEMETRY_HISTORY.md). Scan measurements and platform-specific limits are documented in [Scan evidence semantics](wifi_analyzer_backend/SCAN_EVIDENCE.md).
+After login, send `Authorization: Bearer <token>` to protected endpoints. JSON POST requests are limited to 1 MiB. The browser UI includes a searchable Feature Workbench and automatically attaches the session token. The Settings panel stores local preferences for refresh cadence, compact navigation, hiding demo observations when offline and reduced motion; preferences stay in the current browser profile. Persistent site trends use local SQLite one-minute rollups for live RSSI, network density, diagnostics and completed speed tests. They store no raw SSIDs/BSSIDs/client identifiers, exclude demo observations and enforce the same site scopes; see [Telemetry history](wifi_analyzer_backend/TELEMETRY_HISTORY.md). Scan measurements and platform-specific limits are documented in [Scan evidence semantics](wifi_analyzer_backend/SCAN_EVIDENCE.md). Shared rogue-AP baseline storage and its site permissions are documented in [Trusted AP baseline](wifi_analyzer_backend/TRUSTED_AP_BASELINE.md).
 
 The SYSTEM → Router Agents page provides the authenticated Router Agent Console for enrolment, least-privilege capability selection, heartbeat health, snapshot drift, credential rotation/revocation and negotiation audit. It does not reveal stored credentials.
 

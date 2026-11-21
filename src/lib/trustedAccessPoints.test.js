@@ -14,6 +14,9 @@ test("normalises standard and hyphen-separated BSSIDs", () => {
   assert.equal(normalizeBssid("aa-bb-cc-dd-ee-ff"), "AA:BB:CC:DD:EE:FF");
   assert.equal(normalizeBssid("not a mac"), null);
   assert.equal(normalizeBssid("AA:BB:CC:DD:EE"), null);
+  assert.equal(normalizeBssid("FF:FF:FF:FF:FF:FF"), null);
+  assert.equal(normalizeBssid("01:00:5E:00:00:01"), null);
+  assert.equal(normalizeBssid("00:00:00:00:00:00"), null);
 });
 
 test("validates SSID length using UTF-8 bytes", () => {

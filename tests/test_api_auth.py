@@ -23,6 +23,7 @@ from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundl
 from wifi_analyzer_backend.billing import WorkspaceBillingStore, verify_stripe_signature
 from wifi_analyzer_backend.license import VendorLicenseStore, create_signed_license
 from wifi_analyzer_backend.telemetry_store import WiFiTelemetryStore
+from wifi_analyzer_backend.trusted_ap_store import TrustedAccessPointStore
 from wifi_analyzer_backend.billing import PLAN_CATALOG
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -34,6 +35,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_auth = server.AUTH
         self.previous_history = server.HISTORY
         self.previous_telemetry = server.TELEMETRY
+        self.previous_trusted_aps = server.TRUSTED_APS
         self.previous_agent_health = server.AGENT_HEALTH
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
@@ -88,6 +90,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.AUTH = AuthManager(path=str(Path(self.temp.name) / "auth.json"), session_ttl_seconds=300)
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
         server.TELEMETRY = WiFiTelemetryStore(path=Path(self.temp.name) / "telemetry.sqlite3")
+        server.TRUSTED_APS = TrustedAccessPointStore(path=Path(self.temp.name) / "trusted-aps.sqlite3")
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
         server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
         server.AUDIT = __import__("wifi_analyzer_backend.audit_store", fromlist=["SecurityAuditStore"]).SecurityAuditStore(
@@ -106,6 +109,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.AUTH = self.previous_auth
         server.HISTORY = self.previous_history
         server.TELEMETRY = self.previous_telemetry
+        server.TRUSTED_APS = self.previous_trusted_aps
         server.AGENT_HEALTH = self.previous_agent_health
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
@@ -3428,6 +3432,125 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200, unchanged)
         self.assertEqual(unchanged["rollups"][0]["speedtest_sample_count"], 1)
         self.assertEqual(unchanged["rollups"][0]["average_speedtest_download_mbps"], 150.0)
+
+    def test_trusted_ap_inventory_is_authenticated_site_scoped_and_audited(self):
+        denied, _ = self.request("GET", "/api/trusted-aps?site_id=local")
+        self.assertEqual(denied, 401)
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "trusted AP inventory owner secure password",
+        })
+        owner_token = setup["token"]
+
+        status, empty = self.request("GET", "/api/trusted-aps?site_id=local", token=owner_token)
+        self.assertEqual(status, 200, empty)
+        self.assertEqual(empty["records"], [])
+        self.assertTrue(empty["can_manage"])
+
+        payload = {
+            "operation": "add",
+            "site_id": "local",
+            "ssid": "Corporate-WiFi",
+            "bssid": "aa:bb:cc:dd:ee:ff",
+        }
+        status, created = self.request("POST", "/api/trusted-aps", payload, token=owner_token)
+        self.assertEqual(status, 201, created)
+        self.assertTrue(created["created"])
+        self.assertEqual(created["record"]["bssid"], "AA:BB:CC:DD:EE:FF")
+
+        status, duplicate = self.request("POST", "/api/trusted-aps", payload, token=owner_token)
+        self.assertEqual(status, 200, duplicate)
+        self.assertFalse(duplicate["created"])
+
+        status, inventory = self.request("GET", "/api/trusted-aps?site_id=local", token=owner_token)
+        self.assertEqual(status, 200, inventory)
+        self.assertEqual(inventory["record_count"], 1)
+        self.assertEqual(inventory["records"][0]["ssid"], "Corporate-WiFi")
+        self.assertEqual(inventory["records"][0]["bssid"], "AA:BB:CC:DD:EE:FF")
+
+        status, sites = self.request("GET", "/api/sites", token=owner_token)
+        self.assertEqual(status, 200, sites)
+        self.assertIn("local", sites["site_ids"])
+
+        events = server.AUDIT.list_events(action="trusted_ap.added")
+        self.assertEqual(len(events), 1)
+        event_text = json.dumps(events)
+        self.assertNotIn("Corporate-WiFi", event_text)
+        self.assertNotIn("AA:BB:CC:DD:EE:FF", event_text)
+        self.assertTrue(server.AUDIT.verify_chain()["valid"])
+
+        status, removed = self.request("POST", "/api/trusted-aps", {
+            **payload, "operation": "remove",
+        }, token=owner_token)
+        self.assertEqual(status, 200, removed)
+        self.assertTrue(removed["removed"])
+        status, inventory = self.request("GET", "/api/trusted-aps?site_id=local", token=owner_token)
+        self.assertEqual(status, 200, inventory)
+        self.assertEqual(inventory["records"], [])
+
+    def test_trusted_ap_inventory_respects_site_assignments_and_role_permissions(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "trusted AP scoped owner secure password",
+        })
+        owner_token = setup["token"]
+        _, created = self.request("POST", "/api/users", {
+            "username": "branch.admin",
+            "password": "trusted AP branch admin password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["branch"],
+        }, token=owner_token)
+        self.assertEqual(created["user"]["username"], "branch.admin")
+        branch_token = server.AUTH.login("trusted AP branch admin password", "branch.admin")
+
+        status, forbidden_read = self.request(
+            "GET", "/api/trusted-aps?site_id=local", token=branch_token,
+        )
+        self.assertEqual(status, 403, forbidden_read)
+        status, forbidden_write = self.request("POST", "/api/trusted-aps", {
+            "operation": "add", "site_id": "local",
+            "ssid": "Corporate-WiFi", "bssid": "AA:BB:CC:DD:EE:FF",
+        }, token=branch_token)
+        self.assertEqual(status, 403, forbidden_write)
+
+        status, visible_empty = self.request(
+            "GET", "/api/trusted-aps?site_id=branch", token=branch_token,
+        )
+        self.assertEqual(status, 200, visible_empty)
+        self.assertTrue(visible_empty["can_manage"])
+
+        _, analyst = self.request("POST", "/api/users", {
+            "username": "branch.analyst",
+            "password": "trusted AP branch analyst password",
+            "role": "analyst",
+            "all_sites": False,
+            "site_ids": ["branch"],
+        }, token=owner_token)
+        analyst_token = server.AUTH.login("trusted AP branch analyst password", "branch.analyst")
+        status, read_only = self.request(
+            "GET", "/api/trusted-aps?site_id=branch", token=analyst_token,
+        )
+        self.assertEqual(status, 200, read_only)
+        self.assertFalse(read_only["can_manage"])
+        status, forbidden_write = self.request("POST", "/api/trusted-aps", {
+            "operation": "add", "site_id": "branch",
+            "ssid": "Corporate-WiFi", "bssid": "AA:BB:CC:DD:EE:01",
+        }, token=analyst_token)
+        self.assertEqual(status, 403, forbidden_write)
+
+    def test_trusted_ap_inventory_rejects_invalid_identifiers(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "trusted AP validation owner secure password",
+        })
+        token = setup["token"]
+        bad_payloads = [
+            {"operation": "add", "site_id": "../outside", "ssid": "Corp", "bssid": "AA:BB:CC:DD:EE:FF"},
+            {"operation": "add", "site_id": "local", "ssid": "bad" + chr(10) + "ssid", "bssid": "AA:BB:CC:DD:EE:FF"},
+            {"operation": "add", "site_id": "local", "ssid": "Corp", "bssid": "not-a-mac"},
+            {"operation": "delete", "site_id": "local", "ssid": "Corp", "bssid": "AA:BB:CC:DD:EE:FF"},
+        ]
+        for payload in bad_payloads:
+            status, response = self.request("POST", "/api/trusted-aps", payload, token=token)
+            self.assertEqual(status, 400, response)
 
 if __name__ == "__main__":
     unittest.main()

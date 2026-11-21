@@ -6,7 +6,7 @@ Run:  sudo python3 server.py
 Then open:  http://<pi-ip>:199
 """
 
-import sys, os, json, platform, subprocess, re, time, mimetypes, math
+import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
 from datetime import datetime, timezone
@@ -40,6 +40,7 @@ if __package__:
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .telemetry_store import WiFiTelemetryStore
+    from .trusted_ap_store import TrustedAccessPointStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
     from .router_adapters.health_store import (
         AgentAuthenticationError,
@@ -78,6 +79,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from telemetry_store import WiFiTelemetryStore
+    from trusted_ap_store import TrustedAccessPointStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
     from router_adapters.health_store import (
         AgentAuthenticationError,
@@ -104,6 +106,7 @@ CORS_ORIGINS = {
 AUTH = AuthManager()
 HISTORY = SiteHistoryStore()
 TELEMETRY = WiFiTelemetryStore()
+TRUSTED_APS = TrustedAccessPointStore()
 LOCAL_SITE_ID = os.getenv("WIFI_ANALYZER_LOCAL_SITE_ID", "local")
 AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
@@ -1110,7 +1113,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path == "/api/sites" or path.startswith("/api/sites/history") or path == "/api/telemetry/history":
+            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps"}:
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -1399,6 +1402,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"checkpoint": checkpoint})
             elif path == "/api/security/audit/summary":
                 self.send_json({"summary": AUDIT.summary()})
+            elif path == "/api/trusted-aps":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=2)
+                site_values = params.get("site_id", [])
+                if len(site_values) != 1 or not site_values[0]:
+                    raise ValueError("site_id must be supplied exactly once")
+                site_id = site_values[0]
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                records = TRUSTED_APS.list_for_site(site_id)
+                self.send_json({
+                    "site_id": site_id,
+                    "records": records,
+                    "record_count": len(records),
+                    "can_manage": AUTH.has_permission(self.bearer_token(), "sites.manage"),
+                    "privacy": "This is a shared site inventory. SSIDs and BSSIDs are visible to users assigned to this site.",
+                })
             elif path == "/api/telemetry/history":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=5)
                 def telemetry_parameter(name):
@@ -1433,6 +1452,10 @@ class Handler(BaseHTTPRequestHandler):
                 scope = AUTH.site_access(self.bearer_token())
                 discovered = set(HISTORY.site_ids(limit=100))
                 discovered.update(TELEMETRY.site_ids(limit=100))
+                discovered.update(TRUSTED_APS.site_ids(limit=100))
+                discovered.update(scope["site_ids"])
+                if scope["all_sites"]:
+                    discovered.add(LOCAL_SITE_ID)
                 discovered.update(
                     credential["site_id"]
                     for credential in AGENT_HEALTH.list_agent_credentials()
@@ -1577,6 +1600,9 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth("billing.manage"):
                 return
 
+        if path == "/api/trusted-aps" and not self.require_auth("sites.manage"):
+            return
+
         # Authenticate diagnostic controls before rate limiting them, but rate
         # limit login/setup before parsing or deriving expensive credentials.
         if path.startswith("/api/capture/") and not self.require_auth("diagnostics.run"):
@@ -1590,6 +1616,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/auth/mfa/confirm": ("auth.mfa", False),
             "/api/auth/mfa/disable": ("auth.mfa", False),
             "/api/sites/audit": ("api.site.audit", False),
+            "/api/trusted-aps": ("api.trusted_aps.manage", False),
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
@@ -1624,6 +1651,91 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
             return
+
+        if path == "/api/trusted-aps":
+            site_id = payload.get("site_id")
+            ssid = payload.get("ssid")
+            bssid = payload.get("bssid")
+            operation = payload.get("operation")
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            fingerprint = hashlib.sha256(
+                json.dumps([site_id, ssid, bssid], ensure_ascii=False, default=str, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()[:24]
+            audit_metadata = {"entry_fingerprint": fingerprint, "operation": str(operation)}
+            requested = self.audit_event(
+                "trusted_ap.change_requested",
+                target_type="trusted_ap_baseline",
+                target_id=fingerprint,
+                metadata=audit_metadata,
+            )
+            if requested is None:
+                self.send_json({"error": "The security audit ledger is unavailable; no baseline change was applied"}, 503)
+                return
+            try:
+                if operation == "add":
+                    outcome = TRUSTED_APS.add(site_id, ssid, bssid)
+                    if outcome["created"]:
+                        confirmed = self.audit_event(
+                            "trusted_ap.added",
+                            target_type="trusted_ap_baseline",
+                            target_id=fingerprint,
+                            metadata=audit_metadata,
+                        )
+                        if confirmed is None:
+                            self.send_json({
+                                "site_id": site_id,
+                                "created": True,
+                                "record": outcome["record"],
+                                "audit_status": "request recorded; final outcome event could not be persisted",
+                            }, 202)
+                            return
+                    self.send_json({
+                        "site_id": site_id,
+                        "created": outcome["created"],
+                        "record": outcome["record"],
+                    }, 201 if outcome["created"] else 200)
+                    return
+                if operation == "remove":
+                    removed = TRUSTED_APS.remove(site_id, ssid, bssid)
+                    if removed:
+                        confirmed = self.audit_event(
+                            "trusted_ap.removed",
+                            target_type="trusted_ap_baseline",
+                            target_id=fingerprint,
+                            metadata=audit_metadata,
+                        )
+                        if confirmed is None:
+                            self.send_json({
+                                "site_id": site_id,
+                                "removed": True,
+                                "audit_status": "request recorded; final outcome event could not be persisted",
+                            }, 202)
+                            return
+                    self.send_json({"site_id": site_id, "removed": removed})
+                    return
+                raise ValueError("operation must be add or remove")
+            except ValueError as error:
+                self.audit_event(
+                    "trusted_ap.change_rejected",
+                    target_type="trusted_ap_baseline",
+                    target_id=fingerprint,
+                    outcome="failure",
+                    metadata=audit_metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception:
+                self.audit_event(
+                    "trusted_ap.change_failed",
+                    target_type="trusted_ap_baseline",
+                    target_id=fingerprint,
+                    outcome="failure",
+                    metadata=audit_metadata,
+                )
+                print("[TRUSTED AP ERROR] Could not update site baseline")
+                self.send_json({"error": "Trusted AP baseline update failed"}, 503)
+                return
 
         if path == "/api/license/checkout":
             service_url = os.getenv("WIFI_ANALYZER_VENDOR_LICENSE_SERVICE_URL", "").strip()

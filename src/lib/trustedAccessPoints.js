@@ -6,7 +6,10 @@ const MAX_TRUSTED_BSSIDS = 1024;
 export function normalizeBssid(value) {
   if (typeof value !== "string") return null;
   const normalized = value.trim().replace(/-/g, ":").toUpperCase();
-  return BSSID_PATTERN.test(normalized) ? normalized : null;
+  if (!BSSID_PATTERN.test(normalized)) return null;
+  const firstOctet = Number.parseInt(normalized.slice(0, 2), 16);
+  if ((firstOctet & 1) !== 0 || normalized === "00:00:00:00:00:00") return null;
+  return normalized;
 }
 
 export function validateSsid(value) {
