@@ -1373,13 +1373,15 @@ export default function App() {
             <div>
               <div style={{fontSize:14,fontWeight:700,color:C.text}}>{current?.label||"Dashboard"}</div>
               <div style={{fontSize:10,color:C.muted,display:"flex",alignItems:"center",gap:5}}>
-                <PulseDot col={liveMode?C.green:liveError?C.red:C.purple} size={6}/>
+                <PulseDot col={checking?C.cyan:liveMode?C.green:liveError?C.red:C.purple} size={6}/>
                 <span title={liveError || undefined}>
-                  {liveMode
-                    ? `LIVE · ${liveSystem?.wifi_interface || "Wi-Fi adapter detected"}`
-                    : liveError
-                      ? "API UNAVAILABLE · displaying demo data"
-                      : "DEMO DATA · no live adapter connected"}
+                  {checking
+                    ? "CONNECTING · checking local adapter"
+                    : liveMode
+                      ? `LIVE · ${liveSystem?.wifi_interface || "Wi-Fi adapter detected"}`
+                      : liveError
+                        ? "API UNAVAILABLE · displaying demo data"
+                        : "DEMO DATA · no live adapter connected"}
                   {lastUpdated ? ` · ${new Date(lastUpdated).toLocaleTimeString()}` : ""}
                 </span>
               </div>
