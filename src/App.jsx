@@ -1039,6 +1039,8 @@ export default function App() {
   const [liveSystem,setLiveSystem]=useState(null);
   const [liveDiag,setLiveDiag]=useState(null);
   const [checking,setChecking]=useState(true);
+  const [liveError,setLiveError]=useState("");
+  const [lastUpdated,setLastUpdated]=useState(null);
 
   useEffect(()=>{
     try {
@@ -1064,7 +1066,15 @@ export default function App() {
         if(!hasResponse.ok)throw new Error(`Wi-Fi probe returned HTTP ${hasResponse.status}`);
         const availability=await hasResponse.json();
         if(!availability.has_wifi){
-          if(!disposed)setLiveMode(false);
+          if(!disposed){
+            setLiveMode(false);
+            setLiveNets(null);
+            setLiveDevs(null);
+            setLiveSystem(null);
+            setLiveDiag(null);
+            setLiveError("");
+            setLastUpdated(null);
+          }
           return;
         }
         const responses=await Promise.all([
@@ -1083,8 +1093,18 @@ export default function App() {
         if(Array.isArray(deviceData.devices))setLiveDevs(deviceData.devices);
         setLiveSystem(systemData);
         setLiveDiag(diagnosticData);
-      }catch(_error){
-        if(!disposed)setLiveMode(false);
+        setLiveError("");
+        setLastUpdated(Date.now());
+      }catch(error){
+        if(!disposed){
+          setLiveMode(false);
+          setLiveNets(null);
+          setLiveDevs(null);
+          setLiveSystem(null);
+          setLiveDiag(null);
+          setLiveError(error instanceof Error ? error.message : "The local API could not be reached");
+          setLastUpdated(null);
+        }
       }finally{
         if(!disposed)setChecking(false);
       }
@@ -1176,6 +1196,14 @@ export default function App() {
 
   const allItems=NAV.flatMap(g=>g.items);
   const current=allItems.find(n=>n.id===tab);
+  const visibleNavGroups=NAV.map(group=>({
+    ...group,
+    items:group.items.filter(item=>
+      (!["teamAccess","securityAudit","billing"].includes(item.id) || ["owner","admin"].includes(identity?.role))
+      && (item.id!=="webhookDelivery" || ["owner","admin","network_admin","analyst"].includes(identity?.role))
+      && (!navQuery.trim() || `${item.label} ${group.g}`.toLowerCase().includes(navQuery.trim().toLowerCase()))
+    ),
+  })).filter(group=>group.items.length>0);
 
   return (
     <div className="wa-shell" style={{display:"flex",height:"100vh",background:C.bg,color:C.text,fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
@@ -1218,14 +1246,7 @@ export default function App() {
         {!collapsed&&<div className="wa-nav-search"><Search size={14} aria-hidden="true"/><input type="search" value={navQuery} onChange={event=>setNavQuery(event.target.value)} placeholder="Find a workspace…" aria-label="Search navigation"/></div>}
 
         <div className="wa-nav-list" style={{flex:1,overflowY:"auto",padding:"6px 0"}}>
-          {NAV
-            .map(group => ({ ...group, items: group.items.filter(item =>
-              (!["teamAccess", "securityAudit", "billing"].includes(item.id) || ["owner", "admin"].includes(identity?.role))
-              && (item.id !== "webhookDelivery" || ["owner", "admin", "network_admin", "analyst"].includes(identity?.role))
-              && (!navQuery.trim() || `${item.label} ${group.g}`.toLowerCase().includes(navQuery.trim().toLowerCase()))
-            ) }))
-            .filter(group => group.items.length > 0)
-            .map(group=>(
+          {visibleNavGroups.map(group=>(
             <div key={group.g} className="wa-nav-group">
               {!collapsed&&(
                 <div className="wa-nav-group-label" style={{fontSize:8,color:C.muted,letterSpacing:1.2,padding:"8px 12px 3px",
@@ -1254,6 +1275,13 @@ export default function App() {
               })}
             </div>
           ))}
+          {!collapsed&&navQuery.trim()&&visibleNavGroups.length===0&&(
+            <div className="wa-nav-empty" role="status">
+              <Search size={15}/>
+              <span>No pages match “{navQuery.trim()}”.</span>
+              <button type="button" onClick={()=>setNavQuery("")}>Clear search</button>
+            </div>
+          )}
         </div>
 
         <div className="wa-sidebar-footer" style={{padding:"8px 8px",borderTop:`1px solid ${C.border}`}}>
@@ -1278,7 +1306,14 @@ export default function App() {
               <div style={{fontSize:14,fontWeight:700,color:C.text}}>{current?.label||"Dashboard"}</div>
               <div style={{fontSize:10,color:C.muted,display:"flex",alignItems:"center",gap:5}}>
                 <PulseDot col={C.green} size={6}/>
-                <span>{liveMode ? `LIVE · ${liveSystem?.wifi_interface || "Wi-Fi adapter detected"}` : "DEMO DATA · no live adapter connected"}</span>
+                <span title={liveError || undefined}>
+                  {liveMode
+                    ? `LIVE · ${liveSystem?.wifi_interface || "Wi-Fi adapter detected"}`
+                    : liveError
+                      ? "API UNAVAILABLE · displaying demo data"
+                      : "DEMO DATA · no live adapter connected"}
+                  {lastUpdated ? ` · ${new Date(lastUpdated).toLocaleTimeString()}` : ""}
+                </span>
               </div>
             </div>
           </div>
@@ -1289,15 +1324,16 @@ export default function App() {
               <span style={{fontFamily:"monospace"}}>{liveSystem?.wifi_interface||"No connected interface reported"}</span>
             </div>
             {!checking && (
-              <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,
-                padding:"3px 9px",borderRadius:5,letterSpacing:0.6,
-                background:liveMode?"rgba(34,197,94,0.12)":"rgba(168,85,247,0.12)",
-                border:`1px solid ${liveMode?C.green+"44":C.purple+"44"}`,
-                color:liveMode?C.green:C.purple}}>
+              <div className="wa-connection-status" role="status" aria-live="polite"
+                style={{display:"flex",alignItems:"center",gap:5,fontSize:10,fontWeight:700,
+                  padding:"3px 9px",borderRadius:5,letterSpacing:0.6,
+                  background:liveMode?"rgba(34,197,94,0.12)":liveError?"rgba(239,68,68,0.12)":"rgba(168,85,247,0.12)",
+                  border:`1px solid ${liveMode?C.green+"44":liveError?C.red+"44":C.purple+"44"}`,
+                  color:liveMode?C.green:liveError?C.red:C.purple}}>
                 <span style={{width:5,height:5,borderRadius:"50%",
-                  background:liveMode?C.green:C.purple,
-                  animation:"pulse 1.4s ease-in-out infinite",display:"inline-block"}}/>
-                {liveMode?"LIVE":"DEMO"}
+                  background:liveMode?C.green:liveError?C.red:C.purple,
+                  animation:liveMode?"pulse 1.4s ease-in-out infinite":"none",display:"inline-block"}}/>
+                {liveMode?"LIVE":liveError?"OFFLINE":"DEMO"}
               </div>
             )}
             <button className="wa-scan-button" onClick={scan} disabled={scanning}
