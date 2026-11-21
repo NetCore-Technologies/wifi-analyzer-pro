@@ -14,7 +14,8 @@ creating an unbounded record for every five-second poll.
 Persisted scan aggregates include scan count, average/minimum/maximum observed
 BSS count, open-network count, band counts, and summary RSSI statistics.
 Diagnostic aggregates include measured latency, jitter and packet-loss sample
-counts, averages and extrema.
+counts, averages and extrema. Completed speed tests also retain download/upload
+throughput and the speed-test ping measurement. Failed tests are not stored.
 
 Raw SSIDs, BSSIDs, client identifiers, packet captures and complete request
 payloads are not retained in this database. Measurements that were not supplied

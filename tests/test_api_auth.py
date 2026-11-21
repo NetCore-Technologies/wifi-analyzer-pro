@@ -3399,5 +3399,35 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200, history)
         self.assertEqual(history["rollups"], [])
 
+    def test_completed_speedtest_results_are_historic_and_demo_results_are_excluded(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "speedtest history owner secure password",
+        })
+        token = setup["token"]
+        with patch.object(server, "DEMO_MODE", False), patch.object(
+            server, "run_speedtest",
+            return_value={"download": 150.0, "upload": 25.5, "ping": 13.2},
+        ):
+            status, result = self.request("GET", "/api/speedtest", token=token)
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["download"], 150.0)
+        status, history = self.request("GET", "/api/telemetry/history?days=7", token=token)
+        self.assertEqual(status, 200, history)
+        self.assertEqual(history["rollups"][0]["speedtest_sample_count"], 1)
+        self.assertEqual(history["rollups"][0]["average_speedtest_download_mbps"], 150.0)
+        self.assertEqual(history["rollups"][0]["average_speedtest_upload_mbps"], 25.5)
+        self.assertEqual(history["rollups"][0]["average_speedtest_ping_ms"], 13.2)
+
+        with patch.object(server, "DEMO_MODE", True), patch.object(
+            server, "run_speedtest",
+            return_value={"download": 999.0, "upload": 999.0, "ping": 1.0},
+        ):
+            status, demo_result = self.request("GET", "/api/speedtest", token=token)
+        self.assertEqual(status, 200, demo_result)
+        status, unchanged = self.request("GET", "/api/telemetry/history?days=7", token=token)
+        self.assertEqual(status, 200, unchanged)
+        self.assertEqual(unchanged["rollups"][0]["speedtest_sample_count"], 1)
+        self.assertEqual(unchanged["rollups"][0]["average_speedtest_download_mbps"], 150.0)
+
 if __name__ == "__main__":
     unittest.main()

@@ -792,6 +792,15 @@ class Handler(BaseHTTPRequestHandler):
                 print("[TELEMETRY ERROR] Could not persist diagnostic rollup")
         return diagnostics
 
+    def speedtest_response(self):
+        result = run_speedtest()
+        if not DEMO_MODE and isinstance(result, dict) and not result.get("error"):
+            try:
+                TELEMETRY.record_speedtest(LOCAL_SITE_ID, result)
+            except Exception:
+                print("[TELEMETRY ERROR] Could not persist speed-test rollup")
+        return result
+
     def enforce_rate_limit(self, policy_name, *, client_only=False):
         policy = RATE_LIMIT_POLICIES.get(policy_name)
         if policy is None:
@@ -1150,7 +1159,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/diagnostics": self.diagnostics_response,
             "/api/has_wifi": has_wifi,
             "/api/devices": lambda: {"devices": get_devices()},
-            "/api/speedtest": run_speedtest,
+            "/api/speedtest": self.speedtest_response,
             "/api/features": lambda: {
                 "count": len(feature_catalog()),
                 "features": feature_catalog(),

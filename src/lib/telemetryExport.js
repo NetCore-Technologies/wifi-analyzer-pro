@@ -4,8 +4,9 @@ function csvValue(value) {
   if (value === null || value === undefined) return "";
   if (typeof value === "object") value = JSON.stringify(value);
   let text = String(value);
-  const numeric = /^-?(?:\d+\.?\d*|\.\d+)$/.test(text);
-  if (FORMULA_PREFIX.test(text) || (!numeric && /^-/.test(text)) || /^[\t\r]/.test(text)) {
+  const numeric = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(text);
+  const firstMeaningfulCharacter = text.replace(/^[\s\uFEFF]+/, "");
+  if ((!numeric && FORMULA_PREFIX.test(firstMeaningfulCharacter)) || /^[\t\r]/.test(text)) {
     text = "'" + text;
   }
   return '"' + text.replace(/"/g, '""') + '"';

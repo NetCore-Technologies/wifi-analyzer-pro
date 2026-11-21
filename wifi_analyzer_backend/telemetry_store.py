@@ -158,10 +158,43 @@ class WiFiTelemetryStore:
                 packet_loss_count INTEGER NOT NULL DEFAULT 0,
                 packet_loss_min REAL,
                 packet_loss_max REAL,
+                speedtest_count INTEGER NOT NULL DEFAULT 0,
+                speedtest_download_sum REAL NOT NULL DEFAULT 0,
+                speedtest_download_count INTEGER NOT NULL DEFAULT 0,
+                speedtest_download_min REAL,
+                speedtest_download_max REAL,
+                speedtest_upload_sum REAL NOT NULL DEFAULT 0,
+                speedtest_upload_count INTEGER NOT NULL DEFAULT 0,
+                speedtest_upload_min REAL,
+                speedtest_upload_max REAL,
+                speedtest_ping_sum REAL NOT NULL DEFAULT 0,
+                speedtest_ping_count INTEGER NOT NULL DEFAULT 0,
+                speedtest_ping_min REAL,
+                speedtest_ping_max REAL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (site_id, minute_utc)
             )
         """)
+        existing_columns = {row["name"] for row in db.execute("PRAGMA table_info(wifi_telemetry_minute)")}
+        migrations = {
+            "speedtest_count": "INTEGER NOT NULL DEFAULT 0",
+            "speedtest_download_sum": "REAL NOT NULL DEFAULT 0",
+            "speedtest_download_count": "INTEGER NOT NULL DEFAULT 0",
+            "speedtest_download_min": "REAL",
+            "speedtest_download_max": "REAL",
+            "speedtest_upload_sum": "REAL NOT NULL DEFAULT 0",
+            "speedtest_upload_count": "INTEGER NOT NULL DEFAULT 0",
+            "speedtest_upload_min": "REAL",
+            "speedtest_upload_max": "REAL",
+            "speedtest_ping_sum": "REAL NOT NULL DEFAULT 0",
+            "speedtest_ping_count": "INTEGER NOT NULL DEFAULT 0",
+            "speedtest_ping_min": "REAL",
+            "speedtest_ping_max": "REAL",
+        }
+        for column, definition in migrations.items():
+            if column not in existing_columns:
+                db.execute(f"ALTER TABLE wifi_telemetry_minute ADD COLUMN {column} {definition}")
+
         db.execute(
             "CREATE INDEX IF NOT EXISTS idx_wifi_telemetry_site_minute "
             "ON wifi_telemetry_minute(site_id, minute_utc DESC)"
@@ -322,6 +355,70 @@ class WiFiTelemetryStore:
             self._prune(db, site_id, moment)
         return {"site_id": site_id, "minute_utc": minute, "measured_metrics": sorted(key for key, value in metrics.items() if value is not None)}
 
+    def record_speedtest(
+        self,
+        site_id: str,
+        result: dict,
+        *,
+        sampled_at: object | None = None,
+    ) -> dict | None:
+        site_id = _site_id(site_id)
+        if not isinstance(result, dict):
+            raise ValueError("speed test result must be an object")
+        if result.get("error"):
+            return None
+        moment = _timestamp(sampled_at)
+        if moment < datetime.now(timezone.utc) - timedelta(days=self.retention_days):
+            raise ValueError("sampled_at is outside the configured telemetry retention window")
+        metrics = {
+            "download": _measurement(result.get("download"), 0, 100000),
+            "upload": _measurement(result.get("upload"), 0, 100000),
+            "ping": _measurement(result.get("ping"), 0, 600000),
+        }
+        if all(value is None for value in metrics.values()):
+            return None
+        minute = _bucket(moment)
+        now_text = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._connection() as db:
+            db.execute("""
+                INSERT INTO wifi_telemetry_minute (
+                    site_id, minute_utc, speedtest_count,
+                    speedtest_download_sum, speedtest_download_count, speedtest_download_min, speedtest_download_max,
+                    speedtest_upload_sum, speedtest_upload_count, speedtest_upload_min, speedtest_upload_max,
+                    speedtest_ping_sum, speedtest_ping_count, speedtest_ping_min, speedtest_ping_max, updated_at
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(site_id, minute_utc) DO UPDATE SET
+                    speedtest_count = speedtest_count + 1,
+                    speedtest_download_sum = speedtest_download_sum + excluded.speedtest_download_sum,
+                    speedtest_download_count = speedtest_download_count + excluded.speedtest_download_count,
+                    speedtest_download_min = CASE WHEN excluded.speedtest_download_min IS NULL THEN speedtest_download_min WHEN speedtest_download_min IS NULL THEN excluded.speedtest_download_min ELSE MIN(speedtest_download_min, excluded.speedtest_download_min) END,
+                    speedtest_download_max = CASE WHEN excluded.speedtest_download_max IS NULL THEN speedtest_download_max WHEN speedtest_download_max IS NULL THEN excluded.speedtest_download_max ELSE MAX(speedtest_download_max, excluded.speedtest_download_max) END,
+                    speedtest_upload_sum = speedtest_upload_sum + excluded.speedtest_upload_sum,
+                    speedtest_upload_count = speedtest_upload_count + excluded.speedtest_upload_count,
+                    speedtest_upload_min = CASE WHEN excluded.speedtest_upload_min IS NULL THEN speedtest_upload_min WHEN speedtest_upload_min IS NULL THEN excluded.speedtest_upload_min ELSE MIN(speedtest_upload_min, excluded.speedtest_upload_min) END,
+                    speedtest_upload_max = CASE WHEN excluded.speedtest_upload_max IS NULL THEN speedtest_upload_max WHEN speedtest_upload_max IS NULL THEN excluded.speedtest_upload_max ELSE MAX(speedtest_upload_max, excluded.speedtest_upload_max) END,
+                    speedtest_ping_sum = speedtest_ping_sum + excluded.speedtest_ping_sum,
+                    speedtest_ping_count = speedtest_ping_count + excluded.speedtest_ping_count,
+                    speedtest_ping_min = CASE WHEN excluded.speedtest_ping_min IS NULL THEN speedtest_ping_min WHEN speedtest_ping_min IS NULL THEN excluded.speedtest_ping_min ELSE MIN(speedtest_ping_min, excluded.speedtest_ping_min) END,
+                    speedtest_ping_max = CASE WHEN excluded.speedtest_ping_max IS NULL THEN speedtest_ping_max WHEN speedtest_ping_max IS NULL THEN excluded.speedtest_ping_max ELSE MAX(speedtest_ping_max, excluded.speedtest_ping_max) END,
+                    updated_at = excluded.updated_at
+            """, (
+                site_id, minute,
+                metrics["download"] if metrics["download"] is not None else 0,
+                int(metrics["download"] is not None), metrics["download"], metrics["download"],
+                metrics["upload"] if metrics["upload"] is not None else 0,
+                int(metrics["upload"] is not None), metrics["upload"], metrics["upload"],
+                metrics["ping"] if metrics["ping"] is not None else 0,
+                int(metrics["ping"] is not None), metrics["ping"], metrics["ping"],
+                now_text,
+            ))
+            self._prune(db, site_id, moment)
+        return {
+            "site_id": site_id,
+            "minute_utc": minute,
+            "measured_metrics": sorted(key for key, value in metrics.items() if value is not None),
+        }
+
     def site_ids(self, *, limit: int = 100) -> list[str]:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
             raise ValueError("limit must be an integer between 1 and 100")
@@ -365,6 +462,10 @@ class WiFiTelemetryStore:
                 diagnostics_count, latency_sum, latency_count, latency_min, latency_max,
                 jitter_sum, jitter_count, jitter_min, jitter_max,
                 packet_loss_sum, packet_loss_count, packet_loss_min, packet_loss_max,
+                speedtest_count,
+                speedtest_download_sum, speedtest_download_count, speedtest_download_min, speedtest_download_max,
+                speedtest_upload_sum, speedtest_upload_count, speedtest_upload_min, speedtest_upload_max,
+                speedtest_ping_sum, speedtest_ping_count, speedtest_ping_min, speedtest_ping_max,
                 updated_at
             FROM wifi_telemetry_minute
             WHERE """ + " AND ".join(clauses) + """
@@ -389,14 +490,21 @@ class WiFiTelemetryStore:
                 "average_latency_ms": item["latency_sum"] / item["latency_count"] if item["latency_count"] else None,
                 "average_jitter_ms": item["jitter_sum"] / item["jitter_count"] if item["jitter_count"] else None,
                 "average_packet_loss_pct": item["packet_loss_sum"] / item["packet_loss_count"] if item["packet_loss_count"] else None,
+                "average_speedtest_download_mbps": item["speedtest_download_sum"] / item["speedtest_download_count"] if item["speedtest_download_count"] else None,
+                "average_speedtest_upload_mbps": item["speedtest_upload_sum"] / item["speedtest_upload_count"] if item["speedtest_upload_count"] else None,
+                "average_speedtest_ping_ms": item["speedtest_ping_sum"] / item["speedtest_ping_count"] if item["speedtest_ping_count"] else None,
                 "sample_count": scan_count,
                 "diagnostic_sample_count": diagnostic_count,
+                "speedtest_sample_count": item["speedtest_count"],
             })
             for key in (
                 "network_count_sum", "open_network_count_sum", "band_24_count_sum",
                 "band_5_count_sum", "band_6_count_sum", "rssi_sum", "rssi_count",
                 "latency_sum", "latency_count", "jitter_sum", "jitter_count",
                 "packet_loss_sum", "packet_loss_count",
+                "speedtest_download_sum", "speedtest_download_count",
+                "speedtest_upload_sum", "speedtest_upload_count",
+                "speedtest_ping_sum", "speedtest_ping_count",
             ):
                 item.pop(key, None)
             result.append(item)

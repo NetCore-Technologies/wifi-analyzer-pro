@@ -4,6 +4,9 @@ const METRIC_RANGES = {
   average_latency_ms: [0, 600000],
   average_jitter_ms: [0, 600000],
   average_packet_loss_pct: [0, 100],
+  average_speedtest_download_mbps: [0, 100000],
+  average_speedtest_upload_mbps: [0, 100000],
+  average_speedtest_ping_ms: [0, 600000],
 };
 
 export function buildTelemetryChartData(rollups, metric) {
@@ -42,6 +45,7 @@ export function summariseTelemetry(rollups) {
   const rows = Array.isArray(rollups) ? rollups : [];
   const scanSamples = rows.reduce((sum, row) => sum + (Number.isSafeInteger(row?.sample_count) && row.sample_count > 0 ? row.sample_count : 0), 0);
   const diagnosticSamples = rows.reduce((sum, row) => sum + (Number.isSafeInteger(row?.diagnostic_sample_count) && row.diagnostic_sample_count > 0 ? row.diagnostic_sample_count : 0), 0);
+  const speedtestSamples = rows.reduce((sum, row) => sum + (Number.isSafeInteger(row?.speedtest_sample_count) && row.speedtest_sample_count > 0 ? row.speedtest_sample_count : 0), 0);
   const sites = new Set(rows.filter(row => typeof row?.site_id === "string").map(row => row.site_id));
-  return { buckets: rows.length, scanSamples, diagnosticSamples, siteCount: sites.size };
+  return { buckets: rows.length, scanSamples, diagnosticSamples, speedtestSamples, siteCount: sites.size };
 }

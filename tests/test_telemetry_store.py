@@ -68,8 +68,8 @@ class WiFiTelemetryStoreTests(unittest.TestCase):
             "latency_ms": 8, "jitter_ms": 5, "packet_loss_pct": 0,
         }, sampled_at=self.timestamp(seconds=10))
         row = self.store.history(site_ids=["office"], days=1)[0]
-        self.assertEqual(row["latency_count"], 2)
         self.assertEqual(row["latency_min"], 8)
+        self.assertEqual(row["latency_max"], 20)
         self.assertEqual(row["latency_max"], 20)
         self.assertEqual(row["average_latency_ms"], 14)
         self.assertEqual(row["jitter_min"], 2)
@@ -127,6 +127,77 @@ class WiFiTelemetryStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "site_id"):
             self.store.record_scan("../outside", [], sampled_at=self.timestamp())
 
+
+    def test_speedtest_rollups_preserve_only_completed_measured_results(self):
+        self.store.record_speedtest("office", {
+            "download": 120.5, "upload": 22.0, "ping": 14.5,
+        }, sampled_at=self.timestamp())
+        self.store.record_speedtest("office", {
+            "download": 80.5, "upload": None, "ping": 20.5,
+        }, sampled_at=self.timestamp(seconds=20))
+        self.store.record_speedtest("office", {
+            "download": 0, "upload": 0, "ping": 0, "error": "probe failed",
+        }, sampled_at=self.timestamp(seconds=30))
+        row = self.store.history(site_ids=["office"], days=1)[0]
+        self.assertEqual(row["speedtest_sample_count"], 2)
+        self.assertEqual(row["average_speedtest_download_mbps"], 100.5)
+        self.assertEqual(row["average_speedtest_upload_mbps"], 22.0)
+        self.assertEqual(row["average_speedtest_ping_ms"], 17.5)
+        self.assertEqual(row["speedtest_download_min"], 80.5)
+        self.assertEqual(row["speedtest_download_max"], 120.5)
+
+    def test_speedtest_missing_or_out_of_range_results_are_not_persisted(self):
+        self.assertIsNone(self.store.record_speedtest("office", {"error": "offline"}))
+        self.assertIsNone(self.store.record_speedtest("office", {"download": None, "upload": -1, "ping": float("nan")}))
+        self.assertEqual(self.store.history(site_ids=["office"], days=1), [])
+
+    def test_old_telemetry_database_is_migrated_without_losing_existing_rows(self):
+        import sqlite3
+
+        legacy_path = Path(self.directory.name) / "legacy.sqlite3"
+        with sqlite3.connect(legacy_path) as db:
+            db.execute("""
+                CREATE TABLE wifi_telemetry_minute (
+                    site_id TEXT NOT NULL,
+                    minute_utc TEXT NOT NULL,
+                    scan_count INTEGER NOT NULL DEFAULT 0,
+                    network_count_sum INTEGER NOT NULL DEFAULT 0,
+                    network_count_min INTEGER,
+                    network_count_max INTEGER,
+                    open_network_count_sum INTEGER NOT NULL DEFAULT 0,
+                    band_24_count_sum INTEGER NOT NULL DEFAULT 0,
+                    band_5_count_sum INTEGER NOT NULL DEFAULT 0,
+                    band_6_count_sum INTEGER NOT NULL DEFAULT 0,
+                    rssi_sum REAL NOT NULL DEFAULT 0,
+                    rssi_count INTEGER NOT NULL DEFAULT 0,
+                    rssi_min REAL,
+                    rssi_max REAL,
+                    diagnostics_count INTEGER NOT NULL DEFAULT 0,
+                    latency_sum REAL NOT NULL DEFAULT 0,
+                    latency_count INTEGER NOT NULL DEFAULT 0,
+                    latency_min REAL,
+                    latency_max REAL,
+                    jitter_sum REAL NOT NULL DEFAULT 0,
+                    jitter_count INTEGER NOT NULL DEFAULT 0,
+                    jitter_min REAL,
+                    jitter_max REAL,
+                    packet_loss_sum REAL NOT NULL DEFAULT 0,
+                    packet_loss_count INTEGER NOT NULL DEFAULT 0,
+                    packet_loss_min REAL,
+                    packet_loss_max REAL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (site_id, minute_utc)
+                )
+            """)
+            db.execute(
+                "INSERT INTO wifi_telemetry_minute (site_id, minute_utc, scan_count, updated_at) VALUES (?, ?, ?, ?)",
+                ("office", self.timestamp().replace(second=0).isoformat(timespec="seconds"), 3, self.timestamp().isoformat()),
+            )
+        migrated = WiFiTelemetryStore(legacy_path, retention_days=7)
+        migrated.record_speedtest("office", {"download": 25.0}, sampled_at=self.timestamp())
+        rows = migrated.history(site_ids=["office"], days=1)
+        self.assertEqual(rows[0]["sample_count"], 3)
+        self.assertEqual(rows[0]["average_speedtest_download_mbps"], 25.0)
 
 if __name__ == "__main__":
     unittest.main()

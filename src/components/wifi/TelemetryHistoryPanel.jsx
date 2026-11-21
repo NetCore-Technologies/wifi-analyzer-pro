@@ -140,10 +140,11 @@ export default function TelemetryHistoryPanel() {
         </div>
       ) : !error && (
         <>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
             <SummaryCard label="Measurement buckets" value={summary.buckets.toLocaleString()} detail="One-minute UTC windows" />
             <SummaryCard label="Scan samples" value={summary.scanSamples.toLocaleString()} detail="Successful live scans" />
             <SummaryCard label="Diagnostic samples" value={summary.diagnosticSamples.toLocaleString()} detail="Valid probe results" />
+            <SummaryCard label="Speed tests" value={summary.speedtestSamples.toLocaleString()} detail="Completed throughput tests" />
             <SummaryCard label="Sites with data" value={summary.siteCount.toLocaleString()} detail="Within your assigned scope" />
           </div>
 
@@ -160,6 +161,15 @@ export default function TelemetryHistoryPanel() {
             <MetricChart title="Packet loss" metric="average_packet_loss_pct" unit="%"
               description="Mean measured packet loss percentage; zero is shown only when measured."
               rollups={rollups} domain={[0, 100]} />
+            <MetricChart title="Download throughput" metric="average_speedtest_download_mbps" unit=" Mbps"
+              description="Mean completed local speed-test download throughput."
+              rollups={rollups} domain={[0, 'auto']} />
+            <MetricChart title="Upload throughput" metric="average_speedtest_upload_mbps" unit=" Mbps"
+              description="Mean completed local speed-test upload throughput."
+              rollups={rollups} domain={[0, 'auto']} />
+            <MetricChart title="Speed-test ping" metric="average_speedtest_ping_ms" unit=" ms"
+              description="Mean latency measured by completed speed tests; diagnostic probe latency is graphed separately."
+              rollups={rollups} domain={[0, 'auto']} />
           </div>
         </>
       )}
