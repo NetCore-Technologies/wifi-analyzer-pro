@@ -288,6 +288,33 @@ class VendorLicenseServiceTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.service.receive_webhook(raw, f"t={timestamp},v1={'0' * 64}")
 
+    def test_vendor_portal_requires_activation_secret_and_uses_linked_stripe_customer(self):
+        checkout = self.checkout()
+        self.service.process_event(self.checkout_completed(checkout))
+        self.service.process_event(self.subscription_event(checkout, "evt_portalactive"))
+
+        requests = []
+        def portal_opener(request, timeout):
+            requests.append((request, timeout))
+            return io.BytesIO(b'{"url":"https://billing.stripe.com/p/session_123456"}')
+        self.service._stripe_opener = portal_opener
+        with self.assertRaises(Exception):
+            self.service.create_portal_session(
+                installation_id=INSTALLATION,
+                license_id=checkout["license_id"],
+                activation_secret="wrong-activation-secret-value-long",
+            )
+        result = self.service.create_portal_session(
+            installation_id=INSTALLATION,
+            license_id=checkout["license_id"],
+            activation_secret=checkout["activation_secret"],
+        )
+        self.assertEqual(result["url"], "https://billing.stripe.com/p/session_123456")
+        request, timeout = requests[0]
+        self.assertEqual(request.full_url, "https://api.stripe.com/v1/billing_portal/sessions")
+        self.assertEqual(parse_qs(request.data.decode())["customer"], ["cus_vendor1234"])
+        self.assertEqual(timeout, 12)
+
     def test_public_key_exposes_only_verification_key_not_private_material(self):
         result = self.service.public_key()
         self.assertEqual(result["key_id"], "test-key")

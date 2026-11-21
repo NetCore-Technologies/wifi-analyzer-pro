@@ -443,6 +443,36 @@ class VendorLicenseStore:
             "product_license": self.status(installation_id),
         }
 
+    def open_vendor_portal(
+        self,
+        *,
+        installation_id: str,
+        opener=None,
+    ) -> dict[str, str]:
+        credentials = self.refresh_credentials()
+        if credentials is None:
+            raise LicenseVerificationError("No vendor subscription credentials are stored")
+        if not isinstance(installation_id, str) or not _INSTALLATION_ID.fullmatch(installation_id):
+            raise ValueError("Installation identifier is invalid")
+        result = _post_vendor_service(
+            f"{credentials['service_url']}/api/portal",
+            {
+                "installation_id": installation_id,
+                "license_id": credentials["license_id"],
+                "activation_secret": credentials["activation_secret"],
+            },
+            opener=opener,
+        )
+        url = result.get("url")
+        parsed = urllib.parse.urlsplit(url) if isinstance(url, str) else None
+        if (
+            not parsed or parsed.scheme != "https"
+            or parsed.hostname != "billing.stripe.com"
+            or parsed.username is not None or parsed.password is not None
+        ):
+            raise VendorLicenseServiceError("Vendor service returned an invalid billing portal URL")
+        return {"url": url}
+
     def configure_service(
         self,
         *,

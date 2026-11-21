@@ -32,6 +32,7 @@ DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "api.billing.portal": (10, 60),
     "api.license.checkout": (5, 300),
     "api.license.sync": (20, 300),
+    "api.license.portal": (10, 300),
 }
 
 

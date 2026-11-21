@@ -29,6 +29,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 try:
     from .billing import (
         PLAN_CATALOG, StripeApiError, _stripe_post, verify_stripe_signature,
+        create_billing_portal_session,
     )
     from .license import LicenseVerificationError, create_signed_license
     from .rate_limit import TokenBucketRateLimiter
@@ -529,6 +530,35 @@ class VendorLicenseService:
             )
         return {"processed": True, "duplicate": False, "matched": matched, "stale": stale}
 
+    def create_portal_session(
+        self,
+        *,
+        installation_id: str,
+        license_id: str,
+        activation_secret: str,
+    ) -> dict[str, str]:
+        if not isinstance(installation_id, str) or not _INSTALLATION_ID.fullmatch(installation_id):
+            raise ValueError("Installation identifier is invalid")
+        if not isinstance(license_id, str) or not _LICENSE_ID.fullmatch(license_id):
+            raise ValueError("Vendor licence identifier is invalid")
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM vendor_licenses WHERE license_id=? AND installation_id=?",
+                (license_id, installation_id),
+            ).fetchone()
+            if row is None:
+                raise LicenseNotReady("Vendor licence was not found for this installation")
+            self._verify_activation_secret(row, activation_secret)
+            customer_id = row["stripe_customer_id"]
+            if not isinstance(customer_id, str) or not _CUSTOMER_ID.fullmatch(customer_id):
+                raise LicenseNotReady("The vendor Stripe customer has not been confirmed yet")
+        return create_billing_portal_session(
+            secret_key=self.stripe_secret_key,
+            customer_id=customer_id,
+            public_url=self.public_url,
+            opener=self._stripe_opener,
+        )
+
     def _issue_license(self, row, now: float) -> dict[str, Any]:
         status = row["subscription_status"]
         period_end = row["current_period_end"]
@@ -637,6 +667,7 @@ class LicensingHandler(BaseHTTPRequestHandler):
         "/api/checkout": (5, 60),
         "/api/claim": (15, 60),
         "/api/refresh": (30, 60),
+        "/api/portal": (10, 60),
         "/api/webhook": (120, 60),
     }
 
@@ -765,6 +796,15 @@ class LicensingHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/refresh":
                 result = self.service.refresh_license(
+                    installation_id=payload.get("installation_id"),
+                    license_id=payload.get("license_id"),
+                    activation_secret=payload.get("activation_secret"),
+                )
+                self.send_json(result)
+                return
+
+            if path == "/api/portal":
+                result = self.service.create_portal_session(
                     installation_id=payload.get("installation_id"),
                     license_id=payload.get("license_id"),
                     activation_secret=payload.get("activation_secret"),

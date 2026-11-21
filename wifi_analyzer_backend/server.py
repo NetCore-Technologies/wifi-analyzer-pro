@@ -1409,7 +1409,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in {
             "/api/billing/checkout", "/api/billing/portal",
             "/api/license/activate", "/api/license/deactivate",
-            "/api/license/checkout", "/api/license/sync",
+            "/api/license/checkout", "/api/license/sync", "/api/license/portal",
         }:
             if not self.require_auth("billing.manage"):
                 return
@@ -1434,6 +1434,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/billing/portal": ("api.billing.portal", False),
             "/api/license/checkout": ("api.license.checkout", False),
             "/api/license/sync": ("api.license.sync", False),
+            "/api/license/portal": ("api.license.portal", False),
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
             return
@@ -1512,6 +1513,24 @@ class Handler(BaseHTTPRequestHandler):
                 metadata={"plan_id": synced["plan_id"]},
             )
             self.send_json({"license": synced})
+            return
+
+        if path == "/api/license/portal":
+            try:
+                portal = LICENSES.open_vendor_portal(
+                    installation_id=BILLING.instance_id(),
+                )
+            except VendorLicenseServiceError as error:
+                self.send_json({"error": str(error)}, 502)
+                return
+            except LicenseVerificationError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event("license.portal.opened", target_type="product_license")
+            self.send_json({"portal": portal})
             return
 
         if path == "/api/license/activate":
