@@ -138,6 +138,7 @@ class VendorLicenseServiceTests(unittest.TestCase):
         self.assertEqual(request.full_url, "https://api.stripe.com/v1/checkout/sessions")
         self.assertEqual(request.get_header("Authorization"), f"Bearer {STRIPE_SECRET}")
         self.assertEqual(fields["line_items[0][price]"], ["price_vendorbusiness1234"])
+        self.assertEqual(fields["expires_at"], [str(int(NOW + 30 * 60))])
         self.assertEqual(fields["metadata[license_id]"], [checkout["license_id"]])
         self.assertEqual(fields["metadata[installation_id]"], [INSTALLATION])
         self.assertEqual(fields["subscription_data[metadata][license_id]"], [checkout["license_id"]])

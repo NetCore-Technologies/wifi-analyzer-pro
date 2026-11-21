@@ -42,6 +42,7 @@ except ImportError:  # Direct script execution inside the production container.
     from rate_limit import TokenBucketRateLimiter
 
 
+CHECKOUT_SESSION_TTL_SECONDS = 30 * 60
 LICENSE_TTL_SECONDS = 24 * 60 * 60
 LICENSE_OFFLINE_GRACE_SECONDS = 6 * 60 * 60
 PAYMENT_GRACE_SECONDS = 72 * 60 * 60
@@ -318,7 +319,7 @@ class VendorLicenseService:
                 WHERE installation_id=? AND subscription_status='pending' AND created_at>?
                 LIMIT 1
                 """,
-                (installation_id, now - 30 * 60),
+                (installation_id, now - CHECKOUT_SESSION_TTL_SECONDS),
             ).fetchone()
             if pending:
                 raise LicenseServiceConflict("A checkout is already pending for this installation; finish it or try again later")
@@ -334,6 +335,7 @@ class VendorLicenseService:
 
         fields = {
             "mode": "subscription",
+            "expires_at": str(int(now + CHECKOUT_SESSION_TTL_SECONDS)),
             "success_url": f"{self.public_url}/checkout/success",
             "cancel_url": f"{self.public_url}/checkout/cancel",
             "client_reference_id": installation_id,
