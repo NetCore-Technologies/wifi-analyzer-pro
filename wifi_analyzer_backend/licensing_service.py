@@ -18,6 +18,7 @@ import sqlite3
 import threading
 import time
 import urllib.parse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -31,7 +32,18 @@ from .billing import (
     _stripe_post,
     verify_stripe_signature,
 )
-from .license import create_signed_license
+try:
+    from .billing import (
+        PLAN_CATALOG, StripeApiError, _stripe_post, verify_stripe_signature,
+    )
+    from .license import LicenseVerificationError, create_signed_license
+    from .rate_limit import TokenBucketRateLimiter
+except ImportError:  # Direct script execution inside the production container.
+    from billing import (
+        PLAN_CATALOG, StripeApiError, _stripe_post, verify_stripe_signature,
+    )
+    from license import LicenseVerificationError, create_signed_license
+    from rate_limit import TokenBucketRateLimiter
 
 
 LICENSE_TTL_SECONDS = 24 * 60 * 60
@@ -600,3 +612,207 @@ class VendorLicenseService:
             format=serialization.PublicFormat.Raw,
         )
         return {"key_id": self.key_id, "public_key": base64.b64encode(public).decode("ascii")}
+
+
+MAX_VENDOR_REQUEST_BYTES = 64 * 1024
+
+
+class LicensingHandler(BaseHTTPRequestHandler):
+    """Small HTTPS-proxy-facing HTTP API for vendor product subscriptions."""
+
+    service: VendorLicenseService | None = None
+    limiter = TokenBucketRateLimiter(max_buckets=4096)
+    policies = {
+        "/api/checkout": (5, 60),
+        "/api/claim": (15, 60),
+        "/api/refresh": (30, 60),
+        "/api/webhook": (120, 60),
+    }
+
+    def log_message(self, fmt, *args):
+        # Do not log request bodies, query strings, credentials or Stripe tokens.
+        path = urllib.parse.urlsplit(self.path).path[:128]
+        print(f"[LICENSING] {self.address_string()} {self.command} {path}")
+
+    def send_json(self, payload: dict[str, Any], status: int = 200):
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_html(self, content: str, status: int = 200):
+        body = content.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _read_json(self, maximum: int = MAX_VENDOR_REQUEST_BYTES) -> dict[str, Any]:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError) as error:
+            raise ValueError("Content-Length is invalid") from error
+        if length <= 0 or length > maximum:
+            raise ValueError("Request body is empty or exceeds the size limit")
+        if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+            raise ValueError("Content-Type must be application/json")
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            raise ValueError("Request body is truncated")
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("Request body must contain valid JSON") from error
+        if not isinstance(value, dict):
+            raise ValueError("Request JSON must be an object")
+        return value
+
+    def _limited(self, path: str) -> bool:
+        policy = self.policies.get(path)
+        if policy is None:
+            return True
+        capacity, period = policy
+        peer = str(self.client_address[0]) if self.client_address else "unknown"
+        decision = self.limiter.consume(
+            f"vendor:{path}:{peer}",
+            capacity=capacity,
+            period_seconds=period,
+        )
+        if decision["allowed"]:
+            return True
+        self.send_json({
+            "error": "Rate limit exceeded",
+            "retry_after_seconds": decision["retry_after_seconds"],
+        }, 429)
+        return False
+
+    def do_GET(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path == "/health":
+            self.send_json({"status": "ok", "service": "wifi-analyzer-pro-licensing"})
+            return
+        if path == "/api/public-key":
+            self.send_json(self.service.public_key())
+            return
+        if path == "/checkout/success":
+            self.send_html("""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Payment received</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;color:#e5e7eb;background:#0b1220"><h1>Payment received</h1><p>Stripe is confirming your subscription. Return to WiFi Analyzer Pro, open <b>Plans &amp; Licensing</b>, and select <b>Sync licence</b> to activate the signed product licence.</p><p>You can safely close this page after returning to the app.</p></body></html>""")
+            return
+        if path == "/checkout/cancel":
+            self.send_html("""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Checkout cancelled</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;color:#e5e7eb;background:#0b1220"><h1>Checkout cancelled</h1><p>No product licence was activated. Return to WiFi Analyzer Pro to choose another plan or continue on Free.</p></body></html>""")
+            return
+        self.send_json({"error": "Not found"}, 404)
+
+    def do_POST(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path not in self.policies:
+            self.send_json({"error": "Not found"}, 404)
+            return
+        if not self._limited(path):
+            return
+        try:
+            if path == "/api/webhook":
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                except (TypeError, ValueError) as error:
+                    raise ValueError("Content-Length is invalid") from error
+                if length <= 0 or length > 256 * 1024:
+                    raise ValueError("Webhook body is empty or exceeds 256 KiB")
+                if self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
+                    raise ValueError("Content-Type must be application/json")
+                raw = self.rfile.read(length)
+                if len(raw) != length:
+                    raise ValueError("Webhook body is truncated")
+                result = self.service.receive_webhook(raw, self.headers.get("Stripe-Signature"))
+                self.send_json(result)
+                return
+
+            payload = self._read_json()
+            if path == "/api/checkout":
+                result = self.service.create_checkout(
+                    installation_id=payload.get("installation_id"),
+                    plan_id=payload.get("plan_id"),
+                    customer_email=payload.get("customer_email"),
+                )
+                self.send_json(result, 201)
+                return
+            if path == "/api/claim":
+                result = self.service.claim_license(
+                    installation_id=payload.get("installation_id"),
+                    checkout_session_id=payload.get("checkout_session_id"),
+                    activation_secret=payload.get("activation_secret"),
+                )
+                self.send_json(result)
+                return
+            if path == "/api/refresh":
+                result = self.service.refresh_license(
+                    installation_id=payload.get("installation_id"),
+                    license_id=payload.get("license_id"),
+                    activation_secret=payload.get("activation_secret"),
+                )
+                self.send_json(result)
+                return
+        except LicenseNotReady as error:
+            self.send_json({"error": str(error), "code": "license_not_ready"}, 409)
+        except LicenseVerificationError as error:
+            self.send_json({"error": str(error)}, 403)
+        except StripeApiError as error:
+            self.send_json({"error": str(error)}, 502)
+        except ValueError as error:
+            self.send_json({"error": str(error)}, 400)
+        except LicenseServiceConflict as error:
+            self.send_json({"error": str(error)}, 409)
+        except Exception as error:
+            print(f"[LICENSING ERROR] {type(error).__name__}")
+            self.send_json({"error": "Vendor licensing service failed"}, 500)
+
+
+def build_service_from_environment() -> VendorLicenseService:
+    database_path = os.getenv(
+        "WIFI_ANALYZER_VENDOR_LICENSE_DB",
+        str(Path.home() / ".local" / "state" / "wifi-analyzer-pro" / "vendor-licensing.sqlite3"),
+    )
+    public_url = os.getenv("WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL", "")
+    return VendorLicenseService(
+        database_path,
+        stripe_secret_key=os.getenv("WIFI_ANALYZER_VENDOR_STRIPE_SECRET_KEY", ""),
+        stripe_webhook_secret=os.getenv("WIFI_ANALYZER_VENDOR_STRIPE_WEBHOOK_SECRET", ""),
+        public_url=public_url,
+        price_plans=configured_vendor_price_plans(),
+        signing_private_key=load_vendor_signing_key(),
+        key_id=os.getenv("WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID", "primary"),
+    )
+
+
+def main() -> None:
+    service = build_service_from_environment()
+    host = os.getenv("WIFI_ANALYZER_LICENSE_SERVICE_HOST", "127.0.0.1")
+    port_text = os.getenv("WIFI_ANALYZER_LICENSE_SERVICE_PORT", "1999")
+    try:
+        port = int(port_text)
+    except ValueError as error:
+        raise SystemExit("WIFI_ANALYZER_LICENSE_SERVICE_PORT must be an integer") from error
+    if not 1 <= port <= 65535:
+        raise SystemExit("WIFI_ANALYZER_LICENSE_SERVICE_PORT must be between 1 and 65535")
+    LicensingHandler.service = service
+    httpd = ThreadingHTTPServer((host, port), LicensingHandler)
+    httpd.daemon_threads = True
+    print(f"[LICENSING] Listening on {host}:{port}; place behind a trusted HTTPS reverse proxy")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("[LICENSING] Shutting down")
+    finally:
+        httpd.server_close()
+
+
+if __name__ == "__main__":
+    main()
