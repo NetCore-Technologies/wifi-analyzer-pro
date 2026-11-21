@@ -1290,7 +1290,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 409)
         status, result = self.request("POST", delivery_path, delivery_payload, token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(result["feature"], "F190")
+        self.assertEqual(result["feature"], "F189")
         self.assertEqual(result["result"]["status"], "ready")
         self.assertTrue(result["result"]["egress"]["approved"])
         self.assertEqual(result["result"]["delivery"]["method"], "POST")
