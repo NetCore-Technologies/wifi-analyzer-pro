@@ -24,6 +24,7 @@ import WebhookDeliveryPanel from "./components/WebhookDeliveryPanel.jsx";
 import BillingPanel from "./components/BillingPanel.jsx";
 import { PhyTelemetryPanel, InterfaceTelemetryPanel } from "./components/LiveRadioPanels.jsx";
 import CommandPalette from "./components/CommandPalette.jsx";
+import { calculateInterfaceRates } from "./lib/telemetryMath.js";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -1122,29 +1123,14 @@ export default function App() {
         setLivePhy(phyData);
         setLiveLink(linkData);
         const sampledAt=Date.now();
-        const rxBytes=Number(linkData?.rx_bytes);
-        const txBytes=Number(linkData?.tx_bytes);
-        const previousSample=linkSampleRef.current;
-        if(
-          previousSample
-          && sampledAt>previousSample.sampledAt
-          && Number.isFinite(rxBytes)
-          && Number.isFinite(txBytes)
-          && rxBytes>=previousSample.rxBytes
-          && txBytes>=previousSample.txBytes
-        ){
-          const elapsedMs=sampledAt-previousSample.sampledAt;
-          setLinkRates({
-            rxMbps:((rxBytes-previousSample.rxBytes)*8)/(elapsedMs*1000),
-            txMbps:((txBytes-previousSample.txBytes)*8)/(elapsedMs*1000),
-            sampledAt,
-          });
-        }else{
-          setLinkRates(null);
-        }
-        linkSampleRef.current=Number.isFinite(rxBytes)&&Number.isFinite(txBytes)
-          ?{sampledAt,rxBytes,txBytes}
-          :null;
+        const rxBytes=linkData?.rx_bytes;
+        const txBytes=linkData?.tx_bytes;
+        const currentSample={sampledAt,rxBytes,txBytes};
+        setLinkRates(calculateInterfaceRates(linkSampleRef.current,currentSample));
+        linkSampleRef.current=(
+          typeof rxBytes==="number"&&Number.isFinite(rxBytes)&&rxBytes>=0
+          && typeof txBytes==="number"&&Number.isFinite(txBytes)&&txBytes>=0
+        )?currentSample:null;
         setLiveError("");
         setLastUpdated(Date.now());
       }catch(error){
