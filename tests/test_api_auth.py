@@ -1154,7 +1154,7 @@ class AuthenticatedApiTests(unittest.TestCase):
                     {"feature":"F194","summary":{"profile_count":1,"violation_count":0,"evidence_gap_count":0,"findings_by_severity":{}}, "findings":[]},
                     *[{"feature":f"F{n}","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{}}, "findings":[]} for n in range(195,200)]
                 ]
-            }, "F200")
+            }, "F200"),
             ("multi_ap_channel_reuse_planner", {
                 "radios": [
                     {"radio_id":"hq-ap1-24","ap_id":"hq-ap1","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
