@@ -30,6 +30,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_audit = server.AUDIT
         self.previous_live_capture = server.LIVE_CAPTURE
         self.previous_webhook_deliveries = server.WEBHOOK_DELIVERIES
+        self.previous_webhook_subscriptions = server.WEBHOOK_SUBSCRIPTIONS
         self.previous_rate_limiter = server.RATE_LIMITER
         self.previous_rate_policies = server.RATE_LIMIT_POLICIES
         server.RATE_LIMITER = TokenBucketRateLimiter()
@@ -38,6 +39,10 @@ class AuthenticatedApiTests(unittest.TestCase):
             "wifi_analyzer_backend.webhook_delivery_store",
             fromlist=["WebhookDeliveryStore"],
         ).WebhookDeliveryStore(path=str(Path(self.temp.name) / "webhook-deliveries.sqlite3"))
+        server.WEBHOOK_SUBSCRIPTIONS = __import__(
+            "wifi_analyzer_backend.webhook_subscription_store",
+            fromlist=["WebhookSubscriptionStore"],
+        ).WebhookSubscriptionStore(path=str(Path(self.temp.name) / "webhook-subscriptions.sqlite3"))
         server.LIVE_CAPTURE = Mock()
         server.LIVE_CAPTURE.list_interfaces.return_value = {
             "available": True,
@@ -71,6 +76,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.AUDIT = self.previous_audit
         server.LIVE_CAPTURE = self.previous_live_capture
         server.WEBHOOK_DELIVERIES = self.previous_webhook_deliveries
+        server.WEBHOOK_SUBSCRIPTIONS = self.previous_webhook_subscriptions
         server.RATE_LIMITER = self.previous_rate_limiter
         server.RATE_LIMIT_POLICIES = self.previous_rate_policies
         self.temp.cleanup()
@@ -396,6 +402,104 @@ class AuthenticatedApiTests(unittest.TestCase):
         })[1]["token"]
         self.assertFalse(server.AUTH.has_permission(viewer_token, "webhooks.read"))
         self.assertFalse(server.AUTH.has_permission(viewer_token, "webhooks.manage"))
+
+    def test_webhook_subscriptions_are_persisted_site_scoped_and_secret_free(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+
+        def subscription(subscription_id, sites):
+            return {
+                "subscription_id": subscription_id,
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "key_id": subscription_id + "-key",
+                "event_types": ["router.health", "radio.down"],
+                "minimum_severity": "warning",
+                "site_allowlist": sites,
+                "maximum_events_per_batch": 100,
+                "maximum_batches": 10,
+                "enabled": True,
+            }
+
+        status, created = self.request("POST", "/api/webhooks/subscriptions", {
+            "subscription": subscription("office-alerts", ["office"]),
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        self.assertEqual(created["subscription"]["subscription_id"], "office-alerts")
+
+        status, duplicate = self.request("POST", "/api/webhooks/subscriptions", {
+            "subscription": subscription("office-alerts", ["office"]),
+        }, token=owner_token)
+        self.assertEqual(status, 409)
+
+        status, created_branch = self.request("POST", "/api/webhooks/subscriptions", {
+            "subscription": subscription("branch-alerts", ["branch"]),
+        }, token=owner_token)
+        self.assertEqual(status, 201, created_branch)
+
+        status, user = self.request("POST", "/api/users", {
+            "username": "office.webhook-owner",
+            "password": "office webhook owner password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["office"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, user)
+        scoped_token = self.request("POST", "/api/auth/login", {
+            "username": "office.webhook-owner",
+            "password": "office webhook owner password",
+        })[1]["token"]
+
+        status, listing = self.request("GET", "/api/webhooks/subscriptions", token=scoped_token)
+        self.assertEqual(status, 200, listing)
+        self.assertEqual([item["subscription_id"] for item in listing["subscriptions"]], ["office-alerts"])
+
+        status, forbidden = self.request("POST", "/api/webhooks/subscriptions", {
+            "subscription": subscription("branch-intrusion", ["branch"]),
+        }, token=scoped_token)
+        self.assertEqual(status, 403)
+
+        status, hidden_update = self.request(
+            "POST", "/api/webhooks/subscriptions/branch-alerts/update", {
+                "subscription": subscription("branch-alerts", ["branch"], enabled=False),
+            }, token=scoped_token,
+        )
+        self.assertEqual(status, 404)
+
+        status, updated = self.request(
+            "POST", "/api/webhooks/subscriptions/office-alerts/update", {
+                "subscription": subscription("office-alerts", ["office"], enabled=False),
+            }, token=scoped_token,
+        )
+        self.assertEqual(status, 200, updated)
+        self.assertFalse(updated["subscription"]["enabled"])
+        self.assertNotIn("signing_secret", str(updated))
+        self.assertNotIn("hmac_secret", str(updated))
+
+        status, viewer = self.request("POST", "/api/users", {
+            "username": "viewer.webhook-read",
+            "password": "viewer webhook read password",
+            "role": "viewer",
+            "all_sites": False,
+            "site_ids": ["office"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, viewer)
+        viewer_token = self.request("POST", "/api/auth/login", {
+            "username": "viewer.webhook-read",
+            "password": "viewer webhook read password",
+        })[1]["token"]
+        status, denied_read = self.request("GET", "/api/webhooks/subscriptions", token=viewer_token)
+        self.assertEqual(status, 403)
+
+        status, deleted = self.request(
+            "POST", "/api/webhooks/subscriptions/office-alerts/delete", {}, token=scoped_token,
+        )
+        self.assertEqual(status, 200, deleted)
+        status, remaining = self.request("GET", "/api/webhooks/subscriptions", token=scoped_token)
+        self.assertEqual(status, 200)
+        self.assertEqual(remaining["subscriptions"], [])
 
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")

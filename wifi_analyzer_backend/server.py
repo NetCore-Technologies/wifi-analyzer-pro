@@ -23,6 +23,9 @@ if __package__:
     from .webhook_delivery_store import (
         WebhookDeliveryConflictError, WebhookDeliveryNotFoundError, WebhookDeliveryStore,
     )
+    from .webhook_subscription_store import (
+        WebhookSubscriptionConflictError, WebhookSubscriptionNotFoundError, WebhookSubscriptionStore,
+    )
     from .rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
@@ -46,6 +49,9 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from live_capture import LiveCaptureManager
     from webhook_delivery_store import (
         WebhookDeliveryConflictError, WebhookDeliveryNotFoundError, WebhookDeliveryStore,
+    )
+    from webhook_subscription_store import (
+        WebhookSubscriptionConflictError, WebhookSubscriptionNotFoundError, WebhookSubscriptionStore,
     )
     from rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from feature_plugins import catalog as feature_catalog, run as run_feature
@@ -80,6 +86,7 @@ REPORT_JOBS = RouterReportJobStore()
 AUDIT = SecurityAuditStore()
 LIVE_CAPTURE = LiveCaptureManager()
 WEBHOOK_DELIVERIES = WebhookDeliveryStore()
+WEBHOOK_SUBSCRIPTIONS = WebhookSubscriptionStore()
 RATE_LIMITER = TokenBucketRateLimiter()
 RATE_LIMIT_POLICIES = dict(DEFAULT_POLICIES)
 
@@ -903,7 +910,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "diagnostics.run"
             elif path.startswith("/api/reports/jobs"):
                 permission = "reports.read"
-            elif path.startswith("/api/webhooks/deliveries"):
+            elif path.startswith("/api/webhooks/"):
                 permission = "webhooks.read"
             elif path in {"/api/agents/credentials", "/api/agents/negotiations"}:
                 permission = "agents.manage"
@@ -919,6 +926,16 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "users.manage"
             if not self.require_auth(permission):
                 return
+
+        if path == "/api/webhooks/subscriptions":
+            scope = AUTH.site_access(self.bearer_token())
+            site_filter = None if scope["all_sites"] else scope["site_ids"]
+            try:
+                subscriptions = WEBHOOK_SUBSCRIPTIONS.list_subscriptions(site_ids=site_filter)
+                self.send_json({"subscriptions": subscriptions, "subscription_count": len(subscriptions)})
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+            return
 
         if path == "/api/webhooks/deliveries":
             scope = AUTH.site_access(self.bearer_token())
@@ -1255,6 +1272,8 @@ class Handler(BaseHTTPRequestHandler):
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
             return
+        if path.startswith("/api/webhooks/subscriptions") and not self.enforce_rate_limit("api.webhook.manage"):
+            return
         if path.startswith("/api/features/") and not self.enforce_rate_limit("api.feature.execution"):
             return
 
@@ -1466,6 +1485,91 @@ class Handler(BaseHTTPRequestHandler):
                 metadata={"state": capture["state"], "captured_bytes": capture["captured_bytes"]},
             )
             self.send_json({"capture": capture})
+            return
+
+        if path == "/api/webhooks/subscriptions":
+            if not self.require_auth("webhooks.manage"):
+                return
+            scope = AUTH.site_access(self.bearer_token())
+            allowed_sites = None if scope["all_sites"] else scope["site_ids"]
+            try:
+                subscription = WEBHOOK_SUBSCRIPTIONS.create(
+                    payload.get("subscription"),
+                    allowed_site_ids=allowed_sites,
+                )
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except WebhookSubscriptionConflictError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(
+                "webhook.subscription.created",
+                target_type="webhook_subscription",
+                target_id=subscription["subscription_id"],
+                metadata={"enabled": subscription["enabled"], "site_count": len(subscription["site_allowlist"])},
+            )
+            self.send_json({"subscription": subscription}, 201)
+            return
+
+        subscription_update = re.fullmatch(
+            r"/api/webhooks/subscriptions/([A-Za-z0-9][A-Za-z0-9._:-]{0,63})/update",
+            path,
+        )
+        if subscription_update:
+            if not self.require_auth("webhooks.manage"):
+                return
+            subscription_id = subscription_update.group(1)
+            scope = AUTH.site_access(self.bearer_token())
+            allowed_sites = None if scope["all_sites"] else scope["site_ids"]
+            try:
+                subscription = WEBHOOK_SUBSCRIPTIONS.update(
+                    subscription_id,
+                    payload.get("subscription"),
+                    allowed_site_ids=allowed_sites,
+                )
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except WebhookSubscriptionNotFoundError:
+                self.send_json({"error": "Subscription not found"}, 404)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(
+                "webhook.subscription.updated",
+                target_type="webhook_subscription",
+                target_id=subscription_id,
+                metadata={"enabled": subscription["enabled"], "site_count": len(subscription["site_allowlist"])},
+            )
+            self.send_json({"subscription": subscription})
+            return
+
+        subscription_delete = re.fullmatch(
+            r"/api/webhooks/subscriptions/([A-Za-z0-9][A-Za-z0-9._:-]{0,63})/delete",
+            path,
+        )
+        if subscription_delete:
+            if not self.require_auth("webhooks.manage"):
+                return
+            subscription_id = subscription_delete.group(1)
+            scope = AUTH.site_access(self.bearer_token())
+            site_filter = None if scope["all_sites"] else scope["site_ids"]
+            try:
+                result = WEBHOOK_SUBSCRIPTIONS.delete(subscription_id, site_ids=site_filter)
+            except WebhookSubscriptionNotFoundError:
+                self.send_json({"error": "Subscription not found"}, 404)
+                return
+            self.audit_event(
+                "webhook.subscription.deleted",
+                target_type="webhook_subscription",
+                target_id=subscription_id,
+            )
+            self.send_json(result)
             return
 
         if path == "/api/webhooks/deliveries/enqueue":
