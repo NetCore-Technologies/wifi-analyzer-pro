@@ -1320,7 +1320,7 @@ class FeatureCatalogTests(unittest.TestCase):
             "baseline": {**payload["baseline"], "samples": [
                 {**item, "sample_id": "reversed-base-" + str(index), "observed_at": "2026-11-13T11:5" + str(index) + ":00Z"}
                 for index, item in enumerate(good)
-            ]},
+            ] + payload["baseline"]["samples"][2:]},
             "comparison": {**payload["comparison"], "samples": [
                 {**item, "sample_id": "reversed-current-" + str(index), "observed_at": "2026-11-21T11:5" + str(index) + ":00Z"}
                 for index, item in enumerate(poor)
