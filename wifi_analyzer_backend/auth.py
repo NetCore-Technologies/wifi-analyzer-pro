@@ -39,23 +39,26 @@ ROLE_PERMISSIONS = {
     "owner": frozenset({
         "users.manage", "agents.manage", "agents.read",
         "reports.manage", "reports.read",
+        "webhooks.manage", "webhooks.read",
         "sites.manage", "sites.read",
         "diagnostics.run", "diagnostics.read",
     }),
     "admin": frozenset({
         "users.manage", "agents.manage", "agents.read",
         "reports.manage", "reports.read",
+        "webhooks.manage", "webhooks.read",
         "sites.manage", "sites.read",
         "diagnostics.run", "diagnostics.read",
     }),
     "network_admin": frozenset({
         "agents.manage", "agents.read",
         "reports.manage", "reports.read",
+        "webhooks.manage", "webhooks.read",
         "sites.manage", "sites.read",
         "diagnostics.run", "diagnostics.read",
     }),
     "analyst": frozenset({
-        "agents.read", "reports.read", "sites.read",
+        "agents.read", "reports.read", "webhooks.read", "sites.read",
         "diagnostics.run", "diagnostics.read",
     }),
     "viewer": frozenset({

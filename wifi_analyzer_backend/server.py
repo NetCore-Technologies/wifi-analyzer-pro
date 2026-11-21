@@ -20,6 +20,9 @@ if __package__:
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
     from .live_capture import LiveCaptureManager
+    from .webhook_delivery_store import (
+        WebhookDeliveryConflictError, WebhookDeliveryNotFoundError, WebhookDeliveryStore,
+    )
     from .rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
@@ -41,6 +44,9 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
     from live_capture import LiveCaptureManager
+    from webhook_delivery_store import (
+        WebhookDeliveryConflictError, WebhookDeliveryNotFoundError, WebhookDeliveryStore,
+    )
     from rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
@@ -73,6 +79,7 @@ AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
 AUDIT = SecurityAuditStore()
 LIVE_CAPTURE = LiveCaptureManager()
+WEBHOOK_DELIVERIES = WebhookDeliveryStore()
 RATE_LIMITER = TokenBucketRateLimiter()
 RATE_LIMIT_POLICIES = dict(DEFAULT_POLICIES)
 
@@ -782,6 +789,27 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def require_webhook_delivery_site_access(self, delivery):
+        if not isinstance(delivery, dict):
+            self.send_json({"error": "Webhook delivery not found"}, 404)
+            return False
+        scope = AUTH.site_access(self.bearer_token())
+        if scope is None:
+            self.send_json({"error": "Authentication required"}, 401)
+            return False
+        if scope["all_sites"]:
+            return True
+        delivery_sites = delivery.get("site_ids")
+        if (
+            delivery.get("has_unscoped_events")
+            or not isinstance(delivery_sites, list)
+            or not delivery_sites
+            or not set(delivery_sites).issubset(scope["site_ids"])
+        ):
+            self.send_json({"error": "Webhook delivery not found"}, 404)
+            return False
+        return True
+
     def require_report_job_site_access(self, job):
         if not isinstance(job, dict):
             self.send_json({"error": "Report job not found"}, 404)
@@ -875,6 +903,8 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "diagnostics.run"
             elif path.startswith("/api/reports/jobs"):
                 permission = "reports.read"
+            elif path.startswith("/api/webhooks/deliveries"):
+                permission = "webhooks.read"
             elif path in {"/api/agents/credentials", "/api/agents/negotiations"}:
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
@@ -889,6 +919,25 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "users.manage"
             if not self.require_auth(permission):
                 return
+
+        if path == "/api/webhooks/deliveries":
+            scope = AUTH.site_access(self.bearer_token())
+            site_filter = None if scope["all_sites"] else scope["site_ids"]
+            try:
+                self.send_json({
+                    "summary": WEBHOOK_DELIVERIES.summary(site_ids=site_filter),
+                    "deliveries": WEBHOOK_DELIVERIES.list_deliveries(limit=100, site_ids=site_filter),
+                })
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+            return
+        delivery_detail = re.fullmatch(r"/api/webhooks/deliveries/([1-9][0-9]*)", path)
+        if delivery_detail:
+            delivery = WEBHOOK_DELIVERIES.get(int(delivery_detail.group(1)))
+            if not self.require_webhook_delivery_site_access(delivery):
+                return
+            self.send_json({"delivery": delivery})
+            return
 
         if path == "/api/scan" and not self.enforce_rate_limit("api.scan"):
             return
@@ -1202,6 +1251,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/sites/audit": ("api.site.audit", False),
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
+            "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
             return
@@ -1416,6 +1466,59 @@ class Handler(BaseHTTPRequestHandler):
                 metadata={"state": capture["state"], "captured_bytes": capture["captured_bytes"]},
             )
             self.send_json({"capture": capture})
+            return
+
+        if path == "/api/webhooks/deliveries/enqueue":
+            if not self.require_auth("webhooks.manage"):
+                return
+            scope = AUTH.site_access(self.bearer_token())
+            allowed_sites = None if scope["all_sites"] else scope["site_ids"]
+            try:
+                result = WEBHOOK_DELIVERIES.enqueue_many(
+                    payload.get("deliveries"), now=payload.get("now"),
+                    max_attempts=payload.get("max_attempts", 6),
+                    allowed_site_ids=allowed_sites,
+                )
+            except PermissionError as error:
+                self.send_json({"error": str(error)}, 403)
+                return
+            except WebhookDeliveryConflictError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(
+                "webhook.delivery.enqueued", target_type="webhook_delivery_batch",
+                metadata={"created_count": result["created_count"], "duplicate_count": result["duplicate_count"]},
+            )
+            self.send_json(result, 201 if result["created_count"] else 200)
+            return
+
+        webhook_action = re.fullmatch(r"/api/webhooks/deliveries/([1-9][0-9]*)/(retry|cancel)", path)
+        if webhook_action:
+            if not self.require_auth("webhooks.manage"):
+                return
+            delivery_id = int(webhook_action.group(1))
+            delivery = WEBHOOK_DELIVERIES.get(delivery_id)
+            if not self.require_webhook_delivery_site_access(delivery):
+                return
+            try:
+                if webhook_action.group(2) == "retry":
+                    response = WEBHOOK_DELIVERIES.retry(delivery_id, now=payload.get("now"))
+                    action = "webhook.delivery.retried"
+                else:
+                    response = WEBHOOK_DELIVERIES.cancel(delivery_id, now=payload.get("now"))
+                    action = "webhook.delivery.cancelled"
+            except WebhookDeliveryNotFoundError:
+                self.send_json({"error": "Delivery is not in a retryable or cancellable state"}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(action, target_type="webhook_delivery", target_id=str(delivery_id),
+                             metadata={"status": response["status"]})
+            self.send_json({"delivery": response})
             return
 
         if path == "/api/reports/jobs/enqueue":

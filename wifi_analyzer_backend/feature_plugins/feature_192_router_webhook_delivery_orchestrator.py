@@ -203,6 +203,7 @@ def run(payload: dict) -> dict:
             "event_count": batch["event_count"],
             "status": "prepared",
             "endpoint": delivery["endpoint"],
+            "allowed_hosts": allowed_hosts,
             "headers": delivery["headers"],
             "body": delivery["body"],
             "egress": _egress_summary(verified),
