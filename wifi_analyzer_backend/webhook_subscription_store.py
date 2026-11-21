@@ -198,7 +198,6 @@ class WebhookSubscriptionStore:
         if configuration["subscription_id"] != subscription_id:
             raise ValueError("subscription_id cannot be changed during an update")
         scope = _scope(allowed_site_ids)
-        self._require_scope(configuration, scope)
         if now is None:
             from datetime import datetime, timezone
             now = datetime.now(timezone.utc).isoformat()
@@ -218,6 +217,7 @@ class WebhookSubscriptionStore:
                 not current["site_allowlist"] or not set(current["site_allowlist"]).issubset(scope)
             ):
                 raise WebhookSubscriptionNotFoundError("subscription not found")
+            self._require_scope(configuration, scope)
             connection.execute(
                 "UPDATE webhook_subscriptions SET configuration_json=?, updated_at=? WHERE subscription_id=?",
                 (encoded, now, subscription_id),

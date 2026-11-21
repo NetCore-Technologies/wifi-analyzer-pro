@@ -169,7 +169,9 @@ class WebhookDeliveryStoreTests(unittest.TestCase):
             now=old + timedelta(seconds=1),
         )
 
-        dead = retained_store.enqueue_many([prepared(batch_id="d" * 64)], now=old)["deliveries"][0]
+        dead = retained_store.enqueue_many(
+            [prepared(batch_id="d" * 64)], now=old, max_attempts=1,
+        )["deliveries"][0]
         dead_lease = retained_store.claim_due("worker-two", now=old, lease_seconds=30)["jobs"][0]
         retained_store.fail(dead["id"], dead_lease["lease_id"], "delivery_http_error", now=old + timedelta(seconds=1))
 

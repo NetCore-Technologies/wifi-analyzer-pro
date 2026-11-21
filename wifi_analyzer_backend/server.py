@@ -1538,14 +1538,14 @@ class Handler(BaseHTTPRequestHandler):
             if not host:
                 self.send_json({"error": "Saved endpoint does not contain a DNS hostname"}, 400)
                 return
-            resolved_at = datetime.now(timezone.utc)
             connection = None
             resolved_addresses = []
             try:
                 resolved_addresses = _resolve_public_addresses(host)
+                resolved_at = datetime.now(timezone.utc)
                 for address in resolved_addresses[:4]:
                     try:
-                        connection = _PinnedHTTPSConnection(host, address, 5)
+                        connection = _PinnedHTTPSConnection(host, address, 3)
                         break
                     except Exception:
                         continue

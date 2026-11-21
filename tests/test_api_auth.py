@@ -410,7 +410,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         })
         owner_token = setup["token"]
 
-        def subscription(subscription_id, sites):
+        def subscription(subscription_id, sites, **changes):
             return {
                 "subscription_id": subscription_id,
                 "endpoint": "https://hooks.example.net/router/events",
@@ -422,6 +422,7 @@ class AuthenticatedApiTests(unittest.TestCase):
                 "maximum_events_per_batch": 100,
                 "maximum_batches": 10,
                 "enabled": True,
+                **changes,
             }
 
         status, created = self.request("POST", "/api/webhooks/subscriptions", {
