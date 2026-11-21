@@ -97,14 +97,14 @@ export default function RadioCapabilityRegulatoryPlannerPanel() {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('JSON root must be an object.');
       }
-      const hasRetainedReference = typeof parsed.regulatory_dataset_ref === 'string' && parsed.regulatory_dataset_ref.trim();
-      const hasInlineDataset = parsed.regulatory_dataset && parsed.dataset_acknowledgement;
-      if (!Array.isArray(parsed.radios) || (!hasRetainedReference && !hasInlineDataset)) {
-        throw new Error('Import must contain radios and either a retained regulatory_dataset_ref or an F206 dataset plus acknowledgement.');
+      if (!Array.isArray(parsed.radios) || parsed.radios.length === 0) {
+        throw new Error('Import must contain one or more controller radio capability records.');
       }
       if (typeof parsed.site_id !== 'string' || !parsed.site_id.trim()) {
         throw new Error('Import must include the site_id assigned to these radios.');
       }
+      delete parsed.regulatory_dataset;
+      delete parsed.dataset_acknowledgement;
       setRegistrySiteId(parsed.site_id);
       setPayloadText(text);
       setFileName(file.name);
@@ -123,6 +123,15 @@ export default function RadioCapabilityRegulatoryPlannerPanel() {
       const payload = JSON.parse(payloadText);
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new Error('Planning input must be a JSON object.');
+      }
+      if (typeof payload.site_id !== 'string' || !payload.site_id.trim()) {
+        throw new Error('The radio payload must include its assigned site_id.');
+      }
+      if (typeof payload.regulatory_dataset_ref !== 'string' || !payload.regulatory_dataset_ref.trim()) {
+        throw new Error('Select an active retained regulatory dataset from the site registry before planning.');
+      }
+      if ('regulatory_dataset' in payload || 'dataset_acknowledgement' in payload) {
+        throw new Error('Inline regulatory JSON is not accepted. Select a retained registry version instead.');
       }
       const response = await apiFetch(apiBase() + '/api/features/radio_capability_regulatory_channel_planner', {
         method: 'POST',

@@ -21,27 +21,33 @@ Run through the authenticated feature endpoint:
 
 ## Required input
 
-The payload contains site_id, a normalized F206 result object, an
-acknowledgement object and 1-256 radio snapshots.
+The authenticated production API accepts a site_id, a retained
+regulatory_dataset_ref and 1-256 radio capability snapshots. It deliberately
+does not accept inline regulatory_dataset or dataset_acknowledgement fields:
+the server loads the immutable F206 dataset and reviewer acknowledgement from
+the site registry and rechecks the fingerprint and revocation state on every
+request.
 
-When using inline evidence, the F206 result must include status=validated, effective_status=in_effect,
-provenance_status=allowlisted_domains, its canonical fingerprint, source and
-rule records, retrieved_at and effective dates. F207 rebuilds the F206
-canonical JSON envelope and recomputes its SHA-256 fingerprint; a dataset
-whose records were edited after validation is rejected. The dataset must be
-effective on the assessment date and not older than 365 days.
+The F206 version must be validated, effective for the assessment date, from
+the current jurisdiction/domain allowlist and no older than 365 days. It must
+have a canonical fingerprint that matches all normalized source and rule
+records, source-clause references, date metadata and source counts. A stored
+review acknowledgement must bind to that exact fingerprint and be no older
+than 90 days. The retain API records the authenticated username and
+server-generated UTC review time; it requires an explicit operator
+acknowledgement and a review/change reference.
 
-When using regulatory_dataset_ref, the API loads the immutable dataset and reviewer acknowledgement from the requested site and rejects revoked versions. dataset_acknowledgement binds the exact dataset_fingerprint_sha256 and includes
-reviewer_id, reviewed_at and review_reference. The acknowledgement must be no
-older than 90 days. These values are caller-supplied and are not a
-cryptographically authenticated approval.
-
-Every radio includes radio_id, ap_id, site_id, jurisdiction,
+Each radio includes radio_id, ap_id, site_id, jurisdiction,
 installation_reference, band, capability_source, capabilities_observed_at,
 supported_channels, supported_channel_widths_mhz, device_class, environment,
 DFS/AFC support flags and maximum EIRP. A controller or agent is the declared
 capability source; operator-entered capability claims are rejected. Snapshot
 freshness defaults to seven days and can be set from one to 30 days.
+
+The pure F207 module accepts normalized inline evidence for deterministic
+unit tests, but the authenticated production API requires a retained registry
+reference so revocation cannot be bypassed by replaying an old exported JSON
+document.
 
 ## Eligibility checks
 

@@ -57,7 +57,7 @@ def validated_dataset(version="v1", *, effective_to=None, regulator="Australian 
         "sources": [{**_SOURCE, "effective_to": effective_to}],
         "rules": [copy.deepcopy(_RULE)],
     }
-    result = validate_f206(payload)["result"]
+    result = validate_f206(payload)
     acknowledgement = {
         "dataset_fingerprint_sha256": result["dataset_fingerprint_sha256"],
         "reviewer_id": "netops.reviewer",

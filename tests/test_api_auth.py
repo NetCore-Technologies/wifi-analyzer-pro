@@ -3913,6 +3913,19 @@ class AuthenticatedApiTests(unittest.TestCase):
         reviewed_at = datetime.fromisoformat(detail["acknowledgement"]["reviewed_at"])
         self.assertLessEqual(abs((datetime.now(timezone.utc) - reviewed_at).total_seconds()), 10)
 
+        inline_payload = {
+            "site_id": "head-office",
+            "regulatory_dataset": validated,
+            "dataset_acknowledgement": detail["acknowledgement"],
+            "radios": [],
+        }
+        status, inline_denied = self.request(
+            "POST", "/api/features/radio_capability_regulatory_channel_planner",
+            inline_payload, token=token,
+        )
+        self.assertEqual(status, 400, inline_denied)
+        self.assertIn("retained regulatory_dataset_ref is required", inline_denied["error"])
+
         radio_payload = {
             "site_id": "head-office",
             "regulatory_dataset_ref": record["dataset_ref"],

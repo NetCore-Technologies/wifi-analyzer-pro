@@ -3254,32 +3254,36 @@ class Handler(BaseHTTPRequestHandler):
             if slug == "radio_capability_regulatory_channel_planner":
                 site_id = payload.get("site_id")
                 registry_dataset_ref = payload.get("regulatory_dataset_ref")
-                if registry_dataset_ref is not None:
-                    if not isinstance(site_id, str) or not site_id.strip():
-                        self.send_json({"error": "site_id is required when using a retained regulatory dataset"}, 400)
-                        return
-                    if not self.require_site_access([site_id], require_explicit=True):
-                        return
-                    if "regulatory_dataset" in payload or "dataset_acknowledgement" in payload:
-                        self.send_json({
-                            "error": "When using regulatory_dataset_ref, dataset contents and acknowledgement are loaded from the protected site registry"
-                        }, 400)
-                        return
-                    retained_dataset = REGULATORY_DATASETS.get(site_id, registry_dataset_ref)
-                    if retained_dataset is None:
-                        self.send_json({"error": "Retained regulatory dataset not found in this site"}, 404)
-                        return
-                    if retained_dataset["record"]["revoked"]:
-                        self.send_json({
-                            "error": "Regulatory dataset has been revoked and cannot be used for new planning",
-                            "dataset_ref": registry_dataset_ref,
-                        }, 410)
-                        return
-                    payload = {
-                        **payload,
-                        "regulatory_dataset": retained_dataset["dataset"],
-                        "dataset_acknowledgement": retained_dataset["acknowledgement"],
-                    }
+                if not isinstance(site_id, str) or not site_id.strip():
+                    self.send_json({"error": "site_id is required for radio capability planning"}, 400)
+                    return
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                if not isinstance(registry_dataset_ref, str) or not registry_dataset_ref.strip():
+                    self.send_json({
+                        "error": "A retained regulatory_dataset_ref is required; inline regulatory JSON is not accepted by the production API"
+                    }, 400)
+                    return
+                if "regulatory_dataset" in payload or "dataset_acknowledgement" in payload:
+                    self.send_json({
+                        "error": "When using regulatory_dataset_ref, dataset contents and acknowledgement are loaded from the protected site registry"
+                    }, 400)
+                    return
+                retained_dataset = REGULATORY_DATASETS.get(site_id, registry_dataset_ref)
+                if retained_dataset is None:
+                    self.send_json({"error": "Retained regulatory dataset not found in this site"}, 404)
+                    return
+                if retained_dataset["record"]["revoked"]:
+                    self.send_json({
+                        "error": "Regulatory dataset has been revoked and cannot be used for new planning",
+                        "dataset_ref": registry_dataset_ref,
+                    }, 410)
+                    return
+                payload = {
+                    **payload,
+                    "regulatory_dataset": retained_dataset["dataset"],
+                    "dataset_acknowledgement": retained_dataset["acknowledgement"],
+                }
 
             if slug == "rf_survey_acceptance_auditor":
                 site_id = payload.get("site_id")
