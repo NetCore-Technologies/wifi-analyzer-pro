@@ -50,61 +50,6 @@ services:
       start_period: 10s
       retries: 3
 
-  licensing-control-plane:
-    image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: wifi-analyzer-licensing
-    profiles:
-      - licensing-control-plane
-    command:
-      - python
-      - -m
-      - wifi_analyzer_backend.licensing_service
-    restart: unless-stopped
-    init: true
-    environment:
-      HOME: /home/wifi-analyzer
-      WIFI_ANALYZER_LICENSE_SERVICE_HOST: 0.0.0.0
-      WIFI_ANALYZER_LICENSE_SERVICE_PORT: "1999"
-      WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL: ${WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL:-}
-      WIFI_ANALYZER_VENDOR_LICENSE_DB: /home/wifi-analyzer/.local/state/vendor-license/vendor-licensing.sqlite3
-      WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID: ${WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID:-primary}
-      WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE: /run/secrets/vendor-license-signing-key
-      WIFI_ANALYZER_VENDOR_STRIPE_SECRET_KEY: ${WIFI_ANALYZER_VENDOR_STRIPE_SECRET_KEY:-}
-      WIFI_ANALYZER_VENDOR_STRIPE_WEBHOOK_SECRET: ${WIFI_ANALYZER_VENDOR_STRIPE_WEBHOOK_SECRET:-}
-      WIFI_ANALYZER_VENDOR_STRIPE_PRICE_PRO: ${WIFI_ANALYZER_VENDOR_STRIPE_PRICE_PRO:-}
-      WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS: ${WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS:-}
-      WIFI_ANALYZER_VENDOR_STRIPE_PRICE_ENTERPRISE: ${WIFI_ANALYZER_VENDOR_STRIPE_PRICE_ENTERPRISE:-}
-    ports:
-      # Bind to loopback and terminate HTTPS with the vendor's trusted reverse proxy.
-      - "${WIFI_ANALYZER_LICENSE_BIND_ADDRESS:-127.0.0.1}:1999:1999"
-    volumes:
-      - vendor-license-state:/home/wifi-analyzer/.local/state/vendor-license
-    secrets:
-      - vendor-license-signing-key
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 128
-    mem_limit: 256m
-    cpus: 1.0
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:1999/health', timeout=3)"
-      interval: 30s
-      timeout: 5s
-      start_period: 10s
-      retries: 3
-
   webhook-dispatcher:
     image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
     build:
@@ -141,8 +86,3 @@ services:
 volumes:
   config:
   state:
-  vendor-license-state:
-
-secrets:
-  vendor-license-signing-key:
-    file: ${WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE:-/dev/null}

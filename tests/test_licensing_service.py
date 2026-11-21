@@ -18,8 +18,10 @@ from wifi_analyzer_backend.licensing_service import (
     LicenseNotReady,
     LicenseServiceConflict,
     VendorLicenseService,
+    load_vendor_signing_key,
     vendor_public_key_text,
 )
+from wifi_analyzer_backend.licensing_service import configured_vendor_price_plans
 
 
 NOW = 1_800_000_000.0
@@ -314,6 +316,47 @@ class VendorLicenseServiceTests(unittest.TestCase):
         self.assertEqual(request.full_url, "https://api.stripe.com/v1/billing_portal/sessions")
         self.assertEqual(parse_qs(request.data.decode())["customer"], ["cus_vendor1234"])
         self.assertEqual(timeout, 12)
+
+    def test_signing_key_loader_reads_private_file_only_when_permissions_are_restricted(self):
+        raw = self.private_key.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        key_file = Path(self.temp.name) / "signing-key.b64"
+        key_file.write_text(__import__("base64").b64encode(raw).decode("ascii"), encoding="ascii")
+        if __import__("os").name != "nt":
+            key_file.chmod(0o600)
+        loaded = load_vendor_signing_key({
+            "WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE": str(key_file),
+        })
+        self.assertEqual(
+            loaded.private_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PrivateFormat.Raw,
+                encryption_algorithm=serialization.NoEncryption(),
+            ),
+            raw,
+        )
+        if __import__("os").name != "nt":
+            key_file.chmod(0o644)
+            with self.assertRaisesRegex(ValueError, "permissions"):
+                load_vendor_signing_key({
+                    "WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE": str(key_file),
+                })
+
+    def test_vendor_price_configuration_requires_unique_stripe_price_ids(self):
+        configured = configured_vendor_price_plans({
+            "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_PRO": "price_vendorpro1234",
+            "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS": "price_vendorbusiness1234",
+            "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_ENTERPRISE": "price_vendorenterprise1234",
+        })
+        self.assertEqual(configured["price_vendorbusiness1234"], "business")
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            configured_vendor_price_plans({
+                "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_PRO": "price_vendorpro1234",
+                "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS": "price_vendorpro1234",
+            })
 
     def test_public_key_exposes_only_verification_key_not_private_material(self):
         result = self.service.public_key()

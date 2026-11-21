@@ -83,8 +83,16 @@ def load_vendor_signing_key(environ: dict[str, str] | None = None) -> Ed25519Pri
     if not encoded:
         key_file = source.get("WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE", "").strip()
         if key_file:
+            path = Path(key_file)
             try:
-                encoded = Path(key_file).read_text(encoding="ascii").strip()
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("Vendor licence signing key path must be a regular, non-symlink file")
+                metadata = path.stat()
+                if metadata.st_size > 4096:
+                    raise ValueError("Vendor licence signing key file exceeds the size limit")
+                if os.name != "nt" and metadata.st_mode & 0o077:
+                    raise ValueError("Vendor licence signing key file permissions must exclude group and other access")
+                encoded = path.read_text(encoding="ascii").strip()
             except (OSError, UnicodeDecodeError) as error:
                 raise ValueError("Vendor licence signing key file cannot be read") from error
     if not encoded:

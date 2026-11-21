@@ -16,3 +16,6 @@ wifi_analyzer_backend/.venv/
 vendor-secrets/
 vendor-license-signing-key*
 *.license-private-key
+
+# Vendor control-plane deployment variables
+.env.vendor
