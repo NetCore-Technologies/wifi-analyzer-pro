@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import concurrent.futures
 import hashlib
+import hmac
 import json
+import time
 import tempfile
 import threading
 import unittest
@@ -108,6 +110,133 @@ class AuthenticatedApiTests(unittest.TestCase):
         finally:
             connection.close()
 
+
+    def test_billing_status_is_visible_only_to_workspace_billing_managers(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "billing owner secure password",
+        })
+        owner_token = setup["token"]
+        status, response = self.request("GET", "/api/billing/status", token=owner_token)
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["billing"]["plan_id"], "free")
+        self.assertEqual(response["billing"]["usage"]["users"], 1)
+        self.assertEqual(response["billing"]["billing_configured"], False)
+
+        self.request("POST", "/api/users", {
+            "username": "billing.viewer",
+            "password": "billing viewer secure password",
+            "role": "viewer",
+        }, token=owner_token)
+        viewer_token = server.AUTH.login("billing viewer secure password", "billing.viewer")
+        denied, detail = self.request("GET", "/api/billing/status", token=viewer_token)
+        self.assertEqual(denied, 403)
+        self.assertIn("Insufficient permissions", detail["error"])
+
+    def test_free_plan_blocks_second_user_and_second_router_agent(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "free plan owner secure password",
+        })
+        owner_token = setup["token"]
+        status, response = self.request("POST", "/api/users", {
+            "username": "another.user",
+            "password": "another user secure password",
+            "role": "viewer",
+        }, token=owner_token)
+        self.assertEqual(status, 402, response)
+        self.assertEqual(response["code"], "plan_limit_reached")
+        self.assertEqual(response["resource"], "users")
+
+        self.enroll_agent(owner_token, "agent-first", ["system.board"])
+        status, response = self.request("POST", "/api/agents/enroll", {
+            "agent_id": "agent-second",
+            "adapter_id": "openwrt",
+            "agent_version": "1.2.0",
+            "advertised_capabilities": ["system.board"],
+            "requested_capabilities": ["system.board"],
+            "requested_permissions": ["read"],
+        }, token=owner_token)
+        self.assertEqual(status, 402, response)
+        self.assertEqual(response["resource"], "agents")
+
+    def test_billing_checkout_uses_only_configured_server_price_and_stripe_host(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "checkout owner secure password",
+        })
+        token = setup["token"]
+        with patch.dict("os.environ", {
+            "WIFI_ANALYZER_STRIPE_SECRET_KEY": "sk_test_1234567890",
+            "WIFI_ANALYZER_STRIPE_PRICE_PRO": "price_pro1234",
+            "WIFI_ANALYZER_PUBLIC_URL": "https://analyzer.example.com",
+        }):
+            with patch(
+                "wifi_analyzer_backend.server.create_checkout_session",
+                return_value={
+                    "checkout_session_id": "cs_test_123456",
+                    "url": "https://checkout.stripe.com/c/pay/cs_test_123456",
+                },
+            ) as create_checkout:
+                status, response = self.request(
+                    "POST", "/api/billing/checkout", {"plan_id": "pro"}, token=token,
+                )
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["checkout"]["url"], "https://checkout.stripe.com/c/pay/cs_test_123456")
+        self.assertEqual(create_checkout.call_args.kwargs["price_id"], "price_pro1234")
+        self.assertEqual(create_checkout.call_args.kwargs["public_url"], "https://analyzer.example.com")
+
+    def test_stripe_webhook_is_verified_idempotent_and_updates_workspace_plan(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "webhook owner secure password",
+        })
+        self.assertIn("token", setup)
+        workspace_id = server.BILLING.instance_id()
+        event = {
+            "id": "evt_billing1234",
+            "type": "customer.subscription.updated",
+            "data": {"object": {
+                "id": "sub_billing1234",
+                "customer": "cus_billing1234",
+                "status": "active",
+                "current_period_end": int(time.time()) + 3600,
+                "cancel_at_period_end": False,
+                "metadata": {"workspace_id": workspace_id},
+                "items": {"data": [{"price": {"id": "price_pro1234"}}]},
+            }},
+        }
+        raw = json.dumps(event, separators=(",", ":"), sort_keys=True).encode()
+        timestamp = int(time.time())
+        signature = hmac.new(
+            b"whsec_billing_test_secret",
+            str(timestamp).encode() + b"." + raw,
+            hashlib.sha256,
+        ).hexdigest()
+        headers = {
+            "Content-Type": "application/json",
+            "Stripe-Signature": f"t={timestamp},v1={signature}",
+        }
+        with patch.dict("os.environ", {
+            "WIFI_ANALYZER_STRIPE_WEBHOOK_SECRET": "whsec_billing_test_secret",
+            "WIFI_ANALYZER_STRIPE_PRICE_PRO": "price_pro1234",
+        }):
+            connection = HTTPConnection("127.0.0.1", self.port, timeout=3)
+            try:
+                connection.request("POST", "/api/billing/webhook", body=raw, headers=headers)
+                first = connection.getresponse()
+                first_status, first_body = first.status, json.loads(first.read())
+            finally:
+                connection.close()
+            connection = HTTPConnection("127.0.0.1", self.port, timeout=3)
+            try:
+                connection.request("POST", "/api/billing/webhook", body=raw, headers=headers)
+                second = connection.getresponse()
+                second_status, second_body = second.status, json.loads(second.read())
+            finally:
+                connection.close()
+        self.assertEqual(first_status, 200, first_body)
+        self.assertFalse(first_body["duplicate"])
+        self.assertEqual(second_status, 200, second_body)
+        self.assertTrue(second_body["duplicate"])
+        self.assertEqual(server.BILLING.status()["plan_id"], "pro")
+        self.assertEqual(server.BILLING.status()["webhook_events_retained"], 1)
 
     def enroll_agent(self, admin_token, agent_id, capabilities, site_id=None):
         status, response = self.request("POST", "/api/agents/enroll", {

@@ -1404,7 +1404,6 @@ class Handler(BaseHTTPRequestHandler):
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
-            "/api/billing/webhook": ("api.billing.webhook", True),
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
             return
