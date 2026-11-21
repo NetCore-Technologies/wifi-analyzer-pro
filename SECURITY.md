@@ -154,3 +154,17 @@ installation falls back to free entitlements. User, router-agent and webhook
 subscription quotas are checked server-side under a process lock before
 creation. Quotas are installation-local because this release bills one
 workspace per deployment; it is not a shared multi-tenant SaaS control plane.
+
+
+## Subscription quota enforcement
+
+The local subscription integration enforces quotas for users, managed router
+agents, site inventory, saved webhook subscriptions and monthly diagnostic
+feature executions. Diagnostic usage is persisted as a UTC calendar-month
+SQLite counter; invalid feature slugs and failed feature validations do not
+consume the allowance. Site counts include saved topology-history sites and
+managed router-agent assignments. Creation and reassignment checks are guarded
+by a process lock and are designed for the single-process local API server.
+Do not use these local quotas as a shared multi-process SaaS billing boundary;
+pooled hosting needs central tenant isolation and transactional quota
+coordination.

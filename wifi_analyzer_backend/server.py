@@ -2104,7 +2104,12 @@ class Handler(BaseHTTPRequestHandler):
             elif not self.require_site_access([target_site], require_explicit=True):
                 return
             try:
-                assignment = AGENT_HEALTH.assign_agent_site(agent_id, target_site)
+                with BILLING_QUOTA_LOCK:
+                    if target_site is not None:
+                        known_sites = self.managed_site_ids()
+                        if target_site not in known_sites and not self.enforce_subscription_capacity("sites", len(known_sites)):
+                            return
+                    assignment = AGENT_HEALTH.assign_agent_site(agent_id, target_site)
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400 if "site_id" in str(error) else 404)
                 return

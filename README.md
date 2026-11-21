@@ -130,11 +130,21 @@ The backend creates hosted Checkout and Billing Portal sessions; it does not
 collect card details. The subscription screen shows plan quotas and usage.
 Free, Pro, Business and Enterprise quotas are enforced for local users,
 managed router agents, managed sites, webhook subscriptions and monthly
-diagnostic executions. Diagnostic runs are metered per UTC calendar month and
-failed feature validations do not consume an allowance. Payment events are verified
-and replay-protected. One application deployment represents one paying
-workspace in this integration; pooled multi-tenant hosting still requires a
-separate tenant-isolated control plane and is not claimed as shipped.
+diagnostic executions. The initial allowances are:
+
+| Plan | Users | Router agents | Sites | Webhook subscriptions | Diagnostic runs / month |
+|---|---:|---:|---:|---:|---:|
+| Free | 1 | 1 | 1 | 1 | 100 |
+| Pro | 5 | 5 | 3 | 5 | 5,000 |
+| Business | 25 | 50 | 25 | 25 | 25,000 |
+| Enterprise | 100 | 256 | 100 | 100 | 100,000 |
+
+Diagnostic runs are metered per UTC calendar month and failed feature
+validations do not consume an allowance. Site quotas count sites with saved
+topology history or a managed router-agent assignment. Payment events are
+verified and replay-protected. One application deployment represents one
+paying workspace in this integration; pooled multi-tenant hosting still
+requires a separate tenant-isolated control plane and is not claimed as shipped.
 
 ## API
 
