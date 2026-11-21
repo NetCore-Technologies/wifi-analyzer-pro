@@ -1536,5 +1536,16 @@
       "signing_keys": "key_id-to-secret mapping held outside persistent event storage",
       "egress_evidence": "at most one matching F187 DNS/TLS evidence record per subscription"
     }
+  },
+  {
+    "slug": "router_webhook_delivery_health_report",
+    "name": "Webhook delivery reliability report",
+    "category": "Router operations",
+    "description": "Summarise durable multi-subscription webhook delivery reliability, retries, latency, safe failure codes and per-site/per-subscription health using metadata-only records.",
+    "parameters": {
+      "now": "timezone-aware analysis timestamp",
+      "window_days": "reporting window from 1 to 90 days",
+      "deliveries": "up to 5000 sanitized webhook delivery metadata records"
+    }
   }
 ]

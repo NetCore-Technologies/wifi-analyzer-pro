@@ -1,4 +1,4 @@
-# 188 WiFi Analyzer Pro feature tools (F001–F168, F172–F191)
+# 190 WiFi Analyzer Pro feature tools (F001–F168, F172–F193)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -227,3 +227,8 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F190 | Router webhook subscription router (`router_webhook_subscription_router`) | Router operations | Route normalized events using type/severity/site subscriptions; deduplicate events, produce deterministic bounded batches and enforce exact HTTPS host allowlists without accepting signing secrets or sending requests. |
 
 | F191 | Bounded PCAP capture analyzer (`pcap_capture_analyzer`) | Packet analysis | Analyse classic PCAP and PCAPNG files up to 512 KiB, including multi-interface sections, declared section-length validation, per-interface timestamps and zero-snaplen semantics under a hard frame cap; analyse Ethernet, Linux cooked v1/v2, IPv4/IPv6, TCP/UDP, DSCP and 802.11/radiotap RSSI/noise/channel statistics without exposing packet payloads or endpoint addresses. |
+
+
+| F192 | Multi-subscription webhook delivery orchestrator (`router_webhook_delivery_orchestrator`) | Router operations | Coordinate subscription routing, independent HMAC signing and per-subscription egress evidence; produce bounded delivery batches without exposing signing secrets or sending network requests. |
+
+| F193 | Webhook delivery reliability report (`router_webhook_delivery_health_report`) | Router operations | Summarise delivery outcomes, retries, latency, safe failure codes and site/subscription health from bounded metadata without reading signed payloads or destination details. |

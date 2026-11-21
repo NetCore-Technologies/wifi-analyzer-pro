@@ -890,6 +890,11 @@ PAYLOADS = {
         "negotiated_permissions": ["read"],
         "rejected_permissions": [],
         "permission": "read"
+    },
+    "router_webhook_delivery_health_report": {
+        "now": "2026-11-21T10:00:00Z",
+        "window_days": 7,
+        "deliveries": []
     }
 }
 
@@ -897,15 +902,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 189)
-        self.assertEqual(len(set(FEATURE_MODULES)), 189)
-        self.assertEqual(count(), 189)
-        self.assertEqual(len(entries), 189)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 189)
+        self.assertEqual(len(FEATURE_MODULES), 190)
+        self.assertEqual(len(set(FEATURE_MODULES)), 190)
+        self.assertEqual(count(), 190)
+        self.assertEqual(len(entries), 190)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 190)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):

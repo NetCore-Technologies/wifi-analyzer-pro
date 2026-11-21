@@ -204,7 +204,7 @@ def run(payload: dict) -> dict:
         "recommendations": recommendations,
         "note": (
             "This report uses bounded queue metadata only. It does not inspect or expose signed payloads, "
-            "HTTP headers, endpoint URLs, HMAC keys, remote response bodies or raw exception text. "
+            "request metadata, endpoint URLs, HMAC keys, remote response bodies or raw exception text. "
             "Rates use terminal delivered/dead-letter outcomes; active deliveries are not counted as settled."
         ),
     }
