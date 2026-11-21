@@ -219,6 +219,6 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 ### F293 delivered — client experience SLO window comparison
 
 - ✅ F293 compares two explicitly timestamped, non-overlapping measurement windows using F292 validation, freshness, metric thresholds and required-telemetry eligibility rules.
-- ✅ Reports overall and per-site SLO attainment changes in percentage points, minimum-sample gating, regression/improvement/stable classifications, missing-site evidence and descriptive metric p95 deltas. Fleet-wide improvement/stable headlines are withheld unless every site has sufficient comparison evidence; observed regressions remain visible even when another site is missing.
+- ✅ Reports overall and per-site SLO attainment changes in percentage points, minimum-sample gating, regression/improvement/stable classifications, missing-site evidence and descriptive metric p95 deltas. Fleet headlines are classified from per-site outcomes, not pooled sample counts; sample-volume shifts between sites cannot manufacture improvements or regressions. Equal-site-weighted mean/median deltas are shown alongside the pooled sample-weighted statistic.
 - ✅ Rejects overlapping periods, reused sample IDs, future-dated observations, invalid thresholds and oversized payloads; client references and raw samples are not returned.
 - ⚠️ Attainment is sample-weighted, not duration-weighted uptime or a statistical confidence interval. Metric percentile deltas are descriptive and do not independently determine regression status.

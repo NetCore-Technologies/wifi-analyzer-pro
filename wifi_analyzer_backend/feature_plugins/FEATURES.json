@@ -1667,7 +1667,7 @@
     "slug": "client_experience_slo_window_comparator",
     "name": "Client experience SLO window comparator",
     "category": "Client QoS",
-    "description": "Compare two non-overlapping client-experience measurement windows using the F292 eligibility and threshold model; report site-level SLO attainment regressions, improvements, missing evidence and descriptive metric percentile deltas.",
+    "description": "Compare two non-overlapping client-experience measurement windows using F292 eligibility and thresholds; classify fleet change from per-site outcomes, report site-balanced and pooled sample-weighted deltas, and withhold positive headlines when site coverage is incomplete.",
     "parameters": {
       "baseline": "Baseline window object with timezone-aware as_of and 1-10000 timestamped client samples",
       "comparison": "Comparison window object with timezone-aware as_of and 1-10000 timestamped client samples",
