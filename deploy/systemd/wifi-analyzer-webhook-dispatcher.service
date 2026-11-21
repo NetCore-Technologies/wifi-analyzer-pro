@@ -1,0 +1,40 @@
+[Unit]
+Description=WiFi Analyzer Pro multi-subscription webhook dispatcher
+Documentation=https://github.com/NetCore-Technologies/wifi-analyzer-pro/blob/main/wifi_analyzer_backend/WEBHOOK_DISPATCH_WORKER.md
+After=network-online.target wifi-analyzer-pro.service
+Wants=network-online.target
+Requires=wifi-analyzer-pro.service
+
+[Service]
+Type=simple
+User=wifi-analyzer
+Group=wifi-analyzer
+WorkingDirectory=/opt/wifi-analyzer-pro/current
+Environment=HOME=/var/lib/wifi-analyzer-pro
+Environment=XDG_STATE_HOME=/var/lib
+Environment=WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS=90
+StateDirectory=wifi-analyzer-pro
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/opt/wifi-analyzer-pro/venv/bin/python -m wifi_analyzer_backend.webhook_dispatch_worker
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/lib/wifi-analyzer-pro
+
+[Install]
+WantedBy=multi-user.target

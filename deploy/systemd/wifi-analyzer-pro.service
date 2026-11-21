@@ -1,0 +1,42 @@
+[Unit]
+Description=WiFi Analyzer Pro local diagnostics API
+Documentation=https://github.com/NetCore-Technologies/wifi-analyzer-pro
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wifi-analyzer
+Group=wifi-analyzer
+WorkingDirectory=/opt/wifi-analyzer-pro/current/wifi_analyzer_backend
+Environment=HOME=/var/lib/wifi-analyzer-pro
+Environment=XDG_STATE_HOME=/var/lib
+Environment=WIFI_ANALYZER_AUTH_FILE=/var/lib/wifi-analyzer-pro/auth.json
+Environment=WIFI_ANALYZER_HOST=127.0.0.1
+Environment=WIFI_ANALYZER_PORT=199
+EnvironmentFile=-/etc/wifi-analyzer-pro/server.env
+StateDirectory=wifi-analyzer-pro
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/opt/wifi-analyzer-pro/venv/bin/python /opt/wifi-analyzer-pro/current/wifi_analyzer_backend/server.py
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/lib/wifi-analyzer-pro
+
+[Install]
+WantedBy=multi-user.target

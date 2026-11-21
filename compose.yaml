@@ -1,0 +1,79 @@
+name: wifi-analyzer-pro
+
+services:
+  api:
+    image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wifi-analyzer-pro
+    restart: unless-stopped
+    init: true
+    environment:
+      WIFI_ANALYZER_HOST: 0.0.0.0
+      WIFI_ANALYZER_PORT: "199"
+      HOME: /home/wifi-analyzer
+      XDG_STATE_HOME: /home/wifi-analyzer/.local/state
+      WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS: ${WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS:-90}
+    ports:
+      - "${WIFI_ANALYZER_BIND_ADDRESS:-127.0.0.1}:199:199"
+    volumes:
+      - config:/home/wifi-analyzer/.config
+      - state:/home/wifi-analyzer/.local/state
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    cpus: 2.0
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:199/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+  webhook-dispatcher:
+    image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wifi-analyzer-webhook-dispatcher
+    profiles:
+      - webhook-dispatcher
+    command:
+      - python
+      - webhook_dispatch_worker.py
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /home/wifi-analyzer
+      XDG_STATE_HOME: /home/wifi-analyzer/.local/state
+      WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS: ${WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS:-90}
+    volumes:
+      - state:/home/wifi-analyzer/.local/state
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
+
+volumes:
+  config:
+  state:

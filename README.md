@@ -87,23 +87,20 @@ WIFI_ANALYZER_DEMO=1 python3 wifi_analyzer_backend/server.py
 
 ## Docker deployment
 
-The image runs the API as an unprivileged UID and includes the router adapters, site-history store and optional report worker. The image declares persistent volumes for the local account and report/site state.
+The recommended single-host deployment is Docker Compose:
 
-Build with:
+    cp .env.example .env
+    docker compose up -d --build
 
-    docker build -t wifi-analyzer-pro:local .
+The API binds to loopback by default. To make it reachable from a trusted LAN, set WIFI_ANALYZER_BIND_ADDRESS=0.0.0.0 in the protected .env file, then enforce firewall rules and use a VPN or authenticated TLS reverse proxy. Never expose port 199 directly to the public internet.
 
-Run the API using the default command. To run the optional worker as a sidecar, share the API container volumes and inject its webhook configuration through a protected service-manager secret facility:
+Enable the optional multi-subscription dispatcher sidecar with:
 
-    docker run --rm --volumes-from wifi-analyzer-pro \
-      --entrypoint python wifi-analyzer-pro:local report_worker.py
+    docker compose --profile webhook-dispatcher up -d
 
-The report worker container must share the API container's HOME configuration volume and XDG state volume so it reads the same report-job database. The webhook dispatcher uses the same state volume and needs no signing key: request envelopes are signed before enqueue. Start it with:
+The dispatcher shares the API's persistent state volume, runs as the image's unprivileged UID, has no listening port and does not receive HMAC signing secrets. The scheduled-report worker requires destination credentials and is configured separately; see deploy/README.md and the report worker guide. Compose stores account/configuration and application state in named volumes; back them up before upgrades.
 
-    docker run --rm --volumes-from wifi-analyzer-pro \
-      --entrypoint python wifi-analyzer-pro:local webhook_dispatch_worker.py
-
-Configure poll, timeout and lease settings through the service manager as described in the webhook dispatcher guide. Both workers have no listening port. Keep the SQLite state on local storage with reliable file locking.
+For systemd deployments, including the API and both optional workers, see deploy/README.md.
 
 ## API
 
@@ -134,6 +131,7 @@ The local HTTP service exposes:
 | [Webhook dispatch worker](wifi_analyzer_backend/WEBHOOK_DISPATCH_WORKER.md) | Separate pinned-TLS worker for outbound delivery; no signing-secret storage required |
 | [Scheduled report worker](wifi_analyzer_backend/REPORT_WORKER.md) | Opt-in, pinned-TLS HTTPS delivery of due report jobs; run separately from the API server |
 | [Webhook dispatch worker](wifi_analyzer_backend/WEBHOOK_DISPATCH_WORKER.md) | Durable multi-subscription signed webhook delivery with leases, retries, dead letters and fresh pinned-TLS egress checks |
+| [Deployment and operations](deploy/README.md) | Hardened Compose and systemd deployment, shared state, upgrades, backup and rollback |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |

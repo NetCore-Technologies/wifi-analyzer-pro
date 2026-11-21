@@ -83,3 +83,23 @@ retention policy appropriate to the event data. The dispatch worker has no
 listening port. Run it with the same private state volume as the API and do not
 expose the SQLite file over a network filesystem unless the deployment's
 SQLite locking semantics have been validated.
+
+
+## Production deployment boundary
+
+Use a dedicated non-root service identity, persistent private state, host firewall
+rules and a TLS reverse proxy or VPN for remote access. The Docker image drops
+all Linux capabilities and runs as UID 10001. Its Compose configuration binds
+to loopback by default, uses a read-only container filesystem with a temporary
+filesystem for scratch data, and shares only required named state volumes with
+optional workers. Live packet capture is intentionally not granted host
+network capabilities by default; enable it only through a separately reviewed
+host-specific capability policy.
+
+Keep account state, audit ledger, site history, router-agent credentials,
+report queue and webhook outbox on durable local storage with reliable SQLite
+locking. Back up those files before upgrades and test restore procedures. Do not
+use a shared network filesystem for SQLite queue databases without validating
+locking semantics. The example systemd units use a dedicated account, restrictive
+umask, NoNewPrivileges and filesystem/kernel hardening. They do not grant
+CAP_NET_ADMIN or CAP_NET_RAW.

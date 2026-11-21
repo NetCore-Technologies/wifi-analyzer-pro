@@ -47,7 +47,7 @@ The API and worker must share the same HOME configuration and XDG state volumes 
 - A worker lease is renewed immediately before transmission. Completion and failure updates are accepted only while the same lease is still active.
 - Signing material is never included in a report bundle or job result. The signing-secret file option requires a regular file no larger than 4096 bytes and, on POSIX systems, no group or other permissions. Prefer a service-manager credential facility; do not place secrets in source control, command-line arguments or ordinary world-readable environment files.
 
-This worker currently supports one configured webhook destination per process. Use separate isolated worker processes and credentials for separate destinations until multi-subscription delivery orchestration is implemented. Production rollout still requires customer-managed secret provisioning and rotation, per-tenant access controls, delivery dashboards, operational alerting and an independently reviewed deployment boundary.
+This scheduled-report worker supports one configured report notification destination per process. For multi-subscription router-event webhook delivery, use the separate durable dispatcher described in WEBHOOK_DISPATCH_WORKER.md. Production rollout still requires customer-managed secret provisioning and rotation, per-tenant access controls, delivery dashboards, operational alerting and an independently reviewed deployment boundary.
 
 ## Operational notes
 
