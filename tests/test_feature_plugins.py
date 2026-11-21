@@ -1146,6 +1146,16 @@ class FeatureCatalogTests(unittest.TestCase):
                 "interference_edges":[{**payload["interference_edges"][0],"evidence_source":"guess"}],
             })
 
+    def test_f201_planner_supports_multiple_same_band_radios_on_one_ap(self):
+        result = run("multi_ap_channel_reuse_planner", {
+            "radios": [
+                {"radio_id":"ap1-5a","ap_id":"ap1","site_id":"hq","band":"5GHz","channel_width_mhz":20,"current_channel":36,"channel_options":[36,44]},
+                {"radio_id":"ap1-5b","ap_id":"ap1","site_id":"hq","band":"5GHz","channel_width_mhz":20,"current_channel":36,"channel_options":[36,44]},
+            ],
+            "interference_edges":[{"radio_ids":["ap1-5a","ap1-5b"],"weight":0.8,"evidence_source":"controller"}],
+        })["result"]
+        self.assertEqual(result["status"], "planned")
+        self.assertEqual(result["evidence_edge_count"], 1)
     def test_f201_planner_accounts_for_wide_channel_frequency_overlap(self):
         result = run("multi_ap_channel_reuse_planner", {
             "radios": [
