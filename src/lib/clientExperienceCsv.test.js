@@ -77,7 +77,7 @@ test('rejects rows with wrong column counts and malformed quoting', () => {
   ), /ended inside a quoted field/);
   assert.throws(() => parseClientExperienceCsv(
     'sample_id,site_id,client_ref,observed_at,evidence_source,rssi_dbm\nsample-1,office,sta"tion,2026-11-21T10:00:00Z,probe,-60\n',
-  ), /quote appeared inside an unquoted field/);
+  ), /quote appeared inside an unquoted CSV field/);
 });
 
 test('rejects duplicate IDs, invalid timestamps, unknown evidence and out-of-range metrics', () => {
