@@ -3856,15 +3856,26 @@ class AuthenticatedApiTests(unittest.TestCase):
         )["result"]
         acknowledgement = {
             "dataset_fingerprint_sha256": validated["dataset_fingerprint_sha256"],
-            "reviewer_id": "netops.reviewer",
-            "reviewed_at": now.isoformat(),
             "review_reference": "CHG-REG-2026-001",
+            "acknowledged": True,
+            "reviewer_id": "spoofed.reviewer",
+            "reviewed_at": "2000-01-01T00:00:00+00:00",
         }
         request = {
             "site_id": "head-office",
             "dataset": validated,
             "acknowledgement": acknowledgement,
         }
+        rejected_request = {
+            **request,
+            "acknowledgement": {**acknowledgement, "acknowledged": False},
+        }
+        status, rejected = self.request(
+            "POST", "/api/sites/regulatory-datasets", rejected_request, token=token,
+        )
+        self.assertEqual(status, 400, rejected)
+        self.assertIn("explicit operator acknowledgement", rejected["error"])
+
         status, retained = self.request(
             "POST", "/api/sites/regulatory-datasets", request, token=token,
         )
@@ -3896,7 +3907,11 @@ class AuthenticatedApiTests(unittest.TestCase):
         )
         self.assertEqual(status, 200, detail)
         self.assertEqual(detail["dataset"], validated)
-        self.assertEqual(detail["acknowledgement"], acknowledgement)
+        self.assertEqual(detail["acknowledgement"]["reviewer_id"], "reg.dataset.admin")
+        self.assertTrue(detail["acknowledgement"]["acknowledged"])
+        self.assertEqual(detail["acknowledgement"]["review_reference"], acknowledgement["review_reference"])
+        reviewed_at = datetime.fromisoformat(detail["acknowledgement"]["reviewed_at"])
+        self.assertLessEqual(abs((datetime.now(timezone.utc) - reviewed_at).total_seconds()), 10)
 
         radio_payload = {
             "site_id": "head-office",

@@ -34,7 +34,10 @@ boundary. A dataset must be currently validated, in effect, from a currently
 allowlisted jurisdiction/domain, have consistent source/rule counts and exact
 source-clause references, and retain the same canonical fingerprint. The
 review acknowledgement must bind to that exact fingerprint and be no older
-than 90 days.
+than 90 days. The retain API requires acknowledged=true; the server replaces
+any caller-provided reviewer ID and timestamp with the authenticated account
+username and server-generated UTC time. Retries from the same authenticated
+reviewer with the same fingerprint and review reference are idempotent.
 
 The identity tuple (site_id, jurisdiction, dataset_id, version) is unique.
 Submitting the exact same fingerprint and acknowledgement is idempotent.

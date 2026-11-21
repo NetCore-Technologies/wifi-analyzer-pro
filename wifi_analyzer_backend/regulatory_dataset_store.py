@@ -174,6 +174,8 @@ class RegulatoryDatasetStore:
         site_id = _site(site_id)
         if not isinstance(dataset, dict) or not isinstance(acknowledgement, dict):
             raise ValueError("dataset and acknowledgement must be objects")
+        if acknowledgement.get("acknowledged") is not True:
+            raise ValueError("explicit acknowledged=true is required to retain a regulatory dataset")
         validated, fingerprint, _source_map = _validate_dataset(
             dataset, acknowledgement, datetime.now(timezone.utc),
         )
@@ -204,7 +206,6 @@ class RegulatoryDatasetStore:
                     existing["fingerprint_sha256"] == fingerprint
                     and existing["reviewer_id"] == reviewer
                     and existing["review_reference"] == review_reference
-                    and existing["reviewed_at"] == acknowledgement["reviewed_at"]
                 )
                 if same:
                     return {**self._summary(existing), "created": False}

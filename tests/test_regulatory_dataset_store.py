@@ -62,6 +62,7 @@ def validated_dataset(version="v1", *, effective_to=None, regulator="Australian 
         "dataset_fingerprint_sha256": result["dataset_fingerprint_sha256"],
         "reviewer_id": "netops.reviewer",
         "reviewed_at": _NOW.isoformat(),
+        "acknowledged": True,
         "review_reference": "CHG-REG-001",
     }
     return result, acknowledgement
@@ -72,14 +73,14 @@ class RegulatoryDatasetStoreTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / "private-state" / "regulatory-datasets.sqlite3"
-        self.store = RegulatoryDatasetStore(self.path, max_datasets_per_site=2, max_dataset_bytes=128 * 1024)
+        self.store = RegulatoryDatasetStore(self.path, max_versions_per_site=2, max_dataset_bytes=128 * 1024)
 
     def test_saves_immutable_reviewed_version_and_reopens_with_integrity(self):
         dataset, acknowledgement = validated_dataset()
         saved = self.store.save("head-office", dataset, acknowledgement)
         self.assertTrue(saved["created"])
         self.assertEqual(saved["fingerprint_sha256"], dataset["dataset_fingerprint_sha256"])
-        reopened = RegulatoryDatasetStore(self.path, max_datasets_per_site=2)
+        reopened = RegulatoryDatasetStore(self.path, max_versions_per_site=2)
         loaded = reopened.get("head-office", saved["dataset_ref"])
         self.assertEqual(loaded["dataset"], dataset)
         self.assertEqual(loaded["acknowledgement"], acknowledgement)
@@ -88,7 +89,11 @@ class RegulatoryDatasetStoreTests(unittest.TestCase):
     def test_duplicate_same_version_is_idempotent_and_different_content_is_rejected(self):
         dataset, acknowledgement = validated_dataset()
         first = self.store.save("head-office", dataset, acknowledgement)
-        second = self.store.save("head-office", dataset, acknowledgement)
+        retry_acknowledgement = {
+            **acknowledgement,
+            "reviewed_at": (_NOW + timedelta(minutes=1)).isoformat(),
+        }
+        second = self.store.save("head-office", dataset, retry_acknowledgement)
         self.assertTrue(first["created"])
         self.assertFalse(second["created"])
         modified, modified_ack = validated_dataset("v1", regulator="Changed regulator label")
@@ -107,6 +112,9 @@ class RegulatoryDatasetStoreTests(unittest.TestCase):
 
     def test_rejects_unreviewed_mutated_or_expired_datasets(self):
         dataset, acknowledgement = validated_dataset()
+        unacknowledged = dict(acknowledgement, acknowledged=False)
+        with self.assertRaisesRegex(ValueError, "acknowledged=true"):
+            self.store.save("head-office", dataset, unacknowledged)
         bad_ack = dict(acknowledgement, dataset_fingerprint_sha256="0" * 64)
         with self.assertRaisesRegex(ValueError, "exact regulatory dataset fingerprint"):
             self.store.save("head-office", dataset, bad_ack)
@@ -159,8 +167,8 @@ class RegulatoryDatasetStoreTests(unittest.TestCase):
             self.store.revoke("head-office", saved["dataset_ref"], actor="../bad", reason="This is a valid reason")
         with self.assertRaisesRegex(ValueError, "reason must contain"):
             self.store.revoke("head-office", saved["dataset_ref"], actor="netops.admin", reason="bad")
-        with self.assertRaisesRegex(ValueError, "max_datasets_per_site"):
-            RegulatoryDatasetStore(self.path, max_datasets_per_site=True)
+        with self.assertRaisesRegex(ValueError, "max_versions_per_site"):
+            RegulatoryDatasetStore(self.path, max_versions_per_site=True)
 
     def test_reports_only_sites_with_retained_versions_and_detects_document_tampering(self):
         dataset, acknowledgement = validated_dataset()

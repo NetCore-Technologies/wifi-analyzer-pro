@@ -1942,6 +1942,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(dataset, dict) or not isinstance(acknowledgement, dict):
                 self.send_json({"error": "dataset and acknowledgement objects are required"}, 400)
                 return
+            if acknowledgement.get("acknowledged") is not True:
+                self.send_json({"error": "An explicit operator acknowledgement is required before retaining this dataset"}, 400)
+                return
             request_fingerprint = hashlib.sha256(
                 json.dumps(
                     [site_id, dataset.get("dataset_id"), dataset.get("version"),
@@ -1965,6 +1968,17 @@ class Handler(BaseHTTPRequestHandler):
                 }, 503)
                 return
             try:
+                identity = AUTH.identity(self.bearer_token()) or {}
+                reviewer_id = identity.get("username")
+                if not reviewer_id:
+                    self.send_json({"error": "Authenticated reviewer identity is unavailable"}, 403)
+                    return
+                acknowledgement = {
+                    **acknowledgement,
+                    "reviewer_id": reviewer_id,
+                    "reviewed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "acknowledged": True,
+                }
                 retained = REGULATORY_DATASETS.save(site_id, dataset, acknowledgement)
             except ValueError as error:
                 self.audit_event(
