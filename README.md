@@ -98,7 +98,12 @@ Run the API using the default command. To run the optional worker as a sidecar, 
     docker run --rm --volumes-from wifi-analyzer-pro \
       --entrypoint python wifi-analyzer-pro:local report_worker.py
 
-The worker container must share both the API container's HOME configuration volume and XDG state volume so it reads the same credentials and report-job database. Configure its environment securely; see the worker guide. Do not expose the worker container's ports.
+The report worker container must share the API container's HOME configuration volume and XDG state volume so it reads the same report-job database. The webhook dispatcher uses the same state volume and needs no signing key: request envelopes are signed before enqueue. Start it with:
+
+    docker run --rm --volumes-from wifi-analyzer-pro \
+      --entrypoint python wifi-analyzer-pro:local webhook_dispatch_worker.py
+
+Configure poll, timeout and lease settings through the service manager as described in the webhook dispatcher guide. Both workers have no listening port. Keep the SQLite state on local storage with reliable file locking.
 
 ## API
 
@@ -123,7 +128,12 @@ The local HTTP service exposes:
 | `POST /api/reports/jobs/{id}/renew` | Extend an active worker lease without reviving expired leases |
 | `POST /api/reports/jobs/{id}/delivery-package` | Verify the current SQLite lease and prepare an approved, signed delivery package without sending it |
 | `POST /api/reports/jobs/{id}/complete`, `/fail`, `/cancel` | Complete a lease, schedule a bounded retry/dead-letter, or cancel a pending job |
+| `GET /api/webhooks/deliveries` | Site-scoped durable webhook delivery queue and state counts |
+| `POST /api/webhooks/deliveries/enqueue` | Idempotently enqueue prepared, HMAC-signed subscription envelopes |
+| `POST /api/webhooks/deliveries/{id}/retry`, `/cancel` | Retry dead-lettered deliveries or cancel pending work |
+| [Webhook dispatch worker](wifi_analyzer_backend/WEBHOOK_DISPATCH_WORKER.md) | Separate pinned-TLS worker for outbound delivery; no signing-secret storage required |
 | [Scheduled report worker](wifi_analyzer_backend/REPORT_WORKER.md) | Opt-in, pinned-TLS HTTPS delivery of due report jobs; run separately from the API server |
+| [Webhook dispatch worker](wifi_analyzer_backend/WEBHOOK_DISPATCH_WORKER.md) | Durable multi-subscription signed webhook delivery with leases, retries, dead letters and fresh pinned-TLS egress checks |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
@@ -231,9 +241,8 @@ again. Use this alongside VPN/reverse-proxy access controls and protected
 backups of the local account file.
 
 
-The **Webhook Delivery Center** in the System navigation exposes the F190/F192
-multi-subscription preparation workflow to network operators. It shows prepared
-and blocked subscription batches, copies prepared envelopes on request, and
-clears the submitted signing-key map from the editor after a successful run.
-It does not send HTTP requests; persistent fan-out, retry/dead-letter delivery
-and an operational dispatcher remain separate deployment work.
+The **Webhook Delivery Center** prepares signed multi-subscription envelopes,
+queues them into a durable site-scoped outbox and displays delivery state,
+attempt counts and safe error codes. A separate worker performs fresh DNS
+resolution, pinned-IP TLS delivery, redirect refusal, retries and dead-letter
+recovery. The API stores signed payloads but never stores HMAC signing secrets.

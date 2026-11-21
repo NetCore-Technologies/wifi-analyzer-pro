@@ -62,3 +62,24 @@ or a protected VPN/HTTPS reverse proxy for remote operation, avoid browser
 extensions or shared workstations, and use a dedicated secret manager for
 production automation. Prepared envelopes are copied or exported only when an
 operator explicitly requests it. The browser UI is not a persistent secret store.
+
+
+## Durable webhook dispatch
+
+Prepared multi-subscription envelopes are stored in a private local SQLite outbox.
+The outbox retains only already-signed request bodies and signature headers; it
+never stores the HMAC signing secret. Delivery is opt-in through the separate
+webhook dispatcher process. The dispatcher resolves the endpoint immediately
+before each attempt, rejects any non-public answer, connects to the exact peer
+IP while retaining the DNS hostname for TLS SNI/certificate verification,
+requires TLS 1.2 or 1.3 and refuses redirects. Only 2xx responses mark a
+delivery as delivered. Delivery retries use bounded exponential backoff,
+exclusive expiring leases and dead-letter state.
+
+Queue reads, enqueue, retry and cancel operations are permission-gated and
+respect per-site access. The queue stores signed event payloads, so protect the
+state directory with restrictive host permissions, volume encryption and a
+retention policy appropriate to the event data. The dispatch worker has no
+listening port. Run it with the same private state volume as the API and do not
+expose the SQLite file over a network filesystem unless the deployment's
+SQLite locking semantics have been validated.
