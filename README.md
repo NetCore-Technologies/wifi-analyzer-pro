@@ -373,7 +373,7 @@ unreadable to group and other users (on a Linux host, use mode 0600 and owner
 UID/GID 10001). Start the separate vendor-only image with:
 
 ```sh
-docker compose --env-file .env.vendor -f compose.vendor.yaml up -d --build
+docker compose --env-file .env.vendor -f compose.vendor-licensing.yaml up -d --build
 ```
 
 Terminate public HTTPS using a trusted reverse proxy to the loopback listener
