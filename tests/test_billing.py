@@ -220,7 +220,7 @@ class StripeCheckoutTests(unittest.TestCase):
             {"price_id": "not-a-price"},
             {"public_url": "http://0.0.0.0:199"},
             {"public_url": "https://user:pass@example.com"},
-            {"public_url": "https://example.com.evil.test"},
+            {"public_url": "https://example.com/path"},
         ):
             params = {
                 "secret_key": "sk_test_1234567890",

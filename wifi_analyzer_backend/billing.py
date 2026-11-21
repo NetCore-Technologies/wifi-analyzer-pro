@@ -327,6 +327,9 @@ class WorkspaceBillingStore:
             "INSERT OR IGNORE INTO workspace_subscription(id, plan_id, updated_at) VALUES (1, 'free', ?)",
             (float(self._clock()),),
         )
+        # Commit schema/default-row initialization before application methods
+        # open their own explicit BEGIN IMMEDIATE transaction.
+        connection.commit()
         try:
             yield connection
             connection.commit()
