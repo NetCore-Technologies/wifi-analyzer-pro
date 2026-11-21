@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { apiFetch, apiBase } from '../lib/api.js';
-import { buildMultiApPlannerPayload } from '../lib/multiApChannelPlanner.js';
+import { buildMultiApPlannerPayload, mapSavedSiteSnapshotToPlannerRadios } from '../lib/multiApChannelPlanner.js';
 import { Plus, Trash2, Play, AlertCircle, ShieldCheck, RadioTower, Info } from 'lucide-react';
 
 const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
@@ -25,6 +25,46 @@ export default function MultiApChannelPlanner() {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const choices = useMemo(() => radios.filter(radio => radio.radio_id.trim()), [radios]);
+  const [snapshotId, setSnapshotId] = useState('');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMessage, setImportMessage] = useState('');
+  const [importError, setImportError] = useState('');
+
+  async function importSavedSnapshot(event) {
+    event.preventDefault();
+    if (!/^\\d+$/.test(snapshotId.trim())) {
+      setImportError('Enter a saved snapshot ID.');
+      return;
+    }
+    setImportBusy(true);
+    setImportError('');
+    setImportMessage('');
+    try {
+      const response = await apiFetch(apiBase() + '/api/sites/history/' + encodeURIComponent(snapshotId.trim()), {
+        signal: AbortSignal.timeout(12000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to load the saved snapshot.');
+      const mapped = mapSavedSiteSnapshotToPlannerRadios(data.snapshot?.snapshot);
+      if (!mapped.radios.length) throw new Error('No 20 MHz AP radio records with site, band and channel evidence were available to import.');
+      const rows = mapped.radios.map((radio, index) => ({ ...radio, rowId: radioSequence + index }));
+      setRadios(rows);
+      setRadioSequence(value => value + rows.length);
+      setEdges([blankEdge(edgeSequence)]);
+      setEdgeSequence(value => value + 1);
+      setResult(null);
+      setImportMessage(
+        'Imported ' + rows.length + ' radio records. Skipped ' + mapped.skipped_incomplete_count
+        + ' incomplete records, ' + mapped.skipped_wide_channel_count
+        + ' wide-channel records without a safe centre-frequency value, and '
+        + mapped.skipped_cross_site_count + ' cross-site records. Candidate options contain only the observed current channel; add legally permitted alternatives before planning.',
+      );
+    } catch (err) {
+      setImportError(err.message || 'Unable to import the saved snapshot.');
+    } finally {
+      setImportBusy(false);
+    }
+  }
 
   function updateRadio(id, patch) {
     setRadios(current => current.map(radio => radio.rowId === id ? { ...radio, ...patch } : radio));
@@ -73,6 +113,15 @@ export default function MultiApChannelPlanner() {
         </div>
         <p style={{ ...muted, margin: 0 }}>Define your AP radios, the channels each radio is permitted to use, and the interference relationships you have measured or assessed. The planner proposes a channel assignment; it never applies configuration.</p>
       </section>
+      <form onSubmit={importSavedSnapshot} style={panel}>
+        <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700, marginBottom: 7 }}>Import a saved site inventory</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px,240px) auto', gap: 8, alignItems: 'end' }}>
+          <label><span style={label}>Saved snapshot ID</span><input type="number" min="1" step="1" value={snapshotId} onChange={event => setSnapshotId(event.target.value)} placeholder="e.g. 42" style={field}/></label>
+          <button type="submit" disabled={importBusy || !snapshotId.trim()} style={{ ...secondary, opacity: importBusy || !snapshotId.trim() ? 0.5 : 1 }}>{importBusy ? 'Importing…' : 'Import AP radios'}</button>
+        </div>
+        {importError ? <div role="alert" style={{ ...muted, color: '#fca5a5', marginTop: 8 }}>{importError}</div> : null}
+        {importMessage ? <div role="status" style={{ ...muted, color: '#a5f3fc', marginTop: 8 }}>{importMessage}</div> : null}
+      </form>
       <form onSubmit={execute} style={{ display: 'grid', gap: 12 }}>
         <section style={panel}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>

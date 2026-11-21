@@ -95,3 +95,54 @@ export function buildMultiApPlannerPayload(radios, edges, penaltyValue) {
   }
   return { radios: inputRadios, interference_edges: inputEdges, change_penalty: changePenalty };
 }
+
+export function mapSavedSiteSnapshotToPlannerRadios(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    throw new Error('The selected site snapshot is not a valid object.');
+  }
+  if (!Array.isArray(snapshot.access_points)) {
+    throw new Error('The selected snapshot does not contain an AP inventory.');
+  }
+  const siteId = typeof snapshot.site_id === 'string' ? snapshot.site_id.trim() : '';
+  if (!siteId) throw new Error('The selected snapshot has no site identifier.');
+  const radios = [];
+  let skippedIncomplete = 0;
+  let skippedWide = 0;
+  let skippedCrossSite = 0;
+  snapshot.access_points.forEach((ap, index) => {
+    if (!ap || typeof ap !== 'object' || Array.isArray(ap)) {
+      skippedIncomplete += 1;
+      return;
+    }
+    if (typeof ap.site_id === 'string' && ap.site_id.trim() && ap.site_id.trim() !== siteId) {
+      skippedCrossSite += 1;
+      return;
+    }
+    const identity = String(ap.bssid || ap.ap_id || ap.name || '').trim();
+    if (!identity || !BANDS.has(ap.band) || !Number.isSafeInteger(ap.channel) || ap.channel < 1 || ap.channel > 233) {
+      skippedIncomplete += 1;
+      return;
+    }
+    if (ap.channel_width_mhz !== 20) {
+      skippedWide += 1;
+      return;
+    }
+    const safeApId = identity.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 42);
+    const radioId = (safeApId + '-' + ap.band.replace(/[^A-Za-z0-9]/g, '') + '-' + (index + 1)).slice(0, 64);
+    radios.push({
+      radio_id: radioId,
+      ap_id: safeApId,
+      site_id: siteId,
+      band: ap.band,
+      width: '20',
+      current_channel: String(ap.channel),
+      options: String(ap.channel),
+    });
+  });
+  return {
+    radios,
+    skipped_incomplete_count: skippedIncomplete,
+    skipped_wide_channel_count: skippedWide,
+    skipped_cross_site_count: skippedCrossSite,
+  };
+}

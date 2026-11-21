@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildMultiApPlannerPayload, parsePlannerChannelOptions } from './multiApChannelPlanner.js';
+import { buildMultiApPlannerPayload, mapSavedSiteSnapshotToPlannerRadios, parsePlannerChannelOptions } from './multiApChannelPlanner.js';
 
 const radios = [
   { radio_id: 'ap-01-24', ap_id: 'ap-01', site_id: 'hq', band: '2.4GHz', width: '20', current_channel: '6', options: '1, 6, 11' },
@@ -52,4 +52,28 @@ test('rejects relationships that cross site or band boundaries', () => {
 test('rejects repeated channel options and invalid change penalties', () => {
   assert.throws(() => parsePlannerChannelOptions('1,1,6', 20, 'ap-01'), /must be unique/);
   assert.throws(() => buildMultiApPlannerPayload(radios, edges, '0.75'), /penalty must be between 0 and 0.5/);
+});
+
+test('imports only observed single-width AP radios from a saved site snapshot', () => {
+  const mapped = mapSavedSiteSnapshotToPlannerRadios({
+    site_id: 'hq',
+    access_points: [
+      { bssid: 'AA:BB:CC:DD:EE:01', band: '2.4GHz', channel: 6, channel_width_mhz: 20 },
+      { bssid: 'AA:BB:CC:DD:EE:02', band: '5GHz', channel: 36, channel_width_mhz: 80 },
+      { bssid: 'AA:BB:CC:DD:EE:03', site_id: 'branch', band: '2.4GHz', channel: 1, channel_width_mhz: 20 },
+      { bssid: 'AA:BB:CC:DD:EE:04', band: null, channel: null, channel_width_mhz: null },
+    ],
+  });
+  assert.equal(mapped.radios.length, 1);
+  assert.equal(mapped.radios[0].site_id, 'hq');
+  assert.equal(mapped.radios[0].current_channel, '6');
+  assert.equal(mapped.radios[0].options, '6');
+  assert.equal(mapped.skipped_wide_channel_count, 1);
+  assert.equal(mapped.skipped_cross_site_count, 1);
+  assert.equal(mapped.skipped_incomplete_count, 1);
+});
+
+test('refuses saved snapshots without a site identity or AP inventory', () => {
+  assert.throws(() => mapSavedSiteSnapshotToPlannerRadios({ access_points: [] }), /no site identifier/);
+  assert.throws(() => mapSavedSiteSnapshotToPlannerRadios({ site_id: 'hq' }), /does not contain an AP inventory/);
 });
