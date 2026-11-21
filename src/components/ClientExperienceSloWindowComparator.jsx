@@ -64,7 +64,7 @@ export default function ClientExperienceSloWindowComparator() {
     setResult(null);
     try {
       const baselineSamples = JSON.parse(baselineText);
-      const timezoneAware = value => /(?:Z|[+-]\\d{2}:\\d{2})$/i.test(value) && Number.isFinite(Date.parse(value));
+      const timezoneAware = value => /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && Number.isFinite(Date.parse(value));
       if (!baselineAsOf.trim() || !timezoneAware(baselineAsOf.trim())) {
         throw new Error('Enter a valid timezone-aware baseline window end timestamp.');
       }
