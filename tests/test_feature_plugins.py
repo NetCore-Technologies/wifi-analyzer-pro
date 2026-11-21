@@ -1316,11 +1316,11 @@ class FeatureCatalogTests(unittest.TestCase):
         reversed_windows = {
             **payload,
             "baseline": {**payload["baseline"], "samples": [
-                {**item, "sample_id": "reversed-base-" + str(index), "observed_at": "2026-11-13T11:5" + str(index) + ":00Z"
+                {**item, "sample_id": "reversed-base-" + str(index), "observed_at": "2026-11-13T11:5" + str(index) + ":00Z"}
                 for index, item in enumerate(good)
             ]},
             "comparison": {**payload["comparison"], "samples": [
-                {**item, "sample_id": "reversed-current-" + str(index), "observed_at": "2026-11-21T11:5" + str(index) + ":00Z"
+                {**item, "sample_id": "reversed-current-" + str(index), "observed_at": "2026-11-21T11:5" + str(index) + ":00Z"}
                 for index, item in enumerate(poor)
             ]},
         }
