@@ -130,6 +130,11 @@ class VendorLicenseServiceTests(unittest.TestCase):
         self.assertEqual(timeout, 12)
         self.assertEqual(len(checkout["activation_secret"]), 43)
 
+    def test_pending_checkout_cannot_be_spammed_for_one_installation(self):
+        self.checkout()
+        with self.assertRaisesRegex(LicenseServiceConflict, "already pending"):
+            self.checkout("pro")
+
     def test_invalid_plan_installation_and_email_are_rejected(self):
         with self.assertRaises(ValueError):
             self.service.create_checkout(installation_id=INSTALLATION, plan_id="free")

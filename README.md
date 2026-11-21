@@ -310,3 +310,50 @@ redirect refusal, retries and dead-letter recovery.
 ## Enterprise WLAN security audit (F194)
 
 The `enterprise_wlan_security_audit` feature evaluates supplied office, guest, IoT and management profile evidence for 802.1X/EAP policy, RADIUS redundancy, certificate validation, Protected Management Frames, WPS and network segmentation. It is offline and read-only: it does not connect to controllers or return SSIDs, RADIUS addresses or credential material, and it reports missing evidence separately from observed policy violations.
+
+
+## Vendor product licensing control plane
+
+The vendor-owned licensing service runs separately from customer installations.
+It creates vendor Stripe Checkout sessions, verifies signed Stripe webhooks,
+and issues 24-hour Ed25519 licences tied to one installation. Customer
+installations hold only the vendor public key, their signed licence, and a
+private per-installation activation credential. The vendor Stripe secret and
+signing private key never belong in customer deployments.
+
+### Configure the vendor service
+
+Create recurring Stripe Prices for Pro, Business and Enterprise in the vendor's
+Stripe account. Generate an Ed25519 signing key and store its raw 32-byte
+private key as base64 in a file outside the repository, owned by the service
+account with mode 0600. Configure the matching public key in customer
+installations. Back up the vendor licensing SQLite database.
+
+Set `WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL`, the vendor Stripe secret and
+webhook signing secret, the recurring Price IDs, and
+`WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE` in a vendor-only
+environment file. Start the separate service with:
+
+```sh
+docker compose --profile licensing-control-plane up -d licensing-control-plane
+```
+
+Terminate public HTTPS using a trusted reverse proxy to the loopback listener
+on port 1999. Configure a Stripe webhook at
+`{WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL}/api/webhook` for
+`checkout.session.completed`, `customer.subscription.created`,
+`customer.subscription.updated`, and `customer.subscription.deleted`.
+Do not expose the plain HTTP listener directly to the internet.
+
+In each customer installation, configure
+`WIFI_ANALYZER_VENDOR_LICENSE_PUBLIC_KEY`,
+`WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID`, and
+`WIFI_ANALYZER_VENDOR_LICENSE_SERVICE_URL`. The Plans & Licensing screen
+starts vendor checkout and syncs the signed licence after Stripe confirms
+payment. The customer installation never receives vendor Stripe or signing
+private credentials.
+
+This is the first vendor billing control plane, not yet a multi-region
+high-availability payment platform. A live launch still needs real DNS/TLS,
+Stripe live-mode activation, backups, monitoring, refund/dispute operations
+and full customer onboarding.
