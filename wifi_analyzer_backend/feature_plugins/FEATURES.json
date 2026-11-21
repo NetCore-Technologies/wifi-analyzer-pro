@@ -1641,6 +1641,20 @@
     }
   },
   {
+    "slug": "floorplan_rf_survey_analyzer",
+    "name": "Floor-plan aligned RF survey analyzer",
+    "category": "RF planning",
+    "description": "Align timestamped same-floor RSSI/noise readings to AP coordinates using operator-supplied scale references; report measured distances, summaries, distance buckets and descriptive signal trends without inventing propagation or coverage.",
+    "parameters": {
+      "site_id": "A 1-64 character site identifier",
+      "floorplan": "One floorplan ID/floor ID, pixel dimensions and 1-20 known-distance scale references",
+      "access_points": "1-256 AP identities with same-floor pixel coordinates",
+      "survey_samples": "1-8192 timestamped same-floor survey points; 20,000 per-AP readings total maximum",
+      "as_of": "Optional timezone-aware assessment time; defaults to server UTC time",
+      "max_age_days": "1-30 day freshness window; defaults to 7"
+    }
+  },
+  {
     "slug": "client_roam_transaction_analyzer",
     "name": "Client roam transaction analyzer",
     "category": "Roaming",

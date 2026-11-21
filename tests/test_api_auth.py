@@ -9,6 +9,7 @@ import time
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from http.client import HTTPConnection
 from unittest.mock import Mock, patch
@@ -3551,6 +3552,57 @@ class AuthenticatedApiTests(unittest.TestCase):
         for payload in bad_payloads:
             status, response = self.request("POST", "/api/trusted-aps", payload, token=token)
             self.assertEqual(status, 400, response)
+
+    def test_floorplan_rf_survey_feature_requires_assigned_site_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "floorplan survey owner secure password",
+        })
+        owner_token = setup["token"]
+        _, created = self.request("POST", "/api/users", {
+            "username": "survey.network.admin",
+            "password": "floorplan survey admin secure password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["head-office"],
+        }, token=owner_token)
+        self.assertEqual(created["user"]["username"], "survey.network.admin")
+        token = server.AUTH.login("floorplan survey admin secure password", "survey.network.admin")
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        payload = {
+            "site_id": "head-office",
+            "as_of": now.isoformat(),
+            "floorplan": {
+                "floorplan_id": "hq-floor-1",
+                "floor_id": "floor-1",
+                "width_px": 1000,
+                "height_px": 800,
+                "scale_references": [
+                    {"x1_px": 0, "y1_px": 0, "x2_px": 1000, "y2_px": 0, "distance_m": 20},
+                ],
+            },
+            "access_points": [{"ap_id": "ap-01", "x_px": 100, "y_px": 100}],
+            "survey_samples": [{
+                "sample_id": "survey-001",
+                "x_px": 200,
+                "y_px": 100,
+                "observed_at": (now - timedelta(minutes=5)).isoformat(),
+                "evidence_source": "survey",
+                "measurements": [{"ap_id": "ap-01", "rssi_dbm": -55}],
+            }],
+        }
+        status, result = self.request(
+            "POST", "/api/features/floorplan_rf_survey_analyzer", payload, token=token,
+        )
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["feature"], "F203")
+        self.assertEqual(result["result"]["site_id"], "head-office")
+
+        cross_site = {**payload, "site_id": "branch"}
+        status, denied = self.request(
+            "POST", "/api/features/floorplan_rf_survey_analyzer", cross_site, token=token,
+        )
+        self.assertEqual(status, 403, denied)
+        self.assertIn("outside your assigned access scope", denied["error"])
 
 if __name__ == "__main__":
     unittest.main()

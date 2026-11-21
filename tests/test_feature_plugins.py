@@ -990,6 +990,51 @@ PAYLOADS = {
             {"sample_id":"survey-sample-003","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-55,-64],"channel_utilization_pct":60,"retry_rate_pct":7}
         ]
     },
+    "floorplan_rf_survey_analyzer": {
+        "site_id": "head-office",
+        "as_of": _SURVEY_NOW.isoformat(),
+        "max_age_days": 7,
+        "floorplan": {
+            "floorplan_id": "hq-level-1",
+            "floor_id": "level-1",
+            "width_px": 1000,
+            "height_px": 800,
+            "scale_references": [
+                {"x1_px": 0, "y1_px": 0, "x2_px": 1000, "y2_px": 0, "distance_m": 20},
+                {"x1_px": 0, "y1_px": 0, "x2_px": 0, "y2_px": 500, "distance_m": 10}
+            ]
+        },
+        "access_points": [
+            {"ap_id": "ap-01", "floor_id": "level-1", "x_px": 100, "y_px": 100},
+            {"ap_id": "ap-02", "floor_id": "level-1", "x_px": 800, "y_px": 100}
+        ],
+        "survey_samples": [
+            {
+                "sample_id": "survey-001", "floor_id": "level-1", "x_px": 200, "y_px": 100,
+                "observed_at": (_SURVEY_NOW - timedelta(hours=1)).isoformat(), "evidence_source": "survey",
+                "measurements": [
+                    {"ap_id": "ap-01", "rssi_dbm": -45, "noise_dbm": -95},
+                    {"ap_id": "ap-02", "rssi_dbm": -68}
+                ]
+            },
+            {
+                "sample_id": "survey-002", "floor_id": "level-1", "x_px": 300, "y_px": 100,
+                "observed_at": (_SURVEY_NOW - timedelta(hours=2)).isoformat(), "evidence_source": "controller",
+                "measurements": [
+                    {"ap_id": "ap-01", "rssi_dbm": -53, "noise_dbm": -94},
+                    {"ap_id": "ap-02", "rssi_dbm": -64, "noise_dbm": -94}
+                ]
+            },
+            {
+                "sample_id": "survey-003", "floor_id": "level-1", "x_px": 400, "y_px": 100,
+                "observed_at": (_SURVEY_NOW - timedelta(hours=3)).isoformat(), "evidence_source": "operator",
+                "measurements": [
+                    {"ap_id": "ap-01", "rssi_dbm": -60},
+                    {"ap_id": "ap-02", "rssi_dbm": -59}
+                ]
+            }
+        ]
+    },
     "client_experience_slo_window_comparator": {
             "baseline": {
                     "as_of": "2026-11-13T12:00:00Z",
@@ -1568,6 +1613,13 @@ class FeatureCatalogTests(unittest.TestCase):
             run("client_roam_transaction_analyzer", {"events": [bad_reason]})
         with self.assertRaisesRegex(ValueError, "slow_roam_threshold_ms"):
             run("client_roam_transaction_analyzer", {"events": [payload["events"][0]], "slow_roam_threshold_ms": 1})
+
+    def test_f203_floorplan_rf_survey_is_registered_and_site_scoped(self):
+        result = run("floorplan_rf_survey_analyzer", PAYLOADS["floorplan_rf_survey_analyzer"])["result"]
+        self.assertEqual(result["status"], "analysed")
+        self.assertEqual(result["floorplan_id"], "hq-level-1")
+        self.assertEqual(result["accepted_measurement_count"], 6)
+        self.assertEqual(result["site_id"], "head-office")
 
     def test_f202_normalises_fresh_survey_samples_into_f201_edges(self):
         result = run("rf_survey_evidence_normalizer", PAYLOADS["rf_survey_evidence_normalizer"])["result"]

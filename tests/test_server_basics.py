@@ -98,7 +98,7 @@ class ScanParserTests(unittest.TestCase):
         self.assertIsNone(network["band"])
         self.assertIsNone(network["rssi"])
         self.assertIsNone(network["quality"])
-        self.assertIsNone(network["snr"])
+        self.assertNotIn("snr", network)
 
     def test_iwlist_parser_derives_channel_only_from_reported_frequency(self):
         output = """Cell 01 - Address: AA:BB:CC:DD:EE:05

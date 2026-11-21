@@ -203,6 +203,7 @@ FEATURE_MODULES = (
     "feature_200_enterprise_network_security_evidence_report",
     "feature_201_multi_ap_channel_reuse_planner",
     "feature_202_rf_survey_evidence_normalizer",
+    "feature_203_floorplan_rf_survey_analyzer",
     "feature_291_client_roam_transaction_analyzer",
     "feature_292_client_experience_slo_evaluator",
     "feature_293_client_experience_slo_window_comparator",
