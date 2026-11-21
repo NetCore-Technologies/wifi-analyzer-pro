@@ -205,6 +205,7 @@ FEATURE_MODULES = (
     "feature_202_rf_survey_evidence_normalizer",
     "feature_291_client_roam_transaction_analyzer",
     "feature_292_client_experience_slo_evaluator",
+    "feature_293_client_experience_slo_window_comparator",
 )
 
 @lru_cache(maxsize=1)

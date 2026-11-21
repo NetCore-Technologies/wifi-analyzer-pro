@@ -990,6 +990,85 @@ PAYLOADS = {
             {"sample_id":"survey-sample-003","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-55,-64],"channel_utilization_pct":60,"retry_rate_pct":7}
         ]
     },
+    "client_experience_slo_window_comparator": {
+            "baseline": {
+                    "as_of": "2026-11-13T12:00:00Z",
+                    "samples": [
+                            {
+                                    "sample_id": "base-hq-001",
+                                    "site_id": "hq",
+                                    "client_ref": "station-private-alpha",
+                                    "observed_at": "2026-11-13T11:50:00Z",
+                                    "evidence_source": "probe",
+                                    "metrics": {
+                                            "rssi_dbm": -82,
+                                            "packet_loss_pct": 4,
+                                            "rtt_ms": 210
+                                    }
+                            },
+                            {
+                                    "sample_id": "base-hq-002",
+                                    "site_id": "hq",
+                                    "client_ref": "station-private-beta",
+                                    "observed_at": "2026-11-13T11:51:00Z",
+                                    "evidence_source": "controller",
+                                    "metrics": {
+                                            "rssi_dbm": -78,
+                                            "packet_loss_pct": 3,
+                                            "rtt_ms": 180
+                                    }
+                            },
+                            {
+                                    "sample_id": "base-branch-001",
+                                    "site_id": "branch",
+                                    "client_ref": "branch-private",
+                                    "observed_at": "2026-11-13T11:52:00Z",
+                                    "evidence_source": "probe",
+                                    "metrics": {
+                                            "rssi_dbm": -62,
+                                            "packet_loss_pct": 0.1,
+                                            "rtt_ms": 24
+                                    }
+                            }
+                    ]
+            },
+            "comparison": {
+                    "as_of": "2026-11-21T12:00:00Z",
+                    "samples": [
+                            {
+                                    "sample_id": "current-hq-001",
+                                    "site_id": "hq",
+                                    "client_ref": "station-private-alpha",
+                                    "observed_at": "2026-11-21T11:50:00Z",
+                                    "evidence_source": "probe",
+                                    "metrics": {
+                                            "rssi_dbm": -60,
+                                            "packet_loss_pct": 0.1,
+                                            "rtt_ms": 28
+                                    }
+                            },
+                            {
+                                    "sample_id": "current-hq-002",
+                                    "site_id": "hq",
+                                    "client_ref": "station-private-beta",
+                                    "observed_at": "2026-11-21T11:51:00Z",
+                                    "evidence_source": "controller",
+                                    "metrics": {
+                                            "rssi_dbm": -64,
+                                            "packet_loss_pct": 0.2,
+                                            "rtt_ms": 30
+                                    }
+                            }
+                    ]
+            },
+            "max_age_days": 7,
+            "required_metrics": [
+                    "rssi_dbm",
+                    "packet_loss_pct",
+                    "rtt_ms"
+            ],
+            "minimum_eligible_samples": 1
+    },
     "client_experience_slo_evaluator": {
             "as_of": "2026-11-21T12:00:00Z",
             "max_age_days": 7,
@@ -1091,15 +1170,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 201)
-        self.assertEqual(len(set(FEATURE_MODULES)), 201)
-        self.assertEqual(count(), 201)
-        self.assertEqual(len(entries), 201)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 201)
+        self.assertEqual(len(FEATURE_MODULES), 202)
+        self.assertEqual(len(set(FEATURE_MODULES)), 202)
+        self.assertEqual(count(), 202)
+        self.assertEqual(len(entries), 202)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 202)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F291", "F292"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F291", "F292", "F293"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1218,6 +1297,69 @@ class FeatureCatalogTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate report"):
             run("enterprise_network_security_evidence_report", duplicate)
 
+    def test_f293_compares_slo_windows_and_preserves_missing_site_evidence(self):
+        result = run("client_experience_slo_window_comparator", PAYLOADS["client_experience_slo_window_comparator"])["result"]
+        self.assertEqual(result["status"], "improvement_detected")
+        self.assertEqual(result["overall"]["status"], "improvement")
+        self.assertEqual(result["overall"]["sla_attainment_delta_pct_points"], 100.0)
+        sites = {item["site_id"]: item for item in result["sites"]}
+        self.assertEqual(sites["hq"]["status"], "improvement")
+        self.assertEqual(sites["branch"]["status"], "missing_comparison_evidence")
+        self.assertEqual(result["summary"]["regressing_site_count"], 0)
+        self.assertNotIn("station-private-alpha", json.dumps(result))
+        self.assertNotIn("base-hq-001", json.dumps(result))
+
+    def test_f293_detects_regressions_and_honours_minimum_evidence(self):
+        payload = PAYLOADS["client_experience_slo_window_comparator"]
+        good = payload["comparison"]["samples"]
+        poor = payload["baseline"]["samples"][:2]
+        reversed_windows = {
+            **payload,
+            "baseline": {**payload["baseline"], "samples": [
+                {**item, "sample_id": "reversed-base-" + str(index), "observed_at": "2026-11-13T11:5" + str(index) + ":00Z"
+                for index, item in enumerate(good)
+            ]},
+            "comparison": {**payload["comparison"], "samples": [
+                {**item, "sample_id": "reversed-current-" + str(index), "observed_at": "2026-11-21T11:5" + str(index) + ":00Z"
+                for index, item in enumerate(poor)
+            ]},
+        }
+        result = run("client_experience_slo_window_comparator", reversed_windows)["result"]
+        self.assertEqual(result["status"], "regression_detected")
+        self.assertEqual(result["overall"]["status"], "regression")
+        insufficient = run("client_experience_slo_window_comparator", {
+            **payload, "minimum_eligible_samples": 3,
+        })["result"]
+        self.assertEqual(insufficient["status"], "insufficient_evidence")
+        self.assertIsNone(insufficient["overall"]["sla_attainment_delta_pct_points"])
+
+    def test_f293_rejects_overlapping_periods_future_samples_and_reused_ids(self):
+        payload = PAYLOADS["client_experience_slo_window_comparator"]
+        with self.assertRaisesRegex(ValueError, "must not overlap"):
+            run("client_experience_slo_window_comparator", {
+                **payload, "comparison": {**payload["comparison"], "as_of": "2026-11-19T12:00:00Z"},
+            })
+        future = dict(payload["comparison"]["samples"][0], observed_at="2026-11-21T12:00:01Z")
+        with self.assertRaisesRegex(ValueError, "must not be after its window as_of"):
+            run("client_experience_slo_window_comparator", {
+                **payload, "comparison": {**payload["comparison"], "samples": [future]},
+            })
+        duplicate = dict(payload["comparison"]["samples"][0], sample_id=payload["baseline"]["samples"][0]["sample_id"])
+        with self.assertRaisesRegex(ValueError, "unique across both windows"):
+            run("client_experience_slo_window_comparator", {
+                **payload, "comparison": {**payload["comparison"], "samples": [duplicate]},
+            })
+
+    def test_f293_validates_timezone_and_regression_threshold(self):
+        payload = PAYLOADS["client_experience_slo_window_comparator"]
+        with self.assertRaisesRegex(ValueError, "timezone-aware ISO-8601"):
+            run("client_experience_slo_window_comparator", {
+                **payload, "baseline": {**payload["baseline"], "as_of": "2026-11-13T12:00:00"},
+            })
+        with self.assertRaisesRegex(ValueError, "regression_threshold_pct_points"):
+            run("client_experience_slo_window_comparator", {
+                **payload, "regression_threshold_pct_points": 0,
+            })
     def test_f292_client_experience_slo_excludes_incomplete_samples_and_reports_coverage(self):
         result = run("client_experience_slo_evaluator", PAYLOADS["client_experience_slo_evaluator"])["result"]
         summary = result["summary"]

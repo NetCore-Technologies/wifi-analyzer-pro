@@ -57,12 +57,12 @@ def _window(value: object, name: str) -> tuple[datetime, list[dict]]:
 
 
 def _view(report: dict) -> dict:
-    summary = report["summary"]
+    summary = report.get("summary", report)
     return {
         "status": report["status"],
-        "observed_sample_count": report["observed_sample_count"],
-        "fresh_sample_count": report["fresh_sample_count"],
-        "stale_sample_count": report["stale_sample_count"],
+        "observed_sample_count": report.get("observed_sample_count", summary.get("sample_count", 0)),
+        "fresh_sample_count": report.get("fresh_sample_count", summary.get("sample_count", 0)),
+        "stale_sample_count": report.get("stale_sample_count", 0),
         "eligible_slo_sample_count": summary["eligible_slo_sample_count"],
         "passing_slo_sample_count": summary["passing_slo_sample_count"],
         "breached_slo_sample_count": summary["breached_slo_sample_count"],
