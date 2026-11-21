@@ -68,6 +68,17 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_webhook_dispatch_worker_can_be_imported_by_direct_execution(self):
+        environment = os.environ.copy()
+        backend_path = str(ROOT / "wifi_analyzer_backend")
+        current_path = environment.get("PYTHONPATH", "")
+        environment["PYTHONPATH"] = backend_path + (os.pathsep + current_path if current_path else "")
+        result = subprocess.run(
+            [sys.executable, "-c", "import webhook_dispatch_worker; assert webhook_dispatch_worker.WebhookDispatchWorker"],
+            cwd=ROOT, env=environment, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_docker_runtime_copies_signed_audit_checkpoint_support(self):
         dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
         self.assertIn(
@@ -80,6 +91,14 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         )
         self.assertIn(
             "COPY --chown=10001:10001 wifi_analyzer_backend/rate_limit.py ./rate_limit.py",
+            dockerfile,
+        )
+        self.assertIn(
+            "COPY --chown=10001:10001 wifi_analyzer_backend/webhook_delivery_store.py ./webhook_delivery_store.py",
+            dockerfile,
+        )
+        self.assertIn(
+            "COPY --chown=10001:10001 wifi_analyzer_backend/webhook_dispatch_worker.py ./webhook_dispatch_worker.py",
             dockerfile,
         )
 

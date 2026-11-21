@@ -29,10 +29,15 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
         self.previous_live_capture = server.LIVE_CAPTURE
+        self.previous_webhook_deliveries = server.WEBHOOK_DELIVERIES
         self.previous_rate_limiter = server.RATE_LIMITER
         self.previous_rate_policies = server.RATE_LIMIT_POLICIES
         server.RATE_LIMITER = TokenBucketRateLimiter()
         server.RATE_LIMIT_POLICIES = dict(DEFAULT_POLICIES)
+        server.WEBHOOK_DELIVERIES = __import__(
+            "wifi_analyzer_backend.webhook_delivery_store",
+            fromlist=["WebhookDeliveryStore"],
+        ).WebhookDeliveryStore(path=str(Path(self.temp.name) / "webhook-deliveries.sqlite3"))
         server.LIVE_CAPTURE = Mock()
         server.LIVE_CAPTURE.list_interfaces.return_value = {
             "available": True,
@@ -65,6 +70,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
         server.LIVE_CAPTURE = self.previous_live_capture
+        server.WEBHOOK_DELIVERIES = self.previous_webhook_deliveries
         server.RATE_LIMITER = self.previous_rate_limiter
         server.RATE_LIMIT_POLICIES = self.previous_rate_policies
         self.temp.cleanup()
@@ -240,6 +246,103 @@ class AuthenticatedApiTests(unittest.TestCase):
         }, token=login["token"])
         self.assertEqual(status, 200, disabled)
         self.assertFalse(disabled["mfa"]["mfa_enabled"])
+
+    def test_webhook_delivery_queue_is_permission_gated_idempotent_and_site_scoped(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+
+        def item(batch_id, site_id="office"):
+            body = json.dumps({
+                "schema_version": "1.0", "batch_id": batch_id,
+                "key_id": "office-key-v1", "created_at": "2026-11-21T00:00:00Z",
+                "events": [{
+                    "event_id": "b" * 64, "event_type": "router.health",
+                    "severity": "warning", "occurred_at": "2026-11-21T00:00:00Z",
+                    "site_id": site_id, "router_id": "router-" + site_id,
+                    "summary": "Router health warning", "attributes": {},
+                }],
+            }, sort_keys=True, separators=(",", ":"))
+            return {
+                "subscription_id": "office-alerts", "batch_id": batch_id,
+                "event_count": 1, "status": "prepared",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "headers": {
+                    "Content-Type": "application/json",
+                    "X-WiFiAnalyzer-Key-Id": "office-key-v1",
+                    "X-WiFiAnalyzer-Timestamp": "1795219200",
+                    "X-WiFiAnalyzer-Signature": "v1=" + ("c" * 64),
+                    "Idempotency-Key": batch_id,
+                },
+                "body": body,
+            }
+
+        status, _ = self.request("GET", "/api/webhooks/deliveries")
+        self.assertEqual(status, 401)
+
+        status, created = self.request("POST", "/api/webhooks/deliveries/enqueue", {
+            "deliveries": [item("a" * 64)],
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        delivery_id = created["deliveries"][0]["id"]
+        self.assertEqual(created["created_count"], 1)
+
+        status, duplicate = self.request("POST", "/api/webhooks/deliveries/enqueue", {
+            "deliveries": [item("a" * 64)],
+        }, token=owner_token)
+        self.assertEqual(status, 200, duplicate)
+        self.assertEqual(duplicate["duplicate_count"], 1)
+        self.assertEqual(duplicate["deliveries"][0]["id"], delivery_id)
+
+        status, branch_result = self.request("POST", "/api/webhooks/deliveries/enqueue", {
+            "deliveries": [item("d" * 64, "branch")],
+        }, token=owner_token)
+        self.assertEqual(status, 201, branch_result)
+        branch_id = branch_result["deliveries"][0]["id"]
+
+        status, user = self.request("POST", "/api/users", {
+            "username": "office.webhooks", "password": "office webhook user password",
+            "role": "network_admin", "all_sites": False, "site_ids": ["office"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, user)
+        scoped_token = self.request("POST", "/api/auth/login", {
+            "username": "office.webhooks", "password": "office webhook user password",
+        })[1]["token"]
+
+        status, listing = self.request("GET", "/api/webhooks/deliveries", token=scoped_token)
+        self.assertEqual(status, 200, listing)
+        self.assertEqual(listing["summary"]["delivery_count"], 1)
+        self.assertEqual([entry["id"] for entry in listing["deliveries"]], [delivery_id])
+
+        status, hidden = self.request("GET", f"/api/webhooks/deliveries/{branch_id}", token=scoped_token)
+        self.assertEqual(status, 404)
+        status, forbidden = self.request("POST", "/api/webhooks/deliveries/enqueue", {
+            "deliveries": [item("e" * 64, "branch")],
+        }, token=scoped_token)
+        self.assertEqual(status, 403)
+        status, forbidden = self.request(
+            "POST", f"/api/webhooks/deliveries/{branch_id}/cancel", {}, token=scoped_token,
+        )
+        self.assertEqual(status, 404)
+
+        status, cancelled = self.request(
+            "POST", f"/api/webhooks/deliveries/{delivery_id}/cancel", {}, token=scoped_token,
+        )
+        self.assertEqual(status, 200, cancelled)
+        self.assertEqual(cancelled["delivery"]["status"], "cancelled")
+
+        status, viewer = self.request("POST", "/api/users", {
+            "username": "viewer.webhooks", "password": "viewer webhook user password",
+            "role": "viewer", "all_sites": False, "site_ids": ["office"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, viewer)
+        viewer_token = self.request("POST", "/api/auth/login", {
+            "username": "viewer.webhooks", "password": "viewer webhook user password",
+        })[1]["token"]
+        status, denied_read = self.request("GET", "/api/webhooks/deliveries", token=viewer_token)
+        self.assertEqual(status, 403)
 
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")
