@@ -195,6 +195,12 @@ FEATURE_MODULES = (
     "feature_192_router_webhook_delivery_orchestrator",
     "feature_193_router_webhook_delivery_health_report",
     "feature_194_enterprise_wlan_security_audit",
+    "feature_195_enterprise_switch_management_audit",
+    "feature_196_enterprise_firewall_policy_audit",
+    "feature_197_enterprise_dhcp_dns_security_audit",
+    "feature_198_enterprise_vpn_remote_access_audit",
+    "feature_199_enterprise_network_asset_lifecycle_audit",
+    "feature_200_enterprise_network_security_evidence_report",
 )
 
 @lru_cache(maxsize=1)

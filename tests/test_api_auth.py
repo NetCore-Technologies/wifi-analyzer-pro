@@ -1092,6 +1092,74 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("openwrt_snapshot_delivery_envelope", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_negotiation_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("enterprise_wlan_security_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("enterprise_switch_management_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("enterprise_firewall_policy_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("enterprise_dhcp_dns_security_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("enterprise_vpn_remote_access_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("enterprise_network_asset_lifecycle_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("enterprise_network_security_evidence_report", {item["slug"] for item in catalog["features"]})
+
+    def test_f195_to_f200_security_tools_run_through_authenticated_feature_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "owner passphrase is secure"})
+        token = setup["token"]
+        cases = [
+            ("enterprise_switch_management_audit", {
+                "switches": [{
+                    "switch_id":"core-01", "management_protocols":["ssh-v2","https"],
+                    "ssh_protocol_version":"2", "snmpv3_privacy_enabled":True,
+                    "aaa_enabled":True, "mfa_enabled":True, "management_acl_restricted":True,
+                    "default_accounts_disabled":True, "encrypted_config_backup":True,
+                    "syslog_tls_enabled":True, "authenticated_ntp_enabled":True
+                }]
+            }, "F195"),
+            ("enterprise_firewall_policy_audit", {
+                "firewalls": [{
+                    "firewall_id":"edge-01", "default_inbound_action":"deny",
+                    "rules":[{"rule_id":"deny-web","action":"deny","direction":"inbound",
+                              "protocol":"tcp","source_cidr":"192.0.2.0/24",
+                              "destination_cidr":"198.51.100.2/32","destination_port":443,
+                              "enabled":True,"logging_enabled":True}]
+                }]
+            }, "F196"),
+            ("enterprise_dhcp_dns_security_audit", {
+                "services":[{
+                    "service_id":"infra-01","role":"dhcp-dns","dhcp_snooping_enabled":True,
+                    "rogue_dhcp_detection_enabled":True,"trusted_dhcp_server_inventory_complete":True,
+                    "dhcp_scopes":[{"scope_id":"users","cidr":"10.20.0.0/24"}],
+                    "option82_enabled":True,"dnssec_validation_enabled":True,
+                    "upstream_transport":"dot","approved_forwarders":["resolver.example.net"],
+                    "outbound_dns_restricted":True
+                }]
+            }, "F197"),
+            ("enterprise_vpn_remote_access_audit", {
+                "profiles":[{
+                    "profile_id":"staff-vpn","protocol":"wireguard","mfa_required":True,
+                    "device_posture_required":True,"certificate_auth_required":True,
+                    "admin_portal_mfa_required":True,"logging_enabled":True,
+                    "key_rotation_enabled":True,"split_tunnel_allowlist_enforced":True,
+                    "admin_access_restricted":True,"idle_timeout_minutes":30,
+                    "certificate_lifetime_days":90
+                }]
+            }, "F198"),
+            ("enterprise_network_asset_lifecycle_audit", {
+                "as_of":"2026-11-21T12:00:00Z",
+                "assets":[{"asset_id":"router-01","support_state":"supported",
+                           "criticality":"high","internet_exposed":False,
+                           "last_security_update":"2026-11-01T00:00:00Z",
+                           "critical_vulnerability_count":0,"high_vulnerability_count":0}]
+            }, "F199"),
+            ("enterprise_network_security_evidence_report", {
+                "reports":[
+                    {"feature":"F194","summary":{"profile_count":1,"violation_count":0,"evidence_gap_count":0,"findings_by_severity":{}}, "findings":[]},
+                    *[{"feature":f"F{n}","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{}}, "findings":[]} for n in range(195,200)]
+                ]
+            }, "F200")
+        ]
+        for slug, payload, expected in cases:
+            with self.subTest(feature=slug):
+                status, response = self.request("POST", f"/api/features/{slug}", payload, token=token)
+                self.assertEqual(status, 200, response)
+                self.assertEqual(response["feature"], expected)
 
     def test_enterprise_wlan_security_audit_runs_through_authenticated_feature_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {

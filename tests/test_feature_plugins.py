@@ -906,22 +906,79 @@ PAYLOADS = {
             "pmf": "required",
             "wps_enabled": False
         }]
+    },
+    "enterprise_switch_management_audit": {
+        "switches": [{
+            "switch_id": "core-sw-01", "site_id": "hq",
+            "management_protocols": ["ssh-v2", "https", "snmpv3"],
+            "snmpv3_privacy_enabled": True, "ssh_protocol_version": "2",
+            "aaa_enabled": True, "mfa_enabled": True,
+            "management_acl_restricted": True, "default_accounts_disabled": True,
+            "encrypted_config_backup": True, "syslog_tls_enabled": True,
+            "authenticated_ntp_enabled": True
+        }]
+    },
+    "enterprise_firewall_policy_audit": {
+        "firewalls": [{
+            "firewall_id": "edge-fw-01", "site_id": "hq",
+            "default_inbound_action": "deny",
+            "rules": [{
+                "rule_id": "deny-untrusted", "action": "deny", "direction": "inbound",
+                "protocol": "tcp", "source_cidr": "192.0.2.0/24",
+                "destination_cidr": "198.51.100.10/32", "destination_port": 443,
+                "enabled": True, "logging_enabled": True
+            }]
+        }]
+    },
+    "enterprise_dhcp_dns_security_audit": {
+        "services": [{
+            "service_id": "infra-dhcp-dns-01", "site_id": "hq", "role": "dhcp-dns",
+            "enabled": True, "dhcp_snooping_enabled": True,
+            "rogue_dhcp_detection_enabled": True, "trusted_dhcp_server_inventory_complete": True,
+            "option82_enabled": True, "dhcp_scopes": [{"scope_id":"users", "cidr":"10.20.0.0/24"}],
+            "dnssec_validation_enabled": True, "upstream_transport": "dot",
+            "approved_forwarders": ["resolver.example.net"], "outbound_dns_restricted": True
+        }]
+    },
+    "enterprise_vpn_remote_access_audit": {
+        "profiles": [{
+            "profile_id": "staff-remote-access", "site_id": "hq", "protocol": "wireguard",
+            "mfa_required": True, "device_posture_required": True,
+            "certificate_auth_required": True, "admin_portal_mfa_required": True,
+            "logging_enabled": True, "key_rotation_enabled": True,
+            "split_tunnel_allowlist_enforced": True, "admin_access_restricted": True,
+            "idle_timeout_minutes": 30, "certificate_lifetime_days": 90
+        }]
+    },
+    "enterprise_network_asset_lifecycle_audit": {
+        "as_of": "2026-11-21T12:00:00Z",
+        "assets": [{
+            "asset_id": "core-router-01", "site_id": "hq", "criticality": "high",
+            "support_state": "supported", "internet_exposed": False,
+            "last_security_update": "2026-11-01T00:00:00Z",
+            "critical_vulnerability_count": 0, "high_vulnerability_count": 0
+        }]
+    },
+    "enterprise_network_security_evidence_report": {
+        "report_id": "feature-test-report",
+        "reports": [{"feature":"F194","status":"audited","summary":{"profile_count":1,"violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F195","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F196","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F197","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F198","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F199","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]}]
     }
+}
 }
 
 
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 191)
-        self.assertEqual(len(set(FEATURE_MODULES)), 191)
-        self.assertEqual(count(), 191)
-        self.assertEqual(len(entries), 191)
+        self.assertEqual(len(FEATURE_MODULES), 197)
+        self.assertEqual(len(set(FEATURE_MODULES)), 197)
+        self.assertEqual(count(), 197)
+        self.assertEqual(len(entries), 197)
         self.assertEqual(len({entry["slug"] for entry in entries}), 191)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194"],
+            + ["F172", "173", "174", "175", "176", "177", "178", "179", "180", "181", "182", "183", "184", "185", "186", "187", "188", "189", "190", "191", "192", "193", "194", "195", "196", "197", "198", "199", "200"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -946,6 +1003,99 @@ class FeatureCatalogTests(unittest.TestCase):
                 result = run(entry["slug"], PAYLOADS[entry["slug"]])
                 self.assertEqual(result["slug"], entry["slug"])
                 self.assertIsInstance(result["result"], dict)
+
+    def test_f195_switch_management_audit_detects_legacy_management_services(self):
+        result = run("enterprise_switch_management_audit", {
+            "switches": [{
+                "switch_id": "core-01", "management_protocols": ["ssh-v2", "telnet", "snmpv2c"],
+                "ssh_protocol_version": "2", "aaa_enabled": True, "mfa_enabled": True,
+                "management_acl_restricted": True, "default_accounts_disabled": True,
+                "encrypted_config_backup": True, "syslog_tls_enabled": True,
+                "authenticated_ntp_enabled": True
+            }]
+        })["result"]
+        codes = {item["code"] for item in result["findings"]}
+        self.assertIn("TELNET_ENABLED", codes)
+        self.assertIn("LEGACY_SNMP_ENABLED", codes)
+        self.assertEqual(result["summary"]["confirmed_violation_count"], 2)
+        self.assertNotIn("management_address", json.dumps(result))
+
+    def test_f196_firewall_audit_detects_broad_ingress_and_validates_cidrs(self):
+        result = run("enterprise_firewall_policy_audit", {
+            "firewalls": [{
+                "firewall_id": "edge-01", "default_inbound_action": "deny",
+                "rules": [{
+                    "rule_id": "broad-allow", "action": "allow", "direction": "inbound",
+                    "protocol": "any", "source_cidr": "any", "destination_cidr": "any",
+                    "destination_port": "any", "enabled": True, "logging_enabled": True,
+                    "management_plane": True
+                }]
+            }]
+        })["result"]
+        codes = {item["code"] for item in result["findings"]}
+        self.assertIn("INBOUND_ANY_ANY_ALLOW", codes)
+        self.assertIn("MANAGEMENT_INGRESS_OPEN", codes)
+        with self.assertRaisesRegex(ValueError, "CIDR"):
+            run("enterprise_firewall_policy_audit", {"firewalls": [{
+                "firewall_id": "edge-01", "rules": [{"rule_id":"bad", "source_cidr":"not-a-cidr"}]
+            }]})
+
+    def test_f197_dhcp_dns_audit_detects_overlapping_scopes_and_plain_dns(self):
+        result = run("enterprise_dhcp_dns_security_audit", {
+            "services": [{
+                "service_id": "infra-01", "role": "dhcp-dns", "site_id": "hq",
+                "dhcp_snooping_enabled": True, "rogue_dhcp_detection_enabled": True,
+                "trusted_dhcp_server_inventory_complete": True,
+                "dhcp_scopes": [{"scope_id":"a", "cidr":"10.0.0.0/24"},{"scope_id":"b", "cidr":"10.0.0.128/25"}],
+                "option82_enabled": True, "dnssec_validation_enabled": False,
+                "upstream_transport": "plain", "approved_forwarders": ["1.1.1.1"],
+                "outbound_dns_restricted": True
+            }]
+        })["result"]
+        codes = {item["code"] for item in result["findings"]}
+        self.assertIn("DHCP_SCOPE_OVERLAP", codes)
+        self.assertIn("DNSSEC_VALIDATION_DISABLED", codes)
+        self.assertIn("DNS_UPSTREAM_UNENCRYPTED", codes)
+        self.assertEqual(result["overlapping_scope_pair_count"], 1)
+
+    def test_f198_vpn_audit_detects_legacy_protocol_and_missing_mfa(self):
+        result = run("enterprise_vpn_remote_access_audit", {
+            "profiles": [{
+                "profile_id":"legacy-vpn", "protocol":"pptp",
+                "mfa_required":False, "admin_portal_mfa_required":False,
+                "idle_timeout_minutes":600
+            }]
+        })["result"]
+        codes = {item["code"] for item in result["findings"]}
+        self.assertIn("LEGACY_VPN_PROTOCOL", codes)
+        self.assertIn("VPN_MFA_NOT_REQUIRED", codes)
+        self.assertIn("VPN_ADMIN_PORTAL_MFA_NOT_REQUIRED", codes)
+        self.assertIn("VPN_IDLE_TIMEOUT_TOO_LONG", codes)
+
+    def test_f199_asset_lifecycle_audit_flags_unsupported_exposed_assets(self):
+        result = run("enterprise_network_asset_lifecycle_audit", {
+            "as_of":"2026-11-21T12:00:00Z",
+            "assets":[{
+                "asset_id":"legacy-edge", "support_state":"end-of-life", "criticality":"critical",
+                "internet_exposed":True, "last_security_update":"2025-01-01T00:00:00Z",
+                "critical_vulnerability_count":2, "high_vulnerability_count":1
+            }]
+        })["result"]
+        codes = {item["code"] for item in result["findings"]}
+        self.assertIn("ASSET_END_OF_LIFE", codes)
+        self.assertIn("UNSUPPORTED_ASSET_INTERNET_EXPOSED", codes)
+        self.assertIn("ASSET_CRITICAL_VULNERABILITIES", codes)
+
+    def test_f200_consolidated_security_report_is_deterministic_and_privacy_minimised(self):
+        payload = PAYLOADS["enterprise_network_security_evidence_report"]
+        first = run("enterprise_network_security_evidence_report", payload)["result"]
+        second = run("enterprise_network_security_evidence_report", payload)["result"]
+        self.assertEqual(first["sha256"], second["sha256"])
+        self.assertEqual(first["summary"]["audit_count"], 6)
+        self.assertNotIn("source-secret-description", json.dumps(first))
+        duplicate = {**payload, "reports": payload["reports"] + [payload["reports"][0]]}
+        with self.assertRaisesRegex(ValueError, "duplicate report"):
+            run("enterprise_network_security_evidence_report", duplicate)
 
     def test_wpa3_and_six_ghz_parsing(self):
         result = run("parse_iw_scan", PAYLOADS["parse_iw_scan"])["result"]["networks"][0]

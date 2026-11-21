@@ -1557,5 +1557,61 @@
       "profiles": "Up to 1024 normalized WLAN profile records with purpose, security mode, EAP, PMF, RADIUS and segmentation evidence",
       "policy": "Optional policy overrides for minimum enterprise security, approved EAP methods, RADIUS redundancy and required controls"
     }
+  },
+  {
+    "slug": "enterprise_switch_management_audit",
+    "name": "Enterprise switch management-plane audit",
+    "category": "Security",
+    "description": "Audit supplied switch evidence for secure management transports, SNMPv3 privacy, AAA/MFA, management ACLs, default accounts, encrypted backups, TLS syslog and authenticated time. Reports missing evidence separately and never returns secrets or management addresses.",
+    "parameters": {
+      "switches": "Up to 256 switch records with management protocols and security-control evidence."
+    }
+  },
+  {
+    "slug": "enterprise_firewall_policy_audit",
+    "name": "Enterprise firewall policy audit",
+    "category": "Security",
+    "description": "Review supplied inbound/outbound firewall defaults and rules for broad any/any access, exposed management ingress, duplicate policies and missing logging. Does not connect to firewalls or claim vendor-specific ACL shadowing.",
+    "parameters": {
+      "firewalls": "Up to 64 firewall records with default actions and up to 512 ordered rules each."
+    }
+  },
+  {
+    "slug": "enterprise_dhcp_dns_security_audit",
+    "name": "Enterprise DHCP and DNS security audit",
+    "category": "Security",
+    "description": "Review DHCP snooping, rogue-server detection, trusted server inventories, Option 82, overlapping scopes, DNSSEC and encrypted upstream resolvers from supplied evidence only.",
+    "parameters": {
+      "services": "Up to 256 DHCP/DNS service records with bounded scopes and resolver configuration evidence."
+    }
+  },
+  {
+    "slug": "enterprise_vpn_remote_access_audit",
+    "name": "Enterprise VPN and remote access audit",
+    "category": "Security",
+    "description": "Audit supplied remote-access profiles for legacy protocols, MFA, device posture, certificate authentication, split tunnelling, administrator restrictions, logging, key rotation and session timeout.",
+    "parameters": {
+      "profiles": "Up to 256 VPN profile records with identity, protocol and security-control evidence."
+    }
+  },
+  {
+    "slug": "enterprise_network_asset_lifecycle_audit",
+    "name": "Enterprise network asset lifecycle audit",
+    "category": "Security",
+    "description": "Assess supplied network asset inventory for vendor support lifecycle, stale security updates, confirmed exposure and reported high/critical vulnerability counts. Never invents CVEs or queries outside vulnerability feeds.",
+    "parameters": {
+      "as_of": "Timezone-aware ISO-8601 assessment timestamp.",
+      "assets": "Up to 2048 asset records with support state, criticality, patch and exposure evidence."
+    }
+  },
+  {
+    "slug": "enterprise_network_security_evidence_report",
+    "name": "Enterprise network security evidence report",
+    "category": "Security",
+    "description": "Combine F194-F199 WLAN, switch, firewall, DHCP/DNS, VPN and asset lifecycle audits into a deterministic, privacy-minimised report with evidence gaps, severity rollups and a SHA-256 integrity digest.",
+    "parameters": {
+      "report_id": "Optional stable 1-64 character report identifier.",
+      "reports": "One to six F194-F199 audit result objects."
+    }
   }
 ]
