@@ -102,3 +102,26 @@ floor-plan image is not. The browser preview uses a temporary object URL and
 does not upload that image to the API. A reopened report therefore displays
 its saved AP and measurement coordinates over the coordinate grid until the
 operator imports the corresponding floor-plan image again.
+
+
+## Repeat-survey measurement context (F204)
+
+F203 accepts an optional measurement_context object. Supported caller-declared
+fields are device_model, radio_band, channel, channel_width_mhz, antenna_type,
+antenna_orientation_deg, antenna_height_m and calibration_id. These values are
+retained in the report to describe the measurement method; they are not
+cryptographically attested. Repeat surveys should use the same calibrated
+device, radio band/channel, antenna type/orientation and collection height
+where possible.
+
+The RF survey comparator is POST /api/sites/rf-surveys/compare with site_id,
+baseline_report_id and current_report_id. It reads both immutable saved reports
+from that site, pairs the same AP IDs at unchanged AP placements and the exact
+same survey coordinates, and reports measured RSSI deltas. Reports must have
+the same site, floor, floor-plan identifier/dimensions and distance scale;
+the baseline must predate the current report. APs that moved and unmatched
+survey points are excluded.
+
+The comparison reports missing or mismatched device, radio, antenna and
+calibration context as limited comparability. It does not assert why a signal
+changed, infer interference or make a coverage/service-level prediction.

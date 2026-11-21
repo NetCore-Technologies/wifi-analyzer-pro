@@ -108,6 +108,56 @@ def _trend(observations: list[dict]) -> dict:
     }
 
 
+def _measurement_context(value: object) -> dict:
+    """Validate optional RF-survey context used for longitudinal comparability."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("measurement_context must be an object")
+    allowed = {
+        "device_model", "radio_band", "channel", "channel_width_mhz",
+        "antenna_type", "antenna_orientation_deg", "antenna_height_m",
+        "calibration_id",
+    }
+    unknown = set(value) - allowed
+    if unknown:
+        raise ValueError("measurement_context contains unsupported fields: " + ", ".join(sorted(unknown)))
+    context = {}
+    for field in ("device_model", "antenna_type", "calibration_id"):
+        item = value.get(field)
+        if item is None or item == "":
+            continue
+        if not isinstance(item, str) or len(item.strip()) > 128 or any(ord(char) < 32 or ord(char) == 127 for char in item):
+            raise ValueError(f"measurement_context.{field} must be a printable string of at most 128 characters")
+        context[field] = item.strip()
+    band = value.get("radio_band")
+    if band is not None:
+        if band not in {"2.4GHz", "5GHz", "6GHz"}:
+            raise ValueError("measurement_context.radio_band must be 2.4GHz, 5GHz or 6GHz")
+        context["radio_band"] = band
+    channel = value.get("channel")
+    if channel is not None:
+        if isinstance(channel, bool) or not isinstance(channel, int) or not 1 <= channel <= 233:
+            raise ValueError("measurement_context.channel must be an integer from 1 to 233")
+        context["channel"] = channel
+    width = value.get("channel_width_mhz")
+    if width is not None:
+        if isinstance(width, bool) or not isinstance(width, int) or width not in {5, 10, 20, 40, 80, 160, 320}:
+            raise ValueError("measurement_context.channel_width_mhz must be a supported channel width")
+        context["channel_width_mhz"] = width
+    orientation = value.get("antenna_orientation_deg")
+    if orientation is not None:
+        context["antenna_orientation_deg"] = _number(
+            orientation, "measurement_context.antenna_orientation_deg", 0.0, 359.9,
+        )
+    height = value.get("antenna_height_m")
+    if height is not None:
+        context["antenna_height_m"] = _number(
+            height, "measurement_context.antenna_height_m", 0.1, 20.0,
+        )
+    return context
+
+
 def run(payload: dict) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("payload must be an object")
@@ -120,6 +170,7 @@ def run(payload: dict) -> dict:
     floor_id = _identifier(floorplan.get("floor_id"), "floorplan.floor_id")
     width_px = _number(floorplan.get("width_px"), "floorplan.width_px", 100.0, MAX_COORDINATE_PX)
     height_px = _number(floorplan.get("height_px"), "floorplan.height_px", 100.0, MAX_COORDINATE_PX)
+    measurement_context = _measurement_context(payload.get("measurement_context"))
 
     references = floorplan.get("scale_references")
     if not isinstance(references, list) or not 1 <= len(references) <= MAX_SCALE_REFERENCES:
@@ -295,6 +346,7 @@ def run(payload: dict) -> dict:
         "floorplan_id": floorplan_id,
         "floor_id": floor_id,
         "floorplan": {"width_px": width_px, "height_px": height_px},
+        "measurement_context": measurement_context,
         "coordinate_system": "operator-supplied pixel coordinates mapped to metres using median scale references",
         "scale": {
             "metres_per_pixel": round(metres_per_pixel, 8),
@@ -333,6 +385,7 @@ FEATURE = {
         "survey_samples": "1-8192 timestamped same-floor survey points; 20,000 per-AP readings total maximum",
         "as_of": "Optional timezone-aware assessment time; defaults to server UTC time",
         "max_age_days": "1-30 day freshness window; defaults to 7",
+        "measurement_context": "Optional device/radio/antenna/calibration metadata for comparing repeat surveys; caller-declared, not attested",
     },
     "run": run,
 }

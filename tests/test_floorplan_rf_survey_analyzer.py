@@ -126,6 +126,34 @@ class FloorplanRfSurveyAnalyzerTests(unittest.TestCase):
             with self.subTest(pattern=pattern), self.assertRaisesRegex(ValueError, pattern):
                 run("floorplan_rf_survey_analyzer", candidate)
 
+    def test_f203_retains_validated_measurement_context_for_repeat_surveys(self):
+        payload = copy.deepcopy(_PAYLOAD)
+        payload["measurement_context"] = {
+            "device_model": "SurveyClient X",
+            "radio_band": "5GHz",
+            "channel": 36,
+            "channel_width_mhz": 80,
+            "antenna_type": "integrated",
+            "antenna_orientation_deg": 90,
+            "antenna_height_m": 1.2,
+            "calibration_id": "cal-2026-11",
+        }
+        result = run("floorplan_rf_survey_analyzer", payload)["result"]
+        self.assertEqual(result["measurement_context"], payload["measurement_context"])
+
+    def test_f203_rejects_unsupported_or_malformed_measurement_context(self):
+        for context, message in [
+            ({"radio_band": "unknown"}, "radio_band"),
+            ({"channel": True}, "channel"),
+            ({"channel_width_mhz": 7}, "channel_width_mhz"),
+            ({"antenna_height_m": 0}, "antenna_height_m"),
+            ({"unexpected": "field"}, "unsupported fields"),
+        ]:
+            payload = copy.deepcopy(_PAYLOAD)
+            payload["measurement_context"] = context
+            with self.subTest(context=context), self.assertRaisesRegex(ValueError, message):
+                run("floorplan_rf_survey_analyzer", payload)
+
     def test_f203_rejects_unknown_aps_duplicate_readings_and_invalid_source(self):
         payload = copy.deepcopy(_PAYLOAD)
         payload["survey_samples"][0]["measurements"][0]["ap_id"] = "missing"

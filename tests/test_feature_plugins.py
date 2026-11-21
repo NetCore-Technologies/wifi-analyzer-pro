@@ -1035,6 +1035,79 @@ PAYLOADS = {
             }
         ]
     },
+    "rf_survey_report_comparator": {
+        "site_id": "head-office",
+        "baseline_report": {
+            "report": {
+                "survey_id": "survey-older",
+                "site_id": "head-office",
+                "floorplan_id": "hq-level-1",
+                "floor_id": "level-1",
+                "label": "November baseline",
+                "created_at": "2026-11-01T10:00:00Z"
+            },
+            "result": {
+                "status": "analysed",
+                "site_id": "head-office",
+                "floorplan_id": "hq-level-1",
+                "floor_id": "level-1",
+                "floorplan": {"width_px": 1000, "height_px": 800},
+                "scale": {"metres_per_pixel": 0.02},
+                "measurement_context": {
+                    "device_model": "SurveyClient X",
+                    "radio_band": "5GHz",
+                    "channel": 36,
+                    "channel_width_mhz": 80,
+                    "antenna_type": "integrated",
+                    "antenna_orientation_deg": 90.0,
+                    "antenna_height_m": 1.2,
+                    "calibration_id": "cal-2026-11"
+                },
+                "access_points": [{"ap_id": "ap-01", "x_px": 100, "y_px": 100}],
+                "measurements": [
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 200, "survey_y_px": 100, "rssi_dbm": -50},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 300, "survey_y_px": 100, "rssi_dbm": -60},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 400, "survey_y_px": 100, "rssi_dbm": -70},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 500, "survey_y_px": 100, "rssi_dbm": -65}
+                ]
+            }
+        },
+        "current_report": {
+            "report": {
+                "survey_id": "survey-current",
+                "site_id": "head-office",
+                "floorplan_id": "hq-level-1",
+                "floor_id": "level-1",
+                "label": "November current",
+                "created_at": "2026-11-21T10:00:00Z"
+            },
+            "result": {
+                "status": "analysed",
+                "site_id": "head-office",
+                "floorplan_id": "hq-level-1",
+                "floor_id": "level-1",
+                "floorplan": {"width_px": 1000, "height_px": 800},
+                "scale": {"metres_per_pixel": 0.02},
+                "measurement_context": {
+                    "device_model": "SurveyClient X",
+                    "radio_band": "5GHz",
+                    "channel": 36,
+                    "channel_width_mhz": 80,
+                    "antenna_type": "integrated",
+                    "antenna_orientation_deg": 90.0,
+                    "antenna_height_m": 1.2,
+                    "calibration_id": "cal-2026-11"
+                },
+                "access_points": [{"ap_id": "ap-01", "x_px": 100, "y_px": 100}],
+                "measurements": [
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 200, "survey_y_px": 100, "rssi_dbm": -56},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 300, "survey_y_px": 100, "rssi_dbm": -66},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 400, "survey_y_px": 100, "rssi_dbm": -76},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1", "observed_at": "2026-11-01T09:00:00Z", "evidence_source": "survey", "survey_x_px": 500, "survey_y_px": 100, "rssi_dbm": -71}
+                ]
+            }
+        }
+    },
     "client_experience_slo_window_comparator": {
             "baseline": {
                     "as_of": "2026-11-13T12:00:00Z",
@@ -1215,15 +1288,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 203)
-        self.assertEqual(len(set(FEATURE_MODULES)), 203)
-        self.assertEqual(count(), 203)
-        self.assertEqual(len(entries), 203)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 203)
+        self.assertEqual(len(FEATURE_MODULES), 204)
+        self.assertEqual(len(set(FEATURE_MODULES)), 204)
+        self.assertEqual(count(), 204)
+        self.assertEqual(len(entries), 204)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 204)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F291", "F292", "F293"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F291", "F292", "F293"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1613,6 +1686,14 @@ class FeatureCatalogTests(unittest.TestCase):
             run("client_roam_transaction_analyzer", {"events": [bad_reason]})
         with self.assertRaisesRegex(ValueError, "slow_roam_threshold_ms"):
             run("client_roam_transaction_analyzer", {"events": [payload["events"][0]], "slow_roam_threshold_ms": 1})
+
+    def test_f204_compares_saved_rf_survey_reports_by_site_and_coordinate(self):
+        result = run("rf_survey_report_comparator", PAYLOADS["rf_survey_report_comparator"])["result"]
+        self.assertEqual(result["status"], "compared")
+        self.assertEqual(result["comparability"]["status"], "comparable")
+        self.assertEqual(result["summary"]["matched_point_count"], 4)
+        self.assertEqual(result["summary"]["median_delta_rssi_db"], -6)
+        self.assertEqual(result["summary"]["weaker_by_threshold_count"], 4)
 
     def test_f203_floorplan_rf_survey_is_registered_and_site_scoped(self):
         result = run("floorplan_rf_survey_analyzer", PAYLOADS["floorplan_rf_survey_analyzer"])["result"]

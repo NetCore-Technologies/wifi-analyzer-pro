@@ -1087,8 +1087,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 203)
-        self.assertEqual(len(catalog["features"]), 203)
+        self.assertEqual(catalog["count"], 204)
+        self.assertEqual(len(catalog["features"]), 204)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -3077,7 +3077,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 203)
+        self.assertEqual(catalog["count"], 204)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,
@@ -3656,9 +3656,44 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(saved["result"]["accepted_measurement_count"], 1)
         self.assertEqual(len(server.AUDIT.list_events(action="rf_survey.saved")), 1)
 
+        baseline_result = dict(saved["result"])
+        baseline_result["accepted_sample_count"] = 3
+        first_measurement = saved["result"]["measurements"][0]
+        baseline_result["measurements"] = [
+            {**first_measurement, "survey_x_px": 200, "rssi_dbm": -50},
+            {**first_measurement, "survey_x_px": 300, "rssi_dbm": -60},
+            {**first_measurement, "survey_x_px": 400, "rssi_dbm": -70},
+        ]
+        baseline = server.RF_SURVEYS.save(
+            "head-office", baseline_result, label="Older comparison baseline",
+        )
+        with server.RF_SURVEYS._db() as db:
+            db.execute(
+                "UPDATE rf_survey_reports SET created_at = ? WHERE survey_id = ?",
+                ("2026-11-01T10:00:00+00:00", baseline["survey_id"]),
+            )
+        status, comparison = self.request("POST", "/api/sites/rf-surveys/compare", {
+            "site_id": "head-office",
+            "baseline_report_id": baseline["survey_id"],
+            "current_report_id": saved["report"]["survey_id"],
+        }, token=token)
+        self.assertEqual(status, 200, comparison)
+        self.assertEqual(comparison["feature"], "F204")
+        self.assertEqual(comparison["result"]["status"], "insufficient_overlap")
+        self.assertEqual(comparison["result"]["summary"]["matched_point_count"], 1)
+        self.assertEqual(comparison["result"]["comparability"]["status"], "limited")
+        self.assertEqual(len(server.AUDIT.list_events(action="rf_survey.compared")), 1)
+
+        status, cross_site_comparison = self.request("POST", "/api/sites/rf-surveys/compare", {
+            "site_id": "branch",
+            "baseline_report_id": baseline["survey_id"],
+            "current_report_id": saved["report"]["survey_id"],
+        }, token=token)
+        self.assertEqual(status, 403, cross_site_comparison)
+
         status, history = self.request("GET", "/api/sites/rf-surveys?site_id=head-office", token=token)
         self.assertEqual(status, 200, history)
-        self.assertEqual(history["report_count"], 1)
+        self.assertEqual(history["report_count"], 2)
         report_id = saved["report"]["survey_id"]
         self.assertEqual(history["reports"][0]["survey_id"], report_id)
 

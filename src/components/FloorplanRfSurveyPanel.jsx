@@ -4,7 +4,7 @@ import {
   CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
-  AlertCircle, Download, FileImage, FileUp, History, Info, MapPinned, Play, RefreshCw, Save, ShieldCheck,
+  Activity, AlertCircle, Download, FileImage, FileUp, History, Info, MapPinned, Play, RefreshCw, Save, ShieldCheck,
 } from 'lucide-react';
 import { apiBase, apiFetch } from '../lib/api.js';
 
@@ -170,6 +170,11 @@ export default function FloorplanRfSurveyPanel() {
   const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState('');
   const [historyCanManage, setHistoryCanManage] = useState(false);
+  const [historyCanCompare, setHistoryCanCompare] = useState(false);
+  const [comparison, setComparison] = useState(null);
+  const [compareBusy, setCompareBusy] = useState(false);
+  const [compareBaselineId, setCompareBaselineId] = useState('');
+  const [compareCurrentId, setCompareCurrentId] = useState('');
   const [deleteTarget, setDeleteTarget] = useState('');
   const [activeReport, setActiveReport] = useState(null);
   const [reportLabel, setReportLabel] = useState('');
@@ -205,10 +210,16 @@ export default function FloorplanRfSurveyPanel() {
       if (!response.ok) throw new Error(data.error || 'Unable to load saved RF surveys for this site.');
       if (!Array.isArray(data.reports)) throw new Error('The RF survey history response is invalid.');
       setHistoryReports(data.reports);
+      setCompareBaselineId(current => data.reports.some(report => report.survey_id === current)
+        ? current : (data.reports[1]?.survey_id || ''));
+      setCompareCurrentId(current => data.reports.some(report => report.survey_id === current)
+        ? current : (data.reports[0]?.survey_id || ''));
       setHistoryCanManage(data.can_manage === true);
+      setHistoryCanCompare(data.can_compare === true);
     } catch (loadError) {
       setHistoryReports([]);
       setHistoryCanManage(false);
+      setHistoryCanCompare(false);
       setHistoryError(loadError.message || 'Unable to load RF survey history.');
     } finally {
       setHistoryBusy(false);
@@ -231,6 +242,7 @@ export default function FloorplanRfSurveyPanel() {
         throw new Error('The saved RF survey report is incomplete.');
       }
       setResult(data.result);
+      setComparison(null);
       setActiveReport(data.report || report);
       setReportLabel(data.report?.label || report.label || '');
       // The original floor-plan image remains local and is not part of a saved report.
@@ -241,6 +253,47 @@ export default function FloorplanRfSurveyPanel() {
       setHistoryError(loadError.message || 'Unable to retrieve the saved RF survey.');
     } finally {
       setHistoryBusy(false);
+    }
+  }
+
+  async function compareSavedReports() {
+    if (!historyCanCompare || historyReports.length < 2 || !historySiteId
+      || !compareBaselineId || !compareCurrentId || compareBaselineId === compareCurrentId) return;
+    const baseline = historyReports.find(report => report.survey_id === compareBaselineId);
+    const current = historyReports.find(report => report.survey_id === compareCurrentId);
+    if (!baseline || !current) {
+      setHistoryError('Select two reports that are still present in this site history.');
+      return;
+    }
+    if (Date.parse(baseline.created_at) >= Date.parse(current.created_at)) {
+      setHistoryError('The baseline report must be older than the current report.');
+      return;
+    }
+    setCompareBusy(true);
+    setHistoryError('');
+    setComparison(null);
+    try {
+      const response = await apiFetch(apiBase() + '/api/sites/rf-surveys/compare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          site_id: historySiteId,
+          baseline_report_id: baseline.survey_id,
+          current_report_id: current.survey_id,
+        }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to compare the latest saved surveys.');
+      if (!data.result || !data.result.summary || !Array.isArray(data.result.access_points)) {
+        throw new Error('The RF survey comparison response is invalid.');
+      }
+      setComparison(data.result);
+      if (data.audit_status) setHistoryError(data.audit_status);
+    } catch (compareError) {
+      setHistoryError(compareError.message || 'Unable to compare saved RF surveys.');
+    } finally {
+      setCompareBusy(false);
     }
   }
 
@@ -265,6 +318,7 @@ export default function FloorplanRfSurveyPanel() {
         setActiveReport(null);
         setResult(null);
       }
+      setComparison(null);
       setDeleteTarget('');
       await loadHistory();
       if (data.audit_status) setHistoryError(data.audit_status);
@@ -280,6 +334,7 @@ export default function FloorplanRfSurveyPanel() {
     setError('');
     setResult(null);
     setActiveReport(null);
+    setComparison(null);
     try {
       const payload = JSON.parse(payloadText);
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
@@ -338,6 +393,7 @@ export default function FloorplanRfSurveyPanel() {
       setError('');
       setResult(null);
       setActiveReport(null);
+      setComparison(null);
     } catch {
       setError('The selected survey file is not valid JSON.');
     }
@@ -365,6 +421,7 @@ export default function FloorplanRfSurveyPanel() {
     setPayloadText(JSON.stringify(payload, null, 2));
     setHistorySiteId(payload.site_id);
     setReportLabel('');
+    setComparison(null);
     setFileName('');
     setSamplePayload(true);
     setError('');
@@ -417,13 +474,48 @@ export default function FloorplanRfSurveyPanel() {
             <div className="text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" /> Saved site surveys</div>
             <div className="text-xs text-muted-foreground mt-0.5">Site: {historySiteId || 'not selected'} · site-scoped access</div>
           </div>
-          <button type="button" onClick={() => void loadHistory()} disabled={historyBusy || !historySiteId}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${historyBusy ? 'animate-spin' : ''}`} /> Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {historyCanCompare && historyReports.length >= 2 && (
+              <button type="button" onClick={() => void compareSavedReports()}
+                disabled={historyBusy || compareBusy || !compareBaselineId || !compareCurrentId || compareBaselineId === compareCurrentId}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs disabled:opacity-50">
+                <Activity className={`w-3.5 h-3.5 ${compareBusy ? 'animate-pulse' : ''}`} /> {compareBusy ? 'Comparing…' : 'Compare selected surveys'}
+              </button>
+            )}
+            <button type="button" onClick={() => void loadHistory()} disabled={historyBusy || !historySiteId}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground disabled:opacity-50">
+              <RefreshCw className={`w-3.5 h-3.5 ${historyBusy ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
         </div>
         {historyError && <div role="alert" className="text-xs text-amber-400">{historyError}</div>}
         {historyBusy && <div className="text-xs text-muted-foreground">Loading site reports…</div>}
+        {historyCanCompare && historyReports.length >= 2 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="text-xs text-muted-foreground">
+              Baseline (older report)
+              <select value={compareBaselineId} onChange={event => { setCompareBaselineId(event.target.value); setComparison(null); }}
+                disabled={historyBusy || compareBusy}
+                className="mt-1 w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground">
+                <option value="">Select baseline</option>
+                {historyReports.map(report => (
+                  <option key={report.survey_id} value={report.survey_id}>{report.label} · {new Date(report.created_at).toLocaleString()}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-muted-foreground">
+              Current (newer report)
+              <select value={compareCurrentId} onChange={event => { setCompareCurrentId(event.target.value); setComparison(null); }}
+                disabled={historyBusy || compareBusy}
+                className="mt-1 w-full rounded-lg border border-border bg-background/70 px-3 py-2 text-sm text-foreground">
+                <option value="">Select current report</option>
+                {historyReports.map(report => (
+                  <option key={report.survey_id} value={report.survey_id}>{report.label} · {new Date(report.created_at).toLocaleString()}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
         {!historyBusy && historyReports.length === 0 && !historyError && <div className="text-xs text-muted-foreground">No saved reports for this site yet.</div>}
         {historyReports.length > 0 && (
           <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -460,6 +552,60 @@ export default function FloorplanRfSurveyPanel() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {comparison && (
+          <div className="rounded-xl border border-border bg-secondary/20 p-3 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-foreground">Longitudinal RF comparison</div>
+              <span className={`text-xs ${comparison.status === 'compared' ? 'text-primary' : 'text-amber-400'}`}>
+                {comparison.status.replaceAll('_', ' ')} · {comparison.comparability.status} comparability
+              </span>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {comparison.baseline_report.label} → {comparison.current_report.label}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="rounded-lg bg-background/50 p-2"><div className="text-[11px] text-muted-foreground">Matched points</div><div className="text-lg font-mono font-semibold text-foreground">{comparison.summary.matched_point_count}</div></div>
+              <div className="rounded-lg bg-background/50 p-2"><div className="text-[11px] text-muted-foreground">Median RSSI delta</div><div className="text-lg font-mono font-semibold text-foreground">{comparison.summary.median_delta_rssi_db == null ? '—' : comparison.summary.median_delta_rssi_db + ' dB'}</div></div>
+              <div className="rounded-lg bg-background/50 p-2"><div className="text-[11px] text-muted-foreground">Weaker points</div><div className="text-lg font-mono font-semibold text-rose-400">{comparison.summary.weaker_by_threshold_count}</div></div>
+              <div className="rounded-lg bg-background/50 p-2"><div className="text-[11px] text-muted-foreground">Stronger points</div><div className="text-lg font-mono font-semibold text-emerald-400">{comparison.summary.stronger_by_threshold_count}</div></div>
+            </div>
+            {comparison.comparability.missing_context_fields.length > 0 && (
+              <div className="text-xs text-amber-400">Missing comparison context: {comparison.comparability.missing_context_fields.join(', ')}</div>
+            )}
+            {comparison.comparability.mismatched_context_fields.length > 0 && (
+              <div className="text-xs text-amber-400">Context differs between surveys: {comparison.comparability.mismatched_context_fields.join(', ')}</div>
+            )}
+            {(comparison.comparability.moved_or_repositioned_ap_ids.length > 0
+              || comparison.comparability.added_ap_ids.length > 0
+              || comparison.comparability.removed_ap_ids.length > 0) && (
+              <div className="space-y-1 text-xs text-muted-foreground">
+                {comparison.comparability.moved_or_repositioned_ap_ids.length > 0 && <div>Repositioned APs excluded: {comparison.comparability.moved_or_repositioned_ap_ids.join(', ')}</div>}
+                {comparison.comparability.added_ap_ids.length > 0 && <div>New APs in current survey: {comparison.comparability.added_ap_ids.join(', ')}</div>}
+                {comparison.comparability.removed_ap_ids.length > 0 && <div>APs absent from current survey: {comparison.comparability.removed_ap_ids.join(', ')}</div>}
+              </div>
+            )}
+            {comparison.access_points.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="text-muted-foreground border-b border-border">
+                    <tr><th className="py-2 pr-3">AP</th><th className="py-2 pr-3">Matched points</th><th className="py-2 pr-3">Median Δ RSSI</th><th className="py-2">Weaker / stronger</th></tr>
+                  </thead>
+                  <tbody>
+                    {comparison.access_points.map(ap => (
+                      <tr key={ap.ap_id} className="border-b border-border/50 last:border-0">
+                        <td className="py-2 pr-3 font-mono text-foreground">{ap.ap_id}</td>
+                        <td className="py-2 pr-3 text-muted-foreground">{ap.matched_points}</td>
+                        <td className="py-2 pr-3 font-mono text-foreground">{ap.median_delta_rssi_db == null ? '—' : ap.median_delta_rssi_db + ' dB'}</td>
+                        <td className="py-2 text-muted-foreground">{ap.weaker_by_threshold_count} / {ap.stronger_by_threshold_count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground">{comparison.comparability.limitations.join(' ')}</p>
           </div>
         )}
       </section>

@@ -1651,7 +1651,21 @@
       "access_points": "1-256 AP identities with same-floor pixel coordinates",
       "survey_samples": "1-8192 timestamped same-floor survey points; 20,000 per-AP readings total maximum",
       "as_of": "Optional timezone-aware assessment time; defaults to server UTC time",
-      "max_age_days": "1-30 day freshness window; defaults to 7"
+      "max_age_days": "1-30 day freshness window; defaults to 7",
+      "measurement_context": "Optional device/radio/antenna/calibration metadata for repeat-survey comparability; caller-declared, not attested"
+    }
+  },
+  {
+    "slug": "rf_survey_report_comparator",
+    "name": "RF survey report comparator",
+    "category": "RF assurance",
+    "description": "Compare two retained F203 surveys at identical AP placements and floor-plan coordinates; report measured RSSI deltas, overlap, and device/antenna context limitations without inferring causation.",
+    "parameters": {
+      "site_id": "The site that owns both saved reports",
+      "baseline_report": "Older report metadata and immutable F203 result",
+      "current_report": "Newer report metadata and immutable F203 result",
+      "change_threshold_db": "Optional threshold for weaker/stronger measured points; defaults to 5 dB",
+      "minimum_matched_points": "Minimum exact AP/location pairs for a compared status; defaults to 3"
     }
   },
   {

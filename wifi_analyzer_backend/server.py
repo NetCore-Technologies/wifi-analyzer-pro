@@ -1494,6 +1494,7 @@ class Handler(BaseHTTPRequestHandler):
                     "report_count": len(reports),
                     "retention_days": RF_SURVEYS.retention_days,
                     "can_manage": AUTH.has_permission(self.bearer_token(), "sites.manage"),
+                    "can_compare": AUTH.has_permission(self.bearer_token(), "diagnostics.run"),
                 })
             elif path.startswith("/api/sites/rf-surveys/"):
                 survey_id = unquote(path[len("/api/sites/rf-surveys/"):])
@@ -1651,6 +1652,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sites/rf-surveys":
             if not self.require_auth("diagnostics.run") or not self.require_auth("sites.manage"):
                 return
+        if path == "/api/sites/rf-surveys/compare" and not self.require_auth("diagnostics.run"):
+            return
 
         # Authenticate diagnostic controls before rate limiting them, but rate
         # limit login/setup before parsing or deriving expensive credentials.
@@ -1667,6 +1670,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/sites/audit": ("api.site.audit", False),
             "/api/trusted-aps": ("api.trusted_aps.manage", False),
             "/api/sites/rf-surveys": ("api.rf_surveys.manage", False),
+            "/api/sites/rf-surveys/compare": ("api.rf_surveys.compare", False),
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
@@ -1700,6 +1704,109 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/sites/rf-surveys/compare":
+            site_id = payload.get("site_id")
+            baseline_id = payload.get("baseline_report_id")
+            current_id = payload.get("current_report_id")
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            if not isinstance(baseline_id, str) or not isinstance(current_id, str):
+                self.send_json({"error": "baseline_report_id and current_report_id are required"}, 400)
+                return
+            fingerprint = hashlib.sha256(
+                json.dumps([site_id, baseline_id, current_id], separators=(",", ":")).encode("utf-8")
+            ).hexdigest()[:24]
+            metadata = {"site_id": site_id, "comparison_fingerprint": fingerprint}
+            requested = self.audit_event(
+                "rf_survey.compare_requested",
+                target_type="rf_survey_comparison",
+                target_id=fingerprint,
+                metadata=metadata,
+            )
+            if requested is None:
+                self.send_json({
+                    "error": "The security audit ledger is unavailable; no comparison was run"
+                }, 503)
+                return
+            meter = None
+            try:
+                baseline = RF_SURVEYS.get(site_id, baseline_id)
+                current = RF_SURVEYS.get(site_id, current_id)
+                if baseline is None or current is None:
+                    self.audit_event(
+                        "rf_survey.compare_not_found",
+                        target_type="rf_survey_comparison",
+                        target_id=fingerprint,
+                        outcome="failure",
+                        metadata=metadata,
+                    )
+                    self.send_json({"error": "One or both RF survey reports were not found in this site"}, 404)
+                    return
+                with BILLING_QUOTA_LOCK:
+                    meter = BILLING.consume_monthly_feature_run()
+                    if not meter["allowed"]:
+                        self.audit_event(
+                            "rf_survey.compare_rejected",
+                            target_type="rf_survey_comparison",
+                            target_id=fingerprint,
+                            outcome="failure",
+                            metadata=metadata,
+                        )
+                        self.send_json({
+                            "error": "The monthly diagnostic allowance has been reached",
+                            "code": "plan_limit_reached",
+                            **meter,
+                            "upgrade_required": True,
+                        }, 402)
+                        return
+                    try:
+                        comparison = run_feature("rf_survey_report_comparator", {
+                            "site_id": site_id,
+                            "baseline_report": baseline,
+                            "current_report": current,
+                        })
+                    except Exception:
+                        BILLING.refund_monthly_feature_run(meter["period"])
+                        raise
+            except ValueError as error:
+                self.audit_event(
+                    "rf_survey.compare_failed",
+                    target_type="rf_survey_comparison",
+                    target_id=fingerprint,
+                    outcome="failure",
+                    metadata=metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception:
+                self.audit_event(
+                    "rf_survey.compare_failed",
+                    target_type="rf_survey_comparison",
+                    target_id=fingerprint,
+                    outcome="failure",
+                    metadata=metadata,
+                )
+                print("[RF SURVEY COMPARE ERROR] Could not compare retained survey reports")
+                self.send_json({"error": "RF survey comparison failed"}, 503)
+                return
+            outcome = comparison.get("result", {})
+            completed = self.audit_event(
+                "rf_survey.compared",
+                target_type="rf_survey_comparison",
+                target_id=fingerprint,
+                metadata={
+                    **metadata,
+                    "matched_point_count": outcome.get("summary", {}).get("matched_point_count", 0),
+                    "comparability": outcome.get("comparability", {}).get("status", "unknown"),
+                },
+            )
+            if completed is None:
+                comparison["audit_status"] = "comparison completed; outcome audit event could not be persisted"
+                self.send_json(comparison, 202)
+            else:
+                self.send_json(comparison)
             return
 
         if path == "/api/sites/rf-surveys" and payload.get("operation") == "delete":
