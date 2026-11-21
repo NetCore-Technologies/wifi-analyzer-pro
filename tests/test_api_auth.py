@@ -20,7 +20,7 @@ from wifi_analyzer_backend.rate_limit import TokenBucketRateLimiter, DEFAULT_POL
 from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
 from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
-from wifi_analyzer_backend.billing import verify_stripe_signature
+from wifi_analyzer_backend.billing import WorkspaceBillingStore, verify_stripe_signature
 
 
 class AuthenticatedApiTests(unittest.TestCase):
@@ -47,9 +47,21 @@ class AuthenticatedApiTests(unittest.TestCase):
             "wifi_analyzer_backend.webhook_subscription_store",
             fromlist=["WebhookSubscriptionStore"],
         ).WebhookSubscriptionStore(path=str(Path(self.temp.name) / "webhook-subscriptions.sqlite3"))
-        server.BILLING = __import__(
-            "wifi_analyzer_backend.billing", fromlist=["WorkspaceBillingStore"]
-        ).WorkspaceBillingStore(path=str(Path(self.temp.name) / "billing.sqlite3"))
+        server.BILLING = WorkspaceBillingStore(path=str(Path(self.temp.name) / "billing.sqlite3"))
+        workspace_id = server.BILLING.instance_id()
+        server.BILLING.process_stripe_event({
+            "id": "evt_testenterprise",
+            "type": "customer.subscription.updated",
+            "data": {"object": {
+                "id": "sub_testenterprise",
+                "customer": "cus_testenterprise",
+                "status": "active",
+                "current_period_end": int(time.time()) + 365 * 24 * 60 * 60,
+                "cancel_at_period_end": False,
+                "metadata": {"workspace_id": workspace_id},
+                "items": {"data": [{"price": {"id": "price_testenterprise"}}]},
+            }},
+        }, price_plans={"price_testenterprise": "enterprise"})
         server.LIVE_CAPTURE = Mock()
         server.LIVE_CAPTURE.list_interfaces.return_value = {
             "available": True,
@@ -118,7 +130,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         owner_token = setup["token"]
         status, response = self.request("GET", "/api/billing/status", token=owner_token)
         self.assertEqual(status, 200, response)
-        self.assertEqual(response["billing"]["plan_id"], "free")
+        self.assertEqual(response["billing"]["plan_id"], "enterprise")
         self.assertEqual(response["billing"]["usage"]["users"], 1)
         self.assertEqual(response["billing"]["billing_configured"], False)
 
@@ -137,6 +149,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             "password": "free plan owner secure password",
         })
         owner_token = setup["token"]
+        self.use_free_billing()
         status, response = self.request("POST", "/api/users", {
             "username": "another.user",
             "password": "another user secure password",
@@ -163,6 +176,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             "password": "checkout owner secure password",
         })
         token = setup["token"]
+        self.use_free_billing()
         with patch.dict("os.environ", {
             "WIFI_ANALYZER_STRIPE_SECRET_KEY": "sk_test_1234567890",
             "WIFI_ANALYZER_STRIPE_PRICE_PRO": "price_pro1234",
@@ -188,6 +202,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             "password": "webhook owner secure password",
         })
         self.assertIn("token", setup)
+        self.use_free_billing()
         workspace_id = server.BILLING.instance_id()
         event = {
             "id": "evt_billing1234",
@@ -237,6 +252,11 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertTrue(second_body["duplicate"])
         self.assertEqual(server.BILLING.status()["plan_id"], "pro")
         self.assertEqual(server.BILLING.status()["webhook_events_retained"], 1)
+
+    def use_free_billing(self):
+        server.BILLING = WorkspaceBillingStore(
+            path=str(Path(self.temp.name) / "billing-free.sqlite3")
+        )
 
     def enroll_agent(self, admin_token, agent_id, capabilities, site_id=None):
         status, response = self.request("POST", "/api/agents/enroll", {
