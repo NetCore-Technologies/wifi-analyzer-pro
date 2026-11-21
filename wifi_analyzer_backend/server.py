@@ -979,6 +979,7 @@ class Handler(BaseHTTPRequestHandler):
                 }
                 billing_status = BILLING.status()
                 billing_status["usage"] = usage
+                billing_status["portal_available"] = bool(BILLING.stripe_customer_id())
                 available_plans = [
                     {
                         "plan_id": plan_id,

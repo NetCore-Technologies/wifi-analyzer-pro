@@ -131,3 +131,26 @@ subscription. It resolves the configured DNS hostname, rejects non-public
 answers through the existing resolver, connects directly to a resolved IP,
 verifies TLS with the original hostname and performs no HTTP request. The
 result is short-lived and must be refreshed before the next preparation run.
+
+## Subscription billing and entitlement controls
+
+Stripe billing is optional and remains disabled until the deployment operator
+sets server-side credentials and price IDs. The dashboard never receives the
+Stripe secret key or webhook signing secret. Hosted checkout and the customer
+portal are created by the backend, and returned URLs are restricted to Stripe's
+checkout and billing hosts.
+
+The webhook endpoint is `/api/billing/webhook`. It verifies Stripe's
+timestamped HMAC-SHA256 signature against the raw request bytes before parsing
+JSON, enforces a five-minute timestamp tolerance and bounds the payload to
+256 KiB. Event IDs are stored in a bounded SQLite idempotency ledger. Only
+subscription events containing the installation's server-generated workspace
+reference (or the already-linked Stripe customer) can change entitlements.
+Paid plan IDs are resolved from server-configured Stripe price IDs; webhook
+metadata or browser requests cannot select a paid tier.
+
+A payment that enters `past_due` has a three-day grace period before the
+installation falls back to free entitlements. User, router-agent and webhook
+subscription quotas are checked server-side under a process lock before
+creation. Quotas are installation-local because this release bills one
+workspace per deployment; it is not a shared multi-tenant SaaS control plane.

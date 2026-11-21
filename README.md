@@ -102,6 +102,38 @@ The dispatcher shares the API's persistent state volume, runs as the image's unp
 
 For systemd deployments, including the API and both optional workers, see deploy/README.md.
 
+## Optional subscription billing
+
+WiFi Analyzer Pro can use Stripe-hosted subscriptions. This feature is disabled
+by default; local installations continue to work on the Free plan until the
+operator configures Stripe. Create recurring Stripe Prices for the Pro,
+Business and/or Enterprise plans, then configure their IDs as server-side
+environment variables. Amounts, billing intervals and currency remain defined
+by those Stripe Prices rather than hard-coded in the application.
+
+For Docker Compose, copy `.env.example` to `.env` and set:
+
+- `WIFI_ANALYZER_PUBLIC_URL`: the public HTTPS origin of this installation.
+- `WIFI_ANALYZER_STRIPE_SECRET_KEY`: a restricted or standard Stripe secret key.
+- `WIFI_ANALYZER_STRIPE_WEBHOOK_SECRET`: the signing secret for the webhook endpoint.
+- `WIFI_ANALYZER_STRIPE_PRICE_PRO`, `WIFI_ANALYZER_STRIPE_PRICE_BUSINESS`, and `WIFI_ANALYZER_STRIPE_PRICE_ENTERPRISE`: optional Stripe recurring Price IDs.
+
+Configure a Stripe webhook at `{WIFI_ANALYZER_PUBLIC_URL}/api/billing/webhook`
+for `checkout.session.completed`, `customer.subscription.created`,
+`customer.subscription.updated`, and `customer.subscription.deleted`.
+Set the webhook signing secret from Stripe's endpoint configuration in
+`WIFI_ANALYZER_STRIPE_WEBHOOK_SECRET`. Restart the API after changing these
+settings. Do not put Stripe secrets in frontend build variables, source files,
+screenshots or Git.
+
+The backend creates hosted Checkout and Billing Portal sessions; it does not
+collect card details. The subscription screen shows plan quotas and usage.
+Free, Pro, Business and Enterprise quotas are enforced for local users,
+managed router agents and webhook subscriptions. Payment events are verified
+and replay-protected. One application deployment represents one paying
+workspace in this integration; pooled multi-tenant hosting still requires a
+separate tenant-isolated control plane and is not claimed as shipped.
+
 ## API
 
 The local HTTP service exposes:
