@@ -114,6 +114,26 @@ class BillingStoreTests(unittest.TestCase):
         self.assertFalse(denied["allowed"])
         self.assertEqual(denied["limit"], 1)
 
+    def test_free_monthly_diagnostic_allowance_is_atomic_and_resets_at_utc_month(self):
+        for expected_used in range(1, 101):
+            result = self.store.consume_monthly_feature_run()
+            self.assertTrue(result["allowed"])
+            self.assertEqual(result["used"], expected_used)
+        blocked = self.store.consume_monthly_feature_run()
+        self.assertFalse(blocked["allowed"])
+        self.assertEqual(blocked["used"], 100)
+        self.assertEqual(self.store.status()["monthly_usage"]["feature_runs"], 100)
+
+        self.now[0] += 31 * 24 * 60 * 60
+        reset = self.store.consume_monthly_feature_run()
+        self.assertTrue(reset["allowed"])
+        self.assertEqual(reset["used"], 1)
+
+    def test_site_quota_is_present_on_each_plan(self):
+        self.assertEqual(self.store.status()["limits"]["sites"], 1)
+        self.assertEqual(self.store.capacity("sites", 0)["allowed"], True)
+        self.assertFalse(self.store.capacity("sites", 1)["allowed"])
+
     def test_installation_identifier_is_stable_across_store_restarts(self):
         first = self.store.instance_id()
         restarted = WorkspaceBillingStore(self.path, clock=lambda: self.now[0])

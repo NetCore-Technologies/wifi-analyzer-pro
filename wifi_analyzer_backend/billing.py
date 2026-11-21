@@ -33,19 +33,19 @@ PAST_DUE_GRACE_SECONDS = 72 * 60 * 60
 PLAN_CATALOG = {
     "free": {
         "label": "Free",
-        "limits": {"users": 1, "agents": 1, "webhook_subscriptions": 1},
+        "limits": {"users": 1, "agents": 1, "webhook_subscriptions": 1, "sites": 1, "feature_runs_monthly": 100},
     },
     "pro": {
         "label": "Pro",
-        "limits": {"users": 5, "agents": 5, "webhook_subscriptions": 5},
+        "limits": {"users": 5, "agents": 5, "webhook_subscriptions": 5, "sites": 3, "feature_runs_monthly": 5_000},
     },
     "business": {
         "label": "Business",
-        "limits": {"users": 25, "agents": 50, "webhook_subscriptions": 25},
+        "limits": {"users": 25, "agents": 50, "webhook_subscriptions": 25, "sites": 25, "feature_runs_monthly": 25_000},
     },
     "enterprise": {
         "label": "Enterprise",
-        "limits": {"users": 100, "agents": 256, "webhook_subscriptions": 100},
+        "limits": {"users": 100, "agents": 256, "webhook_subscriptions": 100, "sites": 100, "feature_runs_monthly": 100_000},
     },
 }
 _PLAN_IDS = set(PLAN_CATALOG)
@@ -331,6 +331,17 @@ class WorkspaceBillingStore:
             """
         )
         connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS workspace_monthly_usage (
+                usage_month TEXT NOT NULL,
+                resource TEXT NOT NULL,
+                used INTEGER NOT NULL CHECK(used >= 0),
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (usage_month, resource)
+            )
+            """
+        )
+        connection.execute(
             "INSERT OR IGNORE INTO workspace_subscription(id, plan_id, updated_at) VALUES (1, 'free', ?)",
             (float(self._clock()),),
         )
@@ -376,6 +387,12 @@ class WorkspaceBillingStore:
             event_count = connection.execute(
                 "SELECT COUNT(*) AS count FROM stripe_webhook_events"
             ).fetchone()["count"]
+            usage_month = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m")
+            usage_row = connection.execute(
+                "SELECT used FROM workspace_monthly_usage WHERE usage_month=? AND resource='feature_runs'",
+                (usage_month,),
+            ).fetchone()
+            monthly_feature_runs = int(usage_row["used"]) if usage_row else 0
         row = dict(row) if row else {}
         raw_status = row.get("subscription_status") or "inactive"
         period_end = row.get("current_period_end")
@@ -412,6 +429,8 @@ class WorkspaceBillingStore:
             "cancel_at_period_end": bool(row.get("cancel_at_period_end", False)),
             "grace_period_ends_at": grace_text,
             "limits": dict(plan["limits"]),
+            "usage_period": usage_month,
+            "monthly_usage": {"feature_runs": monthly_feature_runs},
             "webhook_events_retained": int(event_count),
             "billing_configured": bool(
                 _SECRET_KEY.fullmatch(os.getenv("WIFI_ANALYZER_STRIPE_SECRET_KEY", ""))
@@ -423,7 +442,7 @@ class WorkspaceBillingStore:
         }
 
     def capacity(self, resource: str, used: int) -> dict[str, Any]:
-        if resource not in {"users", "agents", "webhook_subscriptions"}:
+        if resource not in {"users", "agents", "webhook_subscriptions", "sites"}:
             raise ValueError("Unknown subscription resource")
         if isinstance(used, bool) or not isinstance(used, int) or used < 0:
             raise ValueError("used must be a non-negative integer")
@@ -436,6 +455,55 @@ class WorkspaceBillingStore:
             "limit": limit,
             "plan_id": status["plan_id"],
         }
+
+    def consume_monthly_feature_run(self) -> dict[str, Any]:
+        """Atomically consume one diagnostic execution from the current UTC month."""
+        status = self.status()
+        plan_id = status["plan_id"]
+        limit = int(status["limits"]["feature_runs_monthly"])
+        now = float(self._clock())
+        usage_month = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m")
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT used FROM workspace_monthly_usage WHERE usage_month=? AND resource='feature_runs'",
+                (usage_month,),
+            ).fetchone()
+            used = int(row["used"]) if row else 0
+            if used >= limit:
+                return {
+                    "allowed": False,
+                    "resource": "feature_runs_monthly",
+                    "used": used,
+                    "limit": limit,
+                    "plan_id": plan_id,
+                    "period": usage_month,
+                }
+            if row:
+                connection.execute(
+                    """
+                    UPDATE workspace_monthly_usage
+                    SET used=used+1, updated_at=?
+                    WHERE usage_month=? AND resource='feature_runs'
+                    """,
+                    (now, usage_month),
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO workspace_monthly_usage(usage_month, resource, used, updated_at)
+                    VALUES (?, 'feature_runs', 1, ?)
+                    """,
+                    (usage_month, now),
+                )
+            return {
+                "allowed": True,
+                "resource": "feature_runs_monthly",
+                "used": used + 1,
+                "limit": limit,
+                "plan_id": plan_id,
+                "period": usage_month,
+            }
 
     def process_stripe_event(
         self,
