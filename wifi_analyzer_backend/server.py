@@ -22,7 +22,9 @@ if __package__:
         configured_price_plans, create_billing_portal_session, create_checkout_session,
         verify_stripe_signature,
     )
-    from .license import LicenseVerificationError, VendorLicenseStore
+    from .license import (
+        LicenseVerificationError, VendorLicenseServiceError, VendorLicenseStore,
+    )
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
     from .live_capture import LiveCaptureManager
@@ -56,7 +58,9 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
         configured_price_plans, create_billing_portal_session, create_checkout_session,
         verify_stripe_signature,
     )
-    from license import LicenseVerificationError, VendorLicenseStore
+    from license import (
+        LicenseVerificationError, VendorLicenseServiceError, VendorLicenseStore,
+    )
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
     from live_capture import LiveCaptureManager
@@ -993,6 +997,10 @@ class Handler(BaseHTTPRequestHandler):
                 }
                 billing_status["usage"] = usage
                 billing_status["portal_available"] = bool(BILLING.stripe_customer_id())
+                billing_status["vendor_checkout_configured"] = bool(
+                    LICENSES.configured()
+                    and os.getenv("WIFI_ANALYZER_VENDOR_LICENSE_SERVICE_URL", "").strip()
+                )
                 available_plans = [
                     {
                         "plan_id": plan_id,
@@ -1401,6 +1409,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in {
             "/api/billing/checkout", "/api/billing/portal",
             "/api/license/activate", "/api/license/deactivate",
+            "/api/license/checkout", "/api/license/sync",
         }:
             if not self.require_auth("billing.manage"):
                 return
@@ -1423,6 +1432,8 @@ class Handler(BaseHTTPRequestHandler):
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
             "/api/billing/checkout": ("api.billing.checkout", False),
             "/api/billing/portal": ("api.billing.portal", False),
+            "/api/license/checkout": ("api.license.checkout", False),
+            "/api/license/sync": ("api.license.sync", False),
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
             return
@@ -1448,6 +1459,59 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/license/checkout":
+            service_url = os.getenv("WIFI_ANALYZER_VENDOR_LICENSE_SERVICE_URL", "").strip()
+            if not service_url:
+                self.send_json({"error": "The vendor licensing service URL is not configured on this installation"}, 503)
+                return
+            try:
+                checkout = LICENSES.start_checkout(
+                    service_url=service_url,
+                    installation_id=BILLING.instance_id(),
+                    plan_id=payload.get("plan_id"),
+                    customer_email=payload.get("customer_email"),
+                )
+            except LicenseVerificationError as error:
+                self.send_json({"error": str(error)}, 503)
+                return
+            except VendorLicenseServiceError as error:
+                self.send_json({"error": str(error)}, 502)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(
+                "license.checkout.created",
+                target_type="product_license",
+                target_id=checkout["license_id"],
+                metadata={"plan_id": checkout["plan_id"]},
+            )
+            self.send_json({"checkout": checkout}, 201)
+            return
+
+        if path == "/api/license/sync":
+            try:
+                synced = LICENSES.sync_from_vendor(
+                    installation_id=BILLING.instance_id(),
+                )
+            except VendorLicenseServiceError as error:
+                self.send_json({"error": str(error)}, 502)
+                return
+            except LicenseVerificationError as error:
+                self.send_json({"error": str(error)}, 409)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(
+                "license.synced",
+                target_type="product_license",
+                target_id=synced["license_id"],
+                metadata={"plan_id": synced["plan_id"]},
+            )
+            self.send_json({"license": synced})
             return
 
         if path == "/api/license/activate":
