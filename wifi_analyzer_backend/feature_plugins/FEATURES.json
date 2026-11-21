@@ -1700,6 +1700,20 @@
     }
   },
   {
+    "slug": "radio_capability_regulatory_channel_planner",
+    "name": "Controller radio capability and regulatory channel planner",
+    "category": "RF assurance",
+    "description": "Cross-check fresh controller/agent radio capabilities against a fingerprint-verified, operator-reviewed F206 rule dataset; evaluate channel/width, DFS/AFC, device class, installation environment and EIRP constraints, then produce a read-only lowest-change configuration preview.",
+    "parameters": {
+      "site_id": "The site that owns every supplied controller radio",
+      "regulatory_dataset": "Normalized F206 result including its canonical dataset fingerprint",
+      "dataset_acknowledgement": "Explicit reviewer ID, date, review reference and matching dataset fingerprint",
+      "radios": "1-256 fresh controller/agent radio capability snapshots with supported channels, widths, DFS/AFC and power limits",
+      "maximum_capability_age_days": "1-30 day freshness window; defaults to 7",
+      "as_of": "Optional timezone-aware assessment timestamp"
+    }
+  },
+  {
     "slug": "client_roam_transaction_analyzer",
     "name": "Client roam transaction analyzer",
     "category": "Roaming",

@@ -1362,18 +1362,56 @@ PAYLOADS = {
 }
 
 
+_F207_NORMALIZED_DATASET = run(
+    "radio_regulatory_evidence_validator",
+    PAYLOADS["radio_regulatory_evidence_validator"],
+)["result"]
+PAYLOADS["radio_capability_regulatory_channel_planner"] = {
+    "site_id": "head-office",
+    "as_of": _SURVEY_NOW.isoformat(),
+    "regulatory_dataset": _F207_NORMALIZED_DATASET,
+    "dataset_acknowledgement": {
+        "dataset_fingerprint_sha256": _F207_NORMALIZED_DATASET["dataset_fingerprint_sha256"],
+        "reviewer_id": "netops.reviewer",
+        "reviewed_at": _SURVEY_NOW.isoformat(),
+        "review_reference": "CHG-2026-1101",
+    },
+    "radios": [{
+        "radio_id": "hq-ap-01-24",
+        "ap_id": "hq-ap-01",
+        "site_id": "head-office",
+        "jurisdiction": "AU",
+        "installation_reference": "hq-building-a",
+        "band": "2.4GHz",
+        "capability_source": "controller",
+        "capabilities_observed_at": _SURVEY_NOW.isoformat(),
+        "supported_channels": [1, 6, 11],
+        "supported_channel_widths_mhz": [20, 40],
+        "device_class": "LPI",
+        "environment": "indoor",
+        "dfs_supported": False,
+        "afc_supported": False,
+        "maximum_eirp_dbm": 18,
+        "maximum_eirp_density_dbm_per_mhz": 8,
+        "current_channel": 6,
+        "current_channel_width_mhz": 20,
+        "current_eirp_dbm": 16,
+    }],
+}
+
+
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 206)
-        self.assertEqual(len(set(FEATURE_MODULES)), 206)
-        self.assertEqual(count(), 206)
-        self.assertEqual(len(entries), 206)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 206)
+        self.assertEqual(len(FEATURE_MODULES), 207)
+        self.assertEqual(len(set(FEATURE_MODULES)), 207)
+        self.assertEqual(count(), 207)
+        self.assertEqual(len(entries), 207)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 207)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F205", "F206", "F291", "F292", "F293"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F205", "F206", "F207", "F291", "F292", "F293"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1763,6 +1801,16 @@ class FeatureCatalogTests(unittest.TestCase):
             run("client_roam_transaction_analyzer", {"events": [bad_reason]})
         with self.assertRaisesRegex(ValueError, "slow_roam_threshold_ms"):
             run("client_roam_transaction_analyzer", {"events": [payload["events"][0]], "slow_roam_threshold_ms": 1})
+
+    def test_f207_plans_only_controller_supported_channels_under_reviewed_rule_dataset(self):
+        result = run(
+            "radio_capability_regulatory_channel_planner",
+            PAYLOADS["radio_capability_regulatory_channel_planner"],
+        )["result"]
+        self.assertEqual(result["status"], "eligible")
+        self.assertEqual(result["eligible_radio_count"], 1)
+        self.assertEqual(result["radios"][0]["recommended_configuration"]["channel"], 6)
+        self.assertFalse(result["change_application"]["applied"])
 
     def test_f206_validates_jurisdiction_scoped_radio_rule_provenance(self):
         result = run("radio_regulatory_evidence_validator", PAYLOADS["radio_regulatory_evidence_validator"])["result"]

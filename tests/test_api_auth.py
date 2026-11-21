@@ -1087,8 +1087,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 206)
-        self.assertEqual(len(catalog["features"]), 206)
+        self.assertEqual(catalog["count"], 207)
+        self.assertEqual(len(catalog["features"]), 207)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -3079,7 +3079,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 206)
+        self.assertEqual(catalog["count"], 207)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,
@@ -3766,6 +3766,30 @@ class AuthenticatedApiTests(unittest.TestCase):
             "GET", "/api/sites/rf-surveys/" + report_id + "?site_id=head-office", token=token,
         )
         self.assertEqual(status, 404, not_found)
+
+    def test_f207_radio_capability_planner_enforces_site_scope_before_validation(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "radio capability planner owner secure password",
+        })
+        owner_token = setup["token"]
+        _, created = self.request("POST", "/api/users", {
+            "username": "radio.capability.admin",
+            "password": "radio capability admin secure password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["head-office"],
+        }, token=owner_token)
+        self.assertEqual(created["user"]["username"], "radio.capability.admin")
+        token = server.AUTH.login("radio capability admin secure password", "radio.capability.admin")
+
+        status, denied = self.request(
+            "POST",
+            "/api/features/radio_capability_regulatory_channel_planner",
+            {"site_id": "branch"},
+            token=token,
+        )
+        self.assertEqual(status, 403, denied)
+        self.assertIn("outside your assigned access scope", denied["error"])
 
 if __name__ == "__main__":
     unittest.main()

@@ -207,6 +207,7 @@ FEATURE_MODULES = (
     "feature_204_rf_survey_report_comparator",
     "feature_205_rf_survey_acceptance_auditor",
     "feature_206_radio_regulatory_evidence_validator",
+    "feature_207_radio_capability_regulatory_planner",
     "feature_291_client_roam_transaction_analyzer",
     "feature_292_client_experience_slo_evaluator",
     "feature_293_client_experience_slo_window_comparator",
