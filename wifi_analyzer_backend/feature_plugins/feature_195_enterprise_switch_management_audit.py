@@ -71,7 +71,17 @@ def run(payload: dict) -> dict:
         elif ssh == "unknown" and "ssh-v2" not in normalized:
             finding(findings, sid, "SSH_VERSION_UNKNOWN", "low", "missing",
                     "The SSH protocol version was not supplied.", "Verify the switch accepts SSHv2 only.")
-        bounded_int(switch.get("stale_local_admin_count", 0), f"switches[{index}].stale_local_admin_count", 0, 10000)
+        stale_admins = switch.get("stale_local_admin_count")
+        if stale_admins is None:
+            finding(findings, sid, "STALE_LOCAL_ADMIN_COUNT_UNKNOWN", "low", "missing",
+                    "The number of stale local administrator accounts was not supplied.",
+                    "Review local administrative accounts and record the number that are obsolete or unused.")
+        else:
+            stale_admins = bounded_int(stale_admins, f"switches[{index}].stale_local_admin_count", 0, 10000)
+            if stale_admins:
+                finding(findings, sid, "STALE_LOCAL_ADMIN_ACCOUNTS", "high", "violation",
+                        f"The inventory reports {stale_admins} stale local administrator accounts.",
+                        "Disable obsolete local accounts and retain named, individually attributable administrative access.")
     return summarize("F195", "Security", len(switches), findings)
 
 FEATURE = {

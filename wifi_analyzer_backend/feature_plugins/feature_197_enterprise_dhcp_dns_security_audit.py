@@ -15,6 +15,10 @@ def run(payload: dict) -> dict:
         sid = identifier(service.get("service_id"), f"services[{index}].service_id")
         site = identifier(service.get("site_id", "unassigned"), f"services[{index}].site_id")
         role = enum(service.get("role"), f"services[{index}].role", {"dhcp", "dns", "dhcp-dns", "unknown"})
+        if role == "unknown":
+            finding(findings, sid, "DHCP_DNS_SERVICE_ROLE_UNKNOWN", "medium", "missing",
+                    "The service role was not supplied.",
+                    "Identify whether the service provides DHCP, DNS or both before assessing its controls.")
         enabled = boolean(service.get("enabled"), f"services[{index}].enabled")
         if enabled is None:
             finding(findings, sid, "SERVICE_ENABLED_STATE_UNKNOWN", "low", "missing",
@@ -56,6 +60,10 @@ def run(payload: dict) -> dict:
                 finding(findings, sid, "DHCP_OPTION82_DISABLED", "low", "violation",
                         "DHCP Option 82 relay-agent information is disabled.",
                         "Enable and validate Option 82 where relay topology and privacy policy require it.")
+            elif option82 is None:
+                finding(findings, sid, "DHCP_OPTION82_STATE_UNKNOWN", "low", "missing",
+                        "DHCP Option 82 state was not supplied.",
+                        "Verify relay-agent information policy against the network design.")
         if role in {"dns", "dhcp-dns"}:
             dnssec = boolean(service.get("dnssec_validation_enabled"), f"services[{index}].dnssec_validation_enabled")
             transport = enum(service.get("upstream_transport"), f"services[{index}].upstream_transport", DNS_TRANSPORTS)

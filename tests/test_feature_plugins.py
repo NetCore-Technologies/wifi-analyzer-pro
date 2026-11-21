@@ -1092,7 +1092,7 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(first["sha256"], second["sha256"])
         self.assertEqual(first["summary"]["audit_count"], 6)
         self.assertNotIn("source-secret-description", json.dumps(first))
-        duplicate = {**payload, "reports": payload["reports"] + [payload["reports"][0]]}
+        duplicate = {**payload, "reports": payload["reports"][:-1] + [payload["reports"][0]]}
         with self.assertRaisesRegex(ValueError, "duplicate report"):
             run("enterprise_network_security_evidence_report", duplicate)
 

@@ -26,7 +26,7 @@ def run(payload: dict) -> dict:
     record_total = violation_total = gap_total = 0
     for index, report in enumerate(reports):
         feature = report.get("feature")
-        if feature not in EXPECTED:
+        if not isinstance(feature, str) or feature not in EXPECTED:
             raise ValueError(f"reports[{index}].feature must be an F194-F199 result")
         if feature in seen:
             raise ValueError(f"duplicate report for {feature}")

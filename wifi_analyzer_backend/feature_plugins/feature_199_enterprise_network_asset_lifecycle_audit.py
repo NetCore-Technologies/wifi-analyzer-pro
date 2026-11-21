@@ -71,7 +71,13 @@ def run(payload: dict) -> dict:
                     "An unsupported asset is recorded as internet exposed.",
                     "Immediately remove public reachability or replace the unsupported asset.")
         for key, severity in (("critical_vulnerability_count", "critical"), ("high_vulnerability_count", "high")):
-            count = bounded_int(asset.get(key, 0), f"assets[{index}].{key}", 0, 100000)
+            observed_count = asset.get(key)
+            if observed_count is None:
+                finding(findings, aid, f"ASSET_{severity.upper()}_VULNERABILITY_COUNT_UNKNOWN", "medium", "missing",
+                        f"The inventory did not supply a {severity} severity vulnerability count.",
+                        "Import a recent, scope-defined vulnerability assessment; do not assume an omitted count is zero.")
+                continue
+            count = bounded_int(observed_count, f"assets[{index}].{key}", 0, 100000)
             if count:
                 finding(findings, aid, f"ASSET_{severity.upper()}_VULNERABILITIES", severity, "violation",
                         f"The inventory reports {count} {severity} severity vulnerabilities.",
