@@ -195,7 +195,7 @@ The local HTTP service exposes:
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
 | `GET /api/security/audit/verify` | Verify the local append-only hash chain and report the verified event count |
 | `POST /api/features/{slug}` | Execute a selected read-only feature tool with JSON input |
-| `POST /api/features/rf_survey_acceptance_auditor` | Score a retained F203 survey against customer RSSI/SNR and measured-point acceptance criteria |
+| `POST /api/features/rf_survey_acceptance_auditor` | Score a retained F203 survey against customer RSSI/SNR and measured-point acceptance criteria | Report contents are server-loaded by saved survey ID and cannot be overridden by the client.
 | `GET /api/reports/jobs` | List authenticated scheduled-report jobs and state counts |
 | `POST /api/reports/jobs/enqueue` | Queue a hash-validated report occurrence idempotently |
 | `POST /api/reports/jobs/claim` | Claim due jobs using exclusive, expiring worker leases |

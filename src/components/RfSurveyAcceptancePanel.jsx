@@ -53,7 +53,7 @@ export default function RfSurveyAcceptancePanel({ report, result }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           site_id: report.site_id,
-          report: { report, result },
+          survey_id: report.survey_id,
           policy,
           zones,
           as_of: new Date().toISOString(),

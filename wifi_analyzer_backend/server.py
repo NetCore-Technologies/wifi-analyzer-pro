@@ -3039,6 +3039,31 @@ class Handler(BaseHTTPRequestHandler):
             scoped_sites = _collect_site_ids(payload)
             if scoped_sites and not self.require_site_access(scoped_sites):
                 return
+            if slug == "rf_survey_acceptance_auditor":
+                site_id = payload.get("site_id")
+                survey_id = payload.get("survey_id")
+                if "report" in payload:
+                    self.send_json({
+                        "error": "Submit a saved survey_id; report contents are loaded from protected site history"
+                    }, 400)
+                    return
+                if not isinstance(site_id, str) or not site_id.strip():
+                    self.send_json({"error": "site_id is required"}, 400)
+                    return
+                if not isinstance(survey_id, str) or not survey_id.strip():
+                    self.send_json({"error": "survey_id is required"}, 400)
+                    return
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                saved_report = RF_SURVEYS.get(site_id, survey_id)
+                if saved_report is None:
+                    self.send_json({"error": "Saved RF survey report not found in this site"}, 404)
+                    return
+                payload = {
+                    **payload,
+                    "report": saved_report,
+                }
+
             if not slug or "/" in slug:
                 self.send_json({"error": "Unknown feature"}, 404)
                 return

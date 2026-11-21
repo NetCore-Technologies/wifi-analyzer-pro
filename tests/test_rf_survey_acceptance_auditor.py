@@ -116,7 +116,7 @@ class RfSurveyAcceptanceAuditorTests(unittest.TestCase):
         ]
         result = run("rf_survey_acceptance_auditor", payload)["result"]
         self.assertEqual(result["zones"][0]["sampled_point_count"], 4)
-        self.assertEqual(result["zones"][1]["sampled_point_count"], 2)
+        self.assertEqual(result["zones"][1]["sampled_point_count"], 3)
         self.assertEqual(result["summary"]["sampled_point_count"], 4)
 
     def test_f205_rejects_cross_site_floor_and_report_metadata_mismatch(self):

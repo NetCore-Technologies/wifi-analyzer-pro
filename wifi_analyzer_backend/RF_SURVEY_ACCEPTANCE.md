@@ -11,7 +11,7 @@ The normal authenticated feature endpoint requires diagnostics.run and checks
 the nested site_id against the caller's site assignments. The request contains:
 
 - site_id: the site owning the retained report.
-- report: an object containing report metadata and the immutable F203 result.
+- survey_id: the UUID of a retained F203 report. The API loads the report from the site's protected SQLite history and verifies its SHA-256 digest; browser-supplied report objects are rejected.
 - policy: the explicit acceptance thresholds described below.
 - zones: optional floor-plan rectangles for separate area-level scoring.
 - as_of: optional timezone-aware assessment time for reproducible freshness.

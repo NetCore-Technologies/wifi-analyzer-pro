@@ -3616,7 +3616,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         )
         acceptance_payload = {
             "site_id": "head-office",
-            "report": {"report": saved, "result": result["result"]},
+            "survey_id": saved["survey_id"],
             "policy": {
                 "minimum_rssi_dbm": -67,
                 "minimum_passing_points_pct": 100,
@@ -3630,6 +3630,16 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 200, acceptance)
         self.assertEqual(acceptance["feature"], "F205")
         self.assertEqual(acceptance["result"]["status"], "accepted")
+        forged = {
+            **acceptance_payload,
+            "report": {"report": saved, "result": {**result["result"], "measurements": []}},
+        }
+        status, rejected_forgery = self.request(
+            "POST", "/api/features/rf_survey_acceptance_auditor",
+            forged, token=token,
+        )
+        self.assertEqual(status, 400, rejected_forgery)
+        self.assertIn("saved survey_id", rejected_forgery["error"])
         cross_site_acceptance = {**acceptance_payload, "site_id": "branch"}
         status, denied_acceptance = self.request(
             "POST", "/api/features/rf_survey_acceptance_auditor",

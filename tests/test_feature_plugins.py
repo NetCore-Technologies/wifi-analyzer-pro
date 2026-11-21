@@ -1272,7 +1272,7 @@ PAYLOADS = {
     },
     "rf_survey_acceptance_auditor": {
         "site_id": "head-office",
-        "as_of": _SURVEY_NOW.isoformat(),
+        "as_of": "2026-11-21T12:00:00Z",
         "report": {
             "report": {
                 "survey_id": "acceptance-survey",
@@ -1280,7 +1280,7 @@ PAYLOADS = {
                 "floorplan_id": "hq-level-1",
                 "floor_id": "level-1",
                 "label": "HQ RF acceptance",
-                "created_at": (_SURVEY_NOW - timedelta(minutes=30)).isoformat()
+                "created_at": "2026-11-21T11:00:00Z"
             },
             "result": {
                 "status": "analysed",
@@ -1291,13 +1291,13 @@ PAYLOADS = {
                 "access_points": [{"ap_id": "ap-01", "x_px": 100, "y_px": 100}],
                 "measurements": [
                     {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1",
-                     "sample_fingerprint": "aaaaaaaaaaaaaaaa", "observed_at": (_SURVEY_NOW - timedelta(minutes=20)).isoformat(),
+                     "sample_fingerprint": "aaaaaaaaaaaaaaaa", "observed_at": "2026-11-21T10:00:00Z",
                      "evidence_source": "survey", "survey_x_px": 200, "survey_y_px": 100, "rssi_dbm": -55},
                     {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1",
-                     "sample_fingerprint": "bbbbbbbbbbbbbbbb", "observed_at": (_SURVEY_NOW - timedelta(minutes=15)).isoformat(),
+                     "sample_fingerprint": "bbbbbbbbbbbbbbbb", "observed_at": "2026-11-21T10:05:00Z",
                      "evidence_source": "survey", "survey_x_px": 300, "survey_y_px": 100, "rssi_dbm": -58},
                     {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1",
-                     "sample_fingerprint": "cccccccccccccccc", "observed_at": (_SURVEY_NOW - timedelta(minutes=10)).isoformat(),
+                     "sample_fingerprint": "cccccccccccccccc", "observed_at": "2026-11-21T10:10:00Z",
                      "evidence_source": "survey", "survey_x_px": 400, "survey_y_px": 100, "rssi_dbm": -62}
                 ]
             }
@@ -1327,7 +1327,7 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 204)
+        self.assertEqual(len(FEATURE_MODULES), 205)
         self.assertEqual(len(set(FEATURE_MODULES)), 205)
         self.assertEqual(count(), 205)
         self.assertEqual(len(entries), 205)
