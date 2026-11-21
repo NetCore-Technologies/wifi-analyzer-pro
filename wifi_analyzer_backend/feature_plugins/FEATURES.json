@@ -1238,7 +1238,8 @@
     "category": "Site inventory",
     "description": "Normalise AP inventories across sites, preserve explicit radio centre-frequency evidence for channel-width planning, surface duplicate BSSIDs and measure inventory-field coverage.",
     "parameters": {
-      "access_points": "Up to 2048 AP records with site, BSSID, band, channel and width; optional center_frequency_mhz is preserved when supplied and is required for planner use of wide channels."
+      "access_points": "Up to 2048 AP records with site, BSSID, band, channel and width; optional center_frequency_mhz is preserved when supplied and is required for planner use of wide channels.",
+      "site_id": "string"
     }
   },
   {

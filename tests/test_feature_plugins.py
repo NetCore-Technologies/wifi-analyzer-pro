@@ -1154,6 +1154,19 @@ class FeatureCatalogTests(unittest.TestCase):
                 "interference_edges":[{**payload["interference_edges"][0],"evidence_source":"guess"}],
             })
 
+    def test_f201_planner_rejects_wide_channel_centre_outside_primary_channel_width(self):
+        with self.assertRaisesRegex(ValueError, "does not contain the primary channel"):
+            run("multi_ap_channel_reuse_planner", {
+                "radios": [{
+                    "radio_id":"ap1-5", "ap_id":"ap1", "site_id":"hq", "band":"5GHz",
+                    "channel_width_mhz":80, "current_channel":36,
+                    "channel_options":[{"channel":36,"center_frequency_mhz":5800}],
+                }],
+                "interference_edges": [{
+                    "radio_ids":["ap1-5","ap2-5"],"weight":0.5,"evidence_source":"survey",
+                }],
+            })
+
     def test_f201_planner_accounts_for_wide_channel_frequency_overlap(self):
         result = run("multi_ap_channel_reuse_planner", {
             "radios": [
