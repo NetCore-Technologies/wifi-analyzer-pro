@@ -1639,5 +1639,15 @@
       "observations": "1-8192 pair observations with sample ID, radio IDs, timezone-aware timestamp, two RSSI readings captured at the same survey point in radio_ids order, and optional channel utilization/retry percentages",
       "max_age_days": "Optional 1-30 day freshness window; defaults to 7 days"
     }
+  },
+  {
+    "slug": "client_roam_transaction_analyzer",
+    "name": "Client roam transaction analyzer",
+    "category": "Roaming",
+    "description": "Correlate explicit per-client roam-start, roam-complete and roam-failure events to calculate successful roam latency percentiles, matched failure rates, incomplete telemetry and disassociation reasons.",
+    "parameters": {
+      "events": "1-10000 timestamped association, disassociation and roam transaction events, scoped by site and pseudonymous client reference",
+      "slow_roam_threshold_ms": "Optional 50-30000 ms threshold for completed roam transactions; defaults to 1000 ms"
+    }
   }
 ]

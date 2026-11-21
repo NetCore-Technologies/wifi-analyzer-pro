@@ -97,3 +97,6 @@ All notable changes to WiFi Analyzer Pro are documented here.
 
 
 - Add F202, a bounded timestamped RF evidence normalizer. It validates directional pairwise RSSI and optional channel-load observations, filters stale evidence, groups samples by same-site/same-band radio pair, and emits provenance-labelled relative co-visibility/load weights for F201 without returning raw sample identifiers.
+
+
+- Add F291, a bounded client roam transaction analyzer for explicit controller/agent/client events. Correlate matched starts and completions/failures, calculate latency percentiles and matched failure rates, surface incomplete telemetry and disassociation reasons, and replace input client references with report-local aliases.

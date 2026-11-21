@@ -10,6 +10,7 @@ from wifi_analyzer_backend.feature_plugins.registry import FEATURE_MODULES
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
 
 _SURVEY_NOW = datetime.now(timezone.utc)
+_ROAM_NOW = datetime.now(timezone.utc)
 
 SAMPLE = [
     {"ssid": "Lab", "bssid": "02:11:22:33:44:55", "band": "2.4GHz", "channel": 6, "rssi": -52, "security": "WPA3"},
@@ -988,6 +989,18 @@ PAYLOADS = {
             {"sample_id":"survey-sample-002","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-56,-66],"channel_utilization_pct":55,"retry_rate_pct":6},
             {"sample_id":"survey-sample-003","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-55,-64],"channel_utilization_pct":60,"retry_rate_pct":7}
         ]
+    },
+    "client_roam_transaction_analyzer": {
+        "events": [
+            {"event_id":"evt-a1","site_id":"office","client_ref":"station-alpha","event_type":"roam_start","roam_id":"roam-a","from_ap_id":"ap-01","to_ap_id":"ap-02","occurred_at":_ROAM_NOW.isoformat(),"evidence_source":"controller"},
+            {"event_id":"evt-a2","site_id":"office","client_ref":"station-alpha","event_type":"roam_complete","roam_id":"roam-a","from_ap_id":"ap-01","to_ap_id":"ap-02","occurred_at":(_ROAM_NOW + timedelta(milliseconds=250)).isoformat(),"evidence_source":"controller"},
+            {"event_id":"evt-b1","site_id":"office","client_ref":"station-beta","event_type":"roam_start","roam_id":"roam-b","from_ap_id":"ap-02","to_ap_id":"ap-03","occurred_at":(_ROAM_NOW + timedelta(seconds=1)).isoformat(),"evidence_source":"agent"},
+            {"event_id":"evt-b2","site_id":"office","client_ref":"station-beta","event_type":"roam_failure","roam_id":"roam-b","from_ap_id":"ap-02","to_ap_id":"ap-03","occurred_at":(_ROAM_NOW + timedelta(seconds=1, milliseconds=400)).isoformat(),"evidence_source":"controller","reason_code":17,"reason":"target AP rejected association"},
+            {"event_id":"evt-c1","site_id":"office","client_ref":"station-gamma","event_type":"roam_start","roam_id":"roam-c","from_ap_id":"ap-01","to_ap_id":"ap-03","occurred_at":(_ROAM_NOW + timedelta(seconds=2)).isoformat(),"evidence_source":"controller"},
+            {"event_id":"evt-d1","site_id":"office","client_ref":"station-alpha","event_type":"association","ap_id":"ap-02","occurred_at":(_ROAM_NOW + timedelta(seconds=3)).isoformat(),"evidence_source":"controller"},
+            {"event_id":"evt-d2","site_id":"office","client_ref":"station-alpha","event_type":"disassociation","ap_id":"ap-02","occurred_at":(_ROAM_NOW + timedelta(seconds=4)).isoformat(),"evidence_source":"controller","reason_code":8}
+        ],
+        "slow_roam_threshold_ms": 200
     }
 }
 
@@ -995,15 +1008,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 199)
-        self.assertEqual(len(set(FEATURE_MODULES)), 199)
-        self.assertEqual(count(), 199)
-        self.assertEqual(len(entries), 199)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 199)
+        self.assertEqual(len(FEATURE_MODULES), 200)
+        self.assertEqual(len(set(FEATURE_MODULES)), 200)
+        self.assertEqual(count(), 200)
+        self.assertEqual(len(entries), 200)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 200)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F291"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1121,6 +1134,87 @@ class FeatureCatalogTests(unittest.TestCase):
         duplicate = {**payload, "reports": payload["reports"][:-1] + [payload["reports"][0]]}
         with self.assertRaisesRegex(ValueError, "duplicate report"):
             run("enterprise_network_security_evidence_report", duplicate)
+
+    def test_f291_correlates_completed_failed_and_incomplete_roam_transactions(self):
+        result = run("client_roam_transaction_analyzer", PAYLOADS["client_roam_transaction_analyzer"])["result"]
+        summary = result["summary"]
+        self.assertEqual(result["status"], "analysed")
+        self.assertEqual(summary["completed_roams"], 1)
+        self.assertEqual(summary["failed_roams"], 1)
+        self.assertEqual(summary["incomplete_transactions"], 1)
+        self.assertEqual(summary["roam_failure_rate_pct"], 50.0)
+        self.assertEqual(summary["latency_sample_count"], 1)
+        self.assertEqual(summary["median_roam_latency_ms"], 250.0)
+        self.assertEqual(summary["p95_roam_latency_ms"], 250.0)
+        self.assertEqual(summary["slow_roam_count"], 1)
+        self.assertEqual(summary["unmatched_start_events"], 1)
+        self.assertNotIn("station-alpha", json.dumps(result))
+        self.assertNotIn("evt-a1", json.dumps(result))
+        self.assertNotIn("roam-a", json.dumps(result))
+
+    def test_f291_failure_rate_excludes_unmatched_events(self):
+        payload = PAYLOADS["client_roam_transaction_analyzer"]
+        events = [item for item in payload["events"] if item["event_type"] in {"roam_start", "roam_failure"}]
+        result = run("client_roam_transaction_analyzer", {"events": events})["result"]
+        self.assertEqual(result["summary"]["failed_roams"], 1)
+        self.assertEqual(result["summary"]["incomplete_transactions"], 2)
+        self.assertEqual(result["summary"]["roam_failure_rate_pct"], 100.0)
+        self.assertIsNone(result["summary"]["median_roam_latency_ms"])
+
+    def test_f291_reports_reason_codes_and_per_site_metrics(self):
+        result = run("client_roam_transaction_analyzer", PAYLOADS["client_roam_transaction_analyzer"])["result"]
+        site = result["sites"][0]
+        self.assertEqual(site["site_id"], "office")
+        self.assertEqual(site["association_events"], 1)
+        self.assertEqual(site["disassociation_events"], 1)
+        self.assertEqual(site["disassociation_reason_counts"], {"8": 1})
+        self.assertEqual(site["roam_failure_reason_counts"], {"17": 1})
+        self.assertEqual(result["evidence_source_counts"], {"agent": 1, "controller": 6})
+
+    def test_f291_rejects_duplicate_ids_invalid_events_and_naive_timestamps(self):
+        payload = PAYLOADS["client_roam_transaction_analyzer"]
+        duplicate = dict(payload["events"][1], event_id=payload["events"][0]["event_id"])
+        with self.assertRaisesRegex(ValueError, "event_id values must be unique"):
+            run("client_roam_transaction_analyzer", {"events": [payload["events"][0], duplicate]})
+        bad_type = dict(payload["events"][0], event_type="guess")
+        with self.assertRaisesRegex(ValueError, "event_type"):
+            run("client_roam_transaction_analyzer", {"events": [bad_type]})
+        naive = dict(payload["events"][0], occurred_at=_ROAM_NOW.replace(tzinfo=None).isoformat())
+        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+            run("client_roam_transaction_analyzer", {"events": [naive]})
+
+    def test_f291_rejects_out_of_order_and_cross_ap_terminal_events(self):
+        payload = PAYLOADS["client_roam_transaction_analyzer"]
+        out_of_order = [
+            payload["events"][0],
+            dict(payload["events"][1], occurred_at=(_ROAM_NOW - timedelta(seconds=1)).isoformat()),
+        ]
+        with self.assertRaisesRegex(ValueError, "must not precede"):
+            run("client_roam_transaction_analyzer", {"events": out_of_order})
+        mismatched = [
+            payload["events"][0],
+            dict(payload["events"][1], to_ap_id="ap-99"),
+        ]
+        with self.assertRaisesRegex(ValueError, "AP pair does not match"):
+            run("client_roam_transaction_analyzer", {"events": mismatched})
+
+    def test_f291_does_not_correlate_roams_across_site_boundaries(self):
+        payload = PAYLOADS["client_roam_transaction_analyzer"]
+        events = [
+            {**payload["events"][0], "site_id":"office"},
+            {**payload["events"][1], "site_id":"branch"},
+        ]
+        result = run("client_roam_transaction_analyzer", {"events": events})["result"]
+        self.assertEqual(result["summary"]["completed_roams"], 0)
+        self.assertEqual(result["summary"]["incomplete_transactions"], 2)
+
+    def test_f291_validates_reason_codes_and_thresholds(self):
+        payload = PAYLOADS["client_roam_transaction_analyzer"]
+        bad_reason = dict(payload["events"][6], reason_code=-1)
+        with self.assertRaisesRegex(ValueError, "reason_code"):
+            run("client_roam_transaction_analyzer", {"events": [bad_reason]})
+        with self.assertRaisesRegex(ValueError, "slow_roam_threshold_ms"):
+            run("client_roam_transaction_analyzer", {"events": [payload["events"][0]], "slow_roam_threshold_ms": 1})
 
     def test_f202_normalises_fresh_survey_samples_into_f201_edges(self):
         result = run("rf_survey_evidence_normalizer", PAYLOADS["rf_survey_evidence_normalizer"])["result"]

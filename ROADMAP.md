@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 199 callable feature tools (F001–F168 and F172–F202), local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 200 callable feature tools (F001–F168, F172–F202 and F291), local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 199 distinct callable feature modules (F001–F168 and F172–F202), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
+- ✅ 200 distinct callable feature modules (F001–F168, F172–F202 and F291), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
@@ -197,3 +197,12 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 - ✅ F202 accepts bounded, timezone-aware, timestamped pairwise survey/controller observations, validates paired RSSI measurements collected at a common survey point and optional channel-utilisation/retry metrics, rejects cross-site/cross-band evidence and excludes samples outside the configured freshness window.
 - ✅ F202 produces deterministic pair-level relative co-visibility/load weights with explicit formulas, last-observed timestamp, source provenance and sample-volume grade; raw sample identifiers and radio addresses are not returned.
 - ⚠️ F202 weights are transparent planning proxies, not measured RF coupling, interference probabilities, airtime contention or capacity. Evidence source is caller-declared and is not cryptographically attested.
+
+
+### F291 delivered — client roam transaction analysis
+
+- ✅ F291 correlates timestamped `roam_start`, `roam_complete` and `roam_failure` events by site, opaque client reference and roam transaction ID.
+- ✅ Reports matched successful roam latency (mean, median and nearest-rank p95), matched failure rate, slow-roam counts, disassociation reason-code counts and per-site summaries.
+- ✅ Unpaired starts and terminals remain incomplete telemetry and are excluded from latency and failure-rate denominators; the analyzer never estimates missing timestamps from snapshot intervals.
+- ✅ Client references, event IDs and controller transaction IDs are replaced or omitted from returned details; AP IDs and site IDs remain available for operational investigation.
+- ⚠️ F291 analyses caller-supplied event exports; evidence-source labels are caller-declared, not cryptographically attested. It is not a live packet capture, 802.11k/v/r protocol decoder or autonomous client intervention.

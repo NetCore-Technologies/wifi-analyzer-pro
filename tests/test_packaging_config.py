@@ -130,6 +130,8 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         self.assertIn('webhook.get("feature") != "F192"', smoke_helper)
         self.assertIn("rf_survey_evidence_normalizer", smoke_helper)
         self.assertIn('rf_evidence.get("feature") != "F202"', smoke_helper)
+        self.assertIn("client_roam_transaction_analyzer", smoke_helper)
+        self.assertIn('roam_result.get("feature") != "F291"', smoke_helper)
 
 
 if __name__ == "__main__":

@@ -2375,6 +2375,48 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["summary"]["client_count"], 1)
         self.assertEqual(result["result"]["summary"]["observation_count"], 1)
 
+    def test_f291_client_roam_transaction_analyzer_enforces_site_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "roam analyzer owner secure password",
+        })
+        owner_token = setup["token"]
+        self.request("POST", "/api/users", {
+            "username": "office.roam.analyst",
+            "password": "office roam analyst secure password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["home"],
+        }, token=owner_token)
+        _, login = self.request("POST", "/api/auth/login", {
+            "username": "office.roam.analyst",
+            "password": "office roam analyst secure password",
+        })
+        analyst_token = login["token"]
+        payload = {
+            "events": [
+                {"event_id":"home-start","site_id":"home","client_ref":"station-001","event_type":"roam_start","roam_id":"transaction-1","from_ap_id":"ap-01","to_ap_id":"ap-02","occurred_at":"2026-11-20T10:00:00Z","evidence_source":"controller"},
+                {"event_id":"home-complete","site_id":"home","client_ref":"station-001","event_type":"roam_complete","roam_id":"transaction-1","from_ap_id":"ap-01","to_ap_id":"ap-02","occurred_at":"2026-11-20T10:00:00.300Z","evidence_source":"controller"},
+            ]
+        }
+        status, result = self.request(
+            "POST", "/api/features/client_roam_transaction_analyzer", payload, token=analyst_token,
+        )
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["feature"], "F291")
+        self.assertEqual(result["result"]["summary"]["median_roam_latency_ms"], 300.0)
+
+        cross_site = {
+            "events": [
+                {**payload["events"][0], "site_id":"branch"},
+                {**payload["events"][1], "site_id":"branch"},
+            ]
+        }
+        status, denied = self.request(
+            "POST", "/api/features/client_roam_transaction_analyzer", cross_site, token=analyst_token,
+        )
+        self.assertEqual(status, 403, denied)
+        self.assertIn("outside your assigned access scope", denied["error"])
+
     def test_router_subnet_overlap_audit_is_available_through_authenticated_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})
         token = setup["token"]

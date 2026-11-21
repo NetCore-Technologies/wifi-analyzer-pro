@@ -1,4 +1,4 @@
-# 199 WiFi Analyzer Pro feature tools (F001–F168, F172–F202)
+# 200 WiFi Analyzer Pro feature tools (F001–F168, F172–F202, F291)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -250,3 +250,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F201 | Multi-AP RF channel reuse planner (`multi_ap_channel_reuse_planner`) | RF planning | Use channel options already validated by the operator for the radio and regulatory domain, plus explicit weighted survey/controller/operator relationships, to calculate a bounded coordinate-descent recommendation, baseline cost and residual overlaps. Reports convergence and heuristic limitations; never applies configuration. |
 
 | F202 | RF survey evidence normalizer (`rf_survey_evidence_normalizer`) | RF planning | Normalize fresh, timestamped paired RSSI readings collected by one survey receiver at the same point, plus optional channel-load observations, into relative co-visibility/load weights for F201; retain source and sample volume while excluding stale data. Scores are not measured interference or capacity. |
+
+| F291 | Client roam transaction analyzer (`client_roam_transaction_analyzer`) | Roaming | Correlate explicit roam-start, roam-complete and roam-failure events to report matched success latency percentiles, failure rates, incomplete event pairs, disassociation reason codes and per-site summaries. Unmatched events are excluded from timing metrics; client references are replaced with report-local aliases. |

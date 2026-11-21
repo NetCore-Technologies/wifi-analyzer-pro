@@ -15,8 +15,9 @@ REQUIRED_FEATURES = {
     "router_webhook_delivery_orchestrator",
     "multi_ap_channel_reuse_planner",
     "rf_survey_evidence_normalizer",
+    "client_roam_transaction_analyzer",
 }
-MINIMUM_FEATURE_COUNT = 199
+MINIMUM_FEATURE_COUNT = 200
 PCAP_FIXTURE = "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"
 
 
@@ -126,6 +127,22 @@ def main() -> None:
     )
     if rf_evidence.get("feature") != "F202" or rf_evidence.get("result", {}).get("status") != "normalised":
         raise SystemExit("Frozen RF survey evidence normalizer did not execute successfully")
+    roam_result = request(
+        "/api/features/client_roam_transaction_analyzer",
+        {
+            "events": [
+                {"event_id":"frozen-roam-start","site_id":"smoke","client_ref":"station-01",
+                 "event_type":"roam_start","roam_id":"frozen-transaction","from_ap_id":"ap-01",
+                 "to_ap_id":"ap-02","occurred_at":now,"evidence_source":"controller"},
+                {"event_id":"frozen-roam-complete","site_id":"smoke","client_ref":"station-01",
+                 "event_type":"roam_complete","roam_id":"frozen-transaction","from_ap_id":"ap-01",
+                 "to_ap_id":"ap-02","occurred_at":"2026-11-20T10:00:00.250Z","evidence_source":"controller"},
+            ],
+        },
+        token=token,
+    )
+    if roam_result.get("feature") != "F291" or roam_result.get("result", {}).get("summary", {}).get("median_roam_latency_ms") != 250.0:
+        raise SystemExit("Frozen client roam transaction analyzer did not execute successfully")
     print(f"Frozen feature smoke test passed ({catalog['count']} registered features)")
 
 

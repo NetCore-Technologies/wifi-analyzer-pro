@@ -181,7 +181,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 199 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 200 built-in tools |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
@@ -405,3 +405,8 @@ The Feature Workbench includes an evidence-weighted multi-AP channel reuse plann
 ### RF survey evidence and multi-AP planning (F201–F202)
 
 F202 normalises fresh, timestamped pairwise survey/controller observations into relative co-visibility/load weights for F201. Supply both AP RSSI readings captured by the same survey receiver at one location, in the order of the radio IDs, plus optional measured channel-utilisation and retry percentages. The normalizer reports missing load data, stale observations, source and sample-volume grade. Its score is a declared heuristic—not an RF interference probability, propagation model, airtime measurement or capacity estimate. The resulting edges can be passed directly to the F201 channel planner.
+
+
+## Client roaming transaction diagnostics (F291)
+
+The Feature Workbench includes a guided client roam transaction analyzer. Import controller, agent or client event exports containing explicit `roam_start`, `roam_complete` and `roam_failure` records with timezone-aware timestamps, site ID, an opaque client reference and a transaction ID. The analyzer reports successful roam latency percentiles, failure rate based only on matched start/terminal pairs, slow-roam counts and disassociation reason codes. Unpaired records are surfaced as incomplete telemetry and excluded from timing metrics. Returned client references are report-local aliases; raw event and roam IDs are not returned. This is offline event analysis, not a live 802.11 protocol decoder or a source of inferred timing.
