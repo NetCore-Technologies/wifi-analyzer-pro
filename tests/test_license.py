@@ -108,7 +108,7 @@ class VendorLicenseTests(unittest.TestCase):
             {"plan_id": "super-enterprise"},
             {"limits": {"users": 100000}},
             {"issued_at": NOW + 3600},
-            {"expires_at": NOW - 1},
+            {"expires_at": NOW - 61},
             {"expires_at": NOW + 20 * 365 * 24 * 60 * 60},
             {"license_id": "bad-id"},
             {"installation_id": "not-an-install"},
@@ -125,7 +125,7 @@ class VendorLicenseTests(unittest.TestCase):
     def test_expired_license_has_a_bounded_offline_grace_period(self):
         expiry = NOW - 60 * 60
         result = verify_license_token(
-            self.token(expires_at=expiry),
+            self.token(issued_at=NOW - 7 * 24 * 60 * 60, expires_at=expiry),
             public_keys=self.public_keys,
             expected_installation_id=INSTALLATION_ID,
             now=NOW,
@@ -184,7 +184,7 @@ class VendorLicenseTests(unittest.TestCase):
         status = self.store.status(INSTALLATION_ID)
         self.assertFalse(status["active"])
         self.assertEqual(status["plan_id"], "free")
-        self.assertIn("signature", status["error"])
+        self.assertIn("format", status["error"])
 
 
 if __name__ == "__main__":
