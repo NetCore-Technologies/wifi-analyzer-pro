@@ -338,13 +338,22 @@ refuses to overwrite an existing key. Store the private key outside the
 repository and mount it only into the vendor service. Back up the vendor
 licensing SQLite database and the signing key separately.
 
-Set `WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL`, the vendor Stripe secret and
-webhook signing secret, the recurring Price IDs, and
-`WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE` in a vendor-only
-environment file. Start the separate service with:
+Copy the vendor template and keep the live file outside Git:
 
 ```sh
-docker compose --profile licensing-control-plane up -d licensing-control-plane
+cp .env.vendor.example .env.vendor
+chmod 600 .env.vendor
+```
+
+Set `WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL`, the vendor Stripe secret and
+webhook signing secret, the recurring Price IDs, and
+`WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE` in `.env.vendor`.
+The private key file must be readable by container UID 10001 while remaining
+unreadable to group and other users (on a Linux host, use mode 0600 and owner
+UID/GID 10001). Start the separate vendor-only image with:
+
+```sh
+docker compose --env-file .env.vendor -f compose.vendor.yaml up -d --build
 ```
 
 Terminate public HTTPS using a trusted reverse proxy to the loopback listener
