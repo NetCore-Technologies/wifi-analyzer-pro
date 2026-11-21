@@ -62,8 +62,6 @@ def _report_bundle(value: object, field: str, site_id: str) -> tuple[dict, dict]
     _time(report.get("created_at"), f"{field}.report.created_at")
     if result.get("status") not in {"analysed", "insufficient_fresh_survey_evidence"}:
         raise ValueError(f"{field}.result has an unsupported survey status")
-    if report.get("floorplan_id") != result.get("floorplan_id") or report.get("floor_id") != result.get("floor_id"):
-        raise ValueError(f"{field} report metadata does not match its stored result")
     return report, result
 
 
@@ -154,6 +152,12 @@ def run(payload: dict) -> dict:
         raise ValueError("reports must use the same floorplan_id")
     if baseline.get("floor_id") != current.get("floor_id"):
         raise ValueError("reports must use the same floor_id")
+    for field, report, result in (
+        ("baseline_report", baseline_report, baseline),
+        ("current_report", current_report, current),
+    ):
+        if report.get("floorplan_id") != result.get("floorplan_id") or report.get("floor_id") != result.get("floor_id"):
+            raise ValueError(f"{field} report metadata does not match its stored result")
     if baseline.get("floorplan") != current.get("floorplan"):
         raise ValueError("reports must use identical floor-plan coordinate dimensions")
     floorplan = baseline.get("floorplan")
@@ -182,8 +186,6 @@ def run(payload: dict) -> dict:
         if baseline_aps[ap_id] == current_aps[ap_id]
     ]
     moved_ids = [ap_id for ap_id in common_ids if ap_id not in stable_ids]
-    removed_ids = sorted(set(baseline_aps) - set(current_aps))
-    added_ids = sorted(set(current_aps) - set(baseline_aps))
     removed_ids = sorted(set(baseline_aps) - set(current_aps))
     added_ids = sorted(set(current_aps) - set(baseline_aps))
     baseline_points = _measurement_points(baseline, "baseline_report", baseline_aps, width, height)
@@ -254,8 +256,6 @@ def run(payload: dict) -> dict:
             "scale_difference_pct": round(scale_delta_pct, 4),
             "unchanged_ap_count": len(stable_ids),
             "moved_or_repositioned_ap_ids": moved_ids,
-            "removed_ap_ids": removed_ids,
-            "added_ap_ids": added_ids,
             "removed_ap_ids": removed_ids,
             "added_ap_ids": added_ids,
             "limitations": [

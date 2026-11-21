@@ -14,7 +14,7 @@ def _result(*, site="hq", context=None, signal_offset=0.0, ap_x=100):
         "floor_id": "level-1",
         "floorplan": {"width_px": 1000, "height_px": 800},
         "scale": {"metres_per_pixel": 0.02},
-        "measurement_context": context or {},
+        "measurement_context": dict(context) if isinstance(context, dict) else {},
         "access_points": [{"ap_id": "ap-01", "x_px": ap_x, "y_px": 100}],
         "measurements": [
             {
