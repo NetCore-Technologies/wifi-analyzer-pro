@@ -106,7 +106,13 @@ For systemd deployments, including the API and both optional workers, see deploy
 
 ## Optional subscription billing
 
-WiFi Analyzer Pro supports two separate billing concepts:
+WiFi Analyzer Pro supports two separate billing concepts. The commercial Pro
+launch target is **30 per month** (the billing currency is selected in the
+vendor Stripe account). At that rate, 1,000 active paying Pro subscriptions
+would equal 30,000 gross monthly recurring revenue before taxes, payment
+processing fees, refunds, hosting, support, churn and other operating costs.
+That is a target calculation, not a revenue forecast or a claim that sales are
+already live.
 
 - **Vendor product licensing:** the NetCore product licence is a signed Ed25519
   token bound to one installation. Customer installations contain only the
@@ -116,8 +122,9 @@ WiFi Analyzer Pro supports two separate billing concepts:
   vendor-hosted Stripe control plane issues short-lived signed renewals; the
   customer app stores only its installation-bound activation credential and
   public verification key. Deployment instructions are in
-  [VENDOR_LICENSING.md](wifi_analyzer_backend/VENDOR_LICENSING.md). The service
-  still needs to be configured and deployed on vendor-owned infrastructure.
+  [VENDOR_LICENSING.md](wifi_analyzer_backend/VENDOR_LICENSING.md). The code and
+  separate vendor deployment stack are implemented; live sales still require
+  production Stripe Prices, DNS/TLS, webhook setup and key management.
 - **Optional workspace billing:** an installation operator can configure its
   own Stripe account to charge its own organisation or customers. This is not
   payment to NetCore and is not the vendor subscription flow.
@@ -267,6 +274,14 @@ Without these secrets, the workflow still builds the macOS binaries, but the dow
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports should include the OS, Python/Node versions, Wi-Fi adapter/driver and reproducible steps. Please remove SSIDs, BSSIDs, IP addresses and other private network details before attaching logs or exports.
+
+The source repository is MIT licensed. This permits customers to
+inspect, modify, fork and self-host the code, including changing local licence
+checks. The vendor-issued Ed25519 licence is an entitlement mechanism for
+official NetCore builds and vendor-managed services, not DRM and not an
+unremovable lock. Recurring subscription value must come from official
+maintained releases, vendor-operated services, integrations, support and
+managed operational capabilities.
 
 ## License
 

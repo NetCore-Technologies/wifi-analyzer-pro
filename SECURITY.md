@@ -170,6 +170,16 @@ pooled hosting needs central tenant isolation and transactional quota
 coordination.
 
 
+## MIT licensing and product licences
+
+The source is MIT licensed. Users may legally inspect, modify, fork and
+self-host the source, including changing local licence validation. The
+vendor-issued Ed25519 token is an official-build entitlement and a credential
+for vendor-operated services; it is not DRM and cannot prevent a modified
+fork. Do not represent local activation as tamper-proof. Keep recurring
+subscription value in maintained official releases, vendor-hosted services,
+managed fleet operations, integrations and support.
+
 ## Vendor product licence boundary
 
 Customer installations verify vendor-issued Ed25519 product licences using

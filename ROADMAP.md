@@ -100,6 +100,16 @@ The next 900 candidates are grouped into ten reviewable 90-feature waves. These 
 
 A candidate is promoted to an F-number only after checking that it is distinct from existing tools, technically supportable on documented hardware/OS combinations, privacy-safe and testable. Avoid duplicate feature counts, simulated measurements presented as live data, and network-changing operations without explicit confirmation.
 
+## Commercial launch readiness
+
+- ✅ Vendor-owned Stripe checkout, signed webhook processing, installation-bound Ed25519 product licences, renewal and self-service Billing Portal are implemented in a separate deployment stack.
+- ✅ Customer Plans & Licensing UI supports purchase, signed activation, licence sync/renewal and subscription management.
+- ✅ Pro target packaging is defined at 30 per month, with Free/Pro/Business/Enterprise user, agent, site, webhook and diagnostic-run limits.
+- 📋 Production launch setup: configure live Stripe recurring Prices, tax settings, public DNS/TLS, webhook endpoint, signing-key custody, backups and service monitoring.
+- 📋 Vendor SaaS roadmap: tenant-isolated fleet management, OIDC/SAML SSO, SCIM, central SIEM forwarding, remote agent health, service-level reporting and customer support workflows.
+- 📋 Commercial operations: subscription analytics, customer onboarding, cancellation/refund/dispute handling, incident response, SLA, status page and backup/restore drills.
+- ⚠️ The repository is MIT licensed. Local licence checks do not prevent a permitted modified fork; paid value must be delivered through official maintained releases and vendor-operated services rather than an unbreakable local feature gate.
+
 ## v1.2.0: Analysis depth
 
 - 📋 Historical database (SQLite) for RSSI, speed tests and alerts, with retention settings
