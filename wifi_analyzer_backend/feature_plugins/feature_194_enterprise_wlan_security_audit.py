@@ -336,7 +336,7 @@ def run(payload: dict) -> dict:
                     if policy["require_radius_shared_secret"]:
                         if any(state is False for state in radius_secret_states):
                             add("RADIUS_SHARED_SECRET_NOT_CONFIGURED", "high", "At least one RADIUS server is explicitly marked without a configured shared secret.")
-                        elif radius_secret_states and any(state is None for state in radius_secret_states):
+                        if radius_secret_states and any(state is None for state in radius_secret_states):
                             add("RADIUS_SECRET_EVIDENCE_MISSING", "medium", "Shared-secret configuration state is unknown for one or more RADIUS servers.", "missing")
 
                 if purpose == "management" and policy["require_management_access_restricted"]:
@@ -456,6 +456,7 @@ def run(payload: dict) -> dict:
         "RADIUS_SERVER_EVIDENCE_MISSING": "Import the current RADIUS server inventory from the WLAN controller; do not treat an absent export as proof that no servers are configured.",
         "RADIUS_REDUNDANCY_INSUFFICIENT": "Provide the configured minimum number of distinct RADIUS servers or document an approved high-availability design.",
         "RADIUS_SHARED_SECRET_NOT_CONFIGURED": "Configure unique, high-entropy RADIUS shared secrets and store them in the controller's protected credential store.",
+        "RADIUS_SECRET_EVIDENCE_MISSING": "Import the current RADIUS shared-secret configuration state from the WLAN controller; do not report absent fields as confirmed misconfiguration.",
         "RADIUS_SERVER_CERT_VALIDATION_DISABLED": "Enable RADIUS server certificate and trusted-name validation to reduce credential interception risk.",
         "EAP_TLS_CLIENT_CERT_NOT_REQUIRED": "Require managed client certificates for EAP-TLS and validate their issuance and revocation lifecycle.",
         "GUEST_VLAN_EVIDENCE_MISSING": "Verify that guest WLAN traffic is mapped to a dedicated guest VLAN.",

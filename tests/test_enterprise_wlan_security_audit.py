@@ -143,6 +143,17 @@ class EnterpriseWlanSecurityAuditTests(unittest.TestCase):
         self.assertIn("RADIUS_SHARED_SECRET_NOT_CONFIGURED", codes)
         self.assertIn("RADIUS_SECRET_EVIDENCE_MISSING", codes)
 
+    def test_missing_radius_secret_state_is_an_evidence_gap_not_a_violation(self):
+        result = run({"profiles": [corporate_profile(radius_servers=[
+            {"server_id": "radius-a", "address": "192.0.2.10", "shared_secret_configured": None},
+        ])]})
+        finding = next(item for item in result["findings"] if item["code"] == "RADIUS_SECRET_EVIDENCE_MISSING")
+        self.assertEqual(finding["evidence_state"], "missing")
+        self.assertNotIn("RADIUS_SHARED_SECRET_NOT_CONFIGURED", {
+            item["code"] for item in result["findings"]
+        })
+        self.assertIsNone(result["profiles"][0]["observed_risk_score"])
+
     def test_duplicate_radius_addresses_do_not_count_as_redundancy(self):
         result = run({"profiles": [corporate_profile(radius_servers=[
             {"server_id": "radius-a", "address": "192.0.2.10", "shared_secret_configured": True},

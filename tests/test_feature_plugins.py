@@ -901,10 +901,10 @@ PAYLOADS = {
             "profile_id": "office-default",
             "site_id": "hq",
             "purpose": "other",
-            "enabled": true,
+            "enabled": True,
             "security_mode": "WPA3-Personal",
             "pmf": "required",
-            "wps_enabled": false
+            "wps_enabled": False
         }]
     }
 }
