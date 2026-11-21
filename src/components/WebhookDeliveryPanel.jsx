@@ -27,47 +27,22 @@ function csvValues(value) {
 }
 
 function createExample() {
-  const now = new Date();
-  const connectedAt = now.toISOString();
-  const resolutionAt = new Date(now.getTime() - 5000).toISOString();
+  const now = new Date().toISOString();
   return {
-    now: connectedAt,
-    subscriptions: [{
-      subscription_id: "home-alerts",
-      endpoint: "https://hooks.example.net/router/events",
-      allowed_hosts: ["hooks.example.net"],
-      key_id: "home-key-v1",
-      event_types: ["router.health"],
-      minimum_severity: "warning",
-      site_allowlist: ["home"],
-      maximum_events_per_batch: 100,
-      maximum_batches: 10
-    }],
+    now,
+    subscriptions: [],
     events: [{
       event_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       event_type: "router.health",
       severity: "warning",
-      occurred_at: connectedAt,
-      site_id: "home",
-      router_id: "openwrt-home",
-      summary: "Router health warning",
-      attributes: { finding_count: 1, threshold: 85, password: "this-unknown-field-is-removed" }
+      occurred_at: now,
+      site_id: "office",
+      router_id: "router-office-01",
+      summary: "Example router health warning",
+      attributes: { finding_count: 1 }
     }],
-    signing_keys: { "home-key-v1": "sample-signing-key-material-minimum-32-bytes" },
-    egress_evidence: [{
-      subscription_id: "home-alerts",
-      endpoint: "https://hooks.example.net/router/events",
-      allowed_hosts: ["hooks.example.net"],
-      resolution_at: resolutionAt,
-      connected_at: connectedAt,
-      resolved_addresses: ["1.1.1.1"],
-      peer_ip: "1.1.1.1",
-      connected_port: 443,
-      tls_version: "TLSv1.3",
-      tls_verified: true,
-      hostname_verified: true,
-      redirect_location: null
-    }]
+    signing_keys: {},
+    egress_evidence: []
   };
 }
 async function readResponse(response) {
@@ -385,6 +360,13 @@ export default function WebhookDeliveryPanel() {
       maximum_batches: item.maximum_batches,
       enabled: true,
     }));
+    const missingKeys = enabled.filter(item => !signingKeyDrafts[item.key_id] || !signingKeyDrafts[item.key_id].trim());
+    if (missingKeys.length) {
+      setSubscriptionError(
+        "Enter the one-time HMAC signing secret for: " + missingKeys.map(item => item.key_id).join(", ")
+      );
+      return;
+    }
     const signingKeys = { ...(request.signing_keys || {}) };
     for (const item of enabled) {
       const draftKey = signingKeyDrafts[item.key_id];
