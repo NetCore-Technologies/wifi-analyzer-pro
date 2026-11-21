@@ -21,7 +21,7 @@ def _timestamp(value: object, field: str) -> datetime:
     except ValueError as error:
         raise ValueError(f"{field} must be a timezone-aware ISO-8601 timestamp") from error
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError(f"{field} must include a timezone offset")
+        raise ValueError(f"{field} must be a timezone-aware ISO-8601 timestamp including a timezone offset")
     return parsed.astimezone(timezone.utc)
 
 
@@ -119,11 +119,16 @@ def _compare(
     after_count = comparison["eligible_slo_sample_count"]
     before_attainment = baseline["sla_attainment_pct"]
     after_attainment = comparison["sla_attainment_pct"]
+    sufficient_samples = (
+        before_count >= minimum_eligible_samples
+        and after_count >= minimum_eligible_samples
+    )
     delta = (
         round(after_attainment - before_attainment, 2)
-        if before_attainment is not None and after_attainment is not None else None
+        if sufficient_samples and before_attainment is not None and after_attainment is not None
+        else None
     )
-    if before_count < minimum_eligible_samples or after_count < minimum_eligible_samples or delta is None:
+    if not sufficient_samples or delta is None:
         status = "insufficient_evidence"
     elif delta <= -regression_threshold_pct_points:
         status = "regression"

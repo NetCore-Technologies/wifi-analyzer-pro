@@ -1379,7 +1379,15 @@ class FeatureCatalogTests(unittest.TestCase):
         payload = PAYLOADS["client_experience_slo_window_comparator"]
         with self.assertRaisesRegex(ValueError, "must not overlap"):
             run("client_experience_slo_window_comparator", {
-                **payload, "comparison": {**payload["comparison"], "as_of": "2026-11-19T12:00:00Z"},
+                **payload,
+                "comparison": {
+                    **payload["comparison"],
+                    "as_of": "2026-11-19T12:00:00Z",
+                    "samples": [
+                        {**sample, "observed_at": "2026-11-19T11:50:00Z"}
+                        for sample in payload["comparison"]["samples"]
+                    ],
+                },
             })
         future = dict(payload["comparison"]["samples"][0], observed_at="2026-11-21T12:00:01Z")
         with self.assertRaisesRegex(ValueError, "must not be after its window as_of"):
