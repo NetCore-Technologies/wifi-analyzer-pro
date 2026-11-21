@@ -411,13 +411,24 @@ class VendorLicenseStore:
             raise LicenseVerificationError("No vendor checkout or renewal credentials are stored")
         if not isinstance(installation_id, str) or not _INSTALLATION_ID.fullmatch(installation_id):
             raise ValueError("Installation identifier is invalid")
-        result = _post_vendor_service(
-            f"{credentials['service_url']}/api/claim",
-            {
+        existing = self.status(installation_id)
+        if existing.get("installed"):
+            endpoint = "/api/refresh"
+            payload = {
+                "installation_id": installation_id,
+                "license_id": credentials["license_id"],
+                "activation_secret": credentials["activation_secret"],
+            }
+        else:
+            endpoint = "/api/claim"
+            payload = {
                 "installation_id": installation_id,
                 "checkout_session_id": credentials["checkout_session_id"],
                 "activation_secret": credentials["activation_secret"],
-            },
+            }
+        result = _post_vendor_service(
+            f"{credentials['service_url']}{endpoint}",
+            payload,
             opener=opener,
         )
         token = result.get("license_token")

@@ -101,6 +101,48 @@ export default function BillingPanel() {
     }
   };
 
+  const startVendorCheckout = async planId => {
+    setBusy(`vendor-${planId}`);
+    setError("");
+    setNotice("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/license/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan_id: planId }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Vendor checkout returned HTTP ${response.status}`);
+      openStripeUrl(data.checkout?.checkout_url);
+    } catch (err) {
+      setError(err.message || "Could not start NetCore product checkout.");
+      setBusy("");
+    }
+  };
+
+  const syncVendorLicense = async () => {
+    setBusy("sync");
+    setError("");
+    setNotice("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/license/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Licence sync returned HTTP ${response.status}`);
+      setNotice(`NetCore ${data.license?.plan_label || data.license?.plan_id} licence is active.`);
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not sync the NetCore product licence.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const activateVendorLicense = async () => {
     setBusy("license");
     setError("");
@@ -183,8 +225,13 @@ export default function BillingPanel() {
             />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 9 }}>
               <span style={{ color: "#64748b", fontSize: 10 }}>
-                The installation stores the signed token locally; the vendor private signing key never leaves the licensing service.
+                The installation stores the signed token and renewal credential locally; vendor payment secrets remain on the licensing service.
               </span>
+              {productLicense.renewal_configured ? (
+                <button type="button" disabled={!!busy} onClick={syncVendorLicense} style={quietButton}>
+                  <RefreshCw size={13}/>{busy === "sync" ? "Syncing…" : "Sync / renew licence"}
+                </button>
+              ) : null}
               <button type="button" disabled={!productLicense.configured || !licenseToken.trim() || !!busy}
                 onClick={activateVendorLicense}
                 style={{ ...button, opacity: !productLicense.configured || !licenseToken.trim() || !!busy ? .45 : 1 }}>
@@ -248,6 +295,52 @@ export default function BillingPanel() {
                 );
               })}
             </div>
+          </section>
+
+          <section style={panel}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 750 }}>WiFi Analyzer Pro plans</div>
+                <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>Purchase from NetCore. Price and billing currency are shown by vendor Stripe Checkout.</div>
+              </div>
+              {productLicense.renewal_configured ? (
+                <button type="button" disabled={!!busy} onClick={syncVendorLicense} style={quietButton}>
+                  <RefreshCw size={13}/>{busy === "sync" ? "Syncing…" : "Sync purchased licence"}
+                </button>
+              ) : null}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 10 }}>
+              {plans.filter(plan => plan.plan_id !== "free").map(plan => {
+                const current = productLicense.active && productLicense.plan_id === plan.plan_id;
+                return (
+                  <div key={plan.plan_id} style={{ background: "#080d18", border: `1px solid ${current ? "#06d6f0" : "#1e2d47"}`, borderRadius: 9, padding: 13 }}>
+                    <div style={{ fontSize: 14, fontWeight: 750 }}>{plan.label}</div>
+                    <div style={{ color: "#64748b", fontSize: 10, margin: "5px 0 10px" }}>NetCore product subscription</div>
+                    {Object.entries(plan.limits).map(([key, value]) => (
+                      <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e2d47" }}>
+                        <span>{{ users: "Users", agents: "Router agents", sites: "Managed sites", webhook_subscriptions: "Webhook subscriptions", feature_runs_monthly: "Diagnostic runs / month" }[key]}</span><strong style={{ color: "#e2e8f0" }}>{value}</strong>
+                      </div>
+                    ))}
+                    <button type="button"
+                      disabled={!!busy || productLicense.active || !billing.vendor_checkout_configured}
+                      onClick={() => startVendorCheckout(plan.plan_id)}
+                      style={{ ...button, width: "100%", marginTop: 12, opacity: productLicense.active || !billing.vendor_checkout_configured ? .45 : 1, cursor: productLicense.active || !billing.vendor_checkout_configured ? "not-allowed" : "pointer" }}>
+                      {current ? "Current product plan" : productLicense.active ? "Active licence" : busy === `vendor-${plan.plan_id}` ? "Opening checkout…" : `Buy ${plan.label}`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {!billing.vendor_checkout_configured ? (
+              <p style={{ fontSize: 10, color: "#fbbf24", margin: "12px 0 0" }}>
+                NetCore checkout is not configured on this installation. Configure the vendor licensing service URL and trusted public verification key.
+              </p>
+            ) : null}
+            {productLicense.renewal_configured && !productLicense.active ? (
+              <p style={{ fontSize: 10, color: "#fbbf24", margin: "12px 0 0" }}>
+                A checkout or renewal credential is stored. Complete payment in Stripe, return here and choose Sync purchased licence.
+              </p>
+            ) : null}
           </section>
 
           <section style={panel}>
