@@ -157,13 +157,13 @@ def run(payload: dict) -> dict:
     latency_median = round(median(latencies), 2) if latencies else None
     recommendations = []
     if dead_letter:
-        recommendations.append("Review dead-letter deliveries and verify receiver availability, TLS and endpoint allowlists.")
+        recommendations.append("Review dead-letter deliveries and verify receiver availability, TLS and destination allowlists.")
     if counts["retry_wait"]:
         recommendations.append("Inspect retry-wait deliveries and recent safe error codes before increasing worker capacity.")
     if counts["pending"]:
         recommendations.append("Check that the webhook dispatcher worker is enabled and sharing the API state volume.")
     if retry_delivery_count:
-        recommendations.append("Review delivery retries; repeated transient failures can indicate endpoint or network instability.")
+        recommendations.append("Review delivery retries; repeated transient failures can indicate destination or network instability.")
     if not deliveries:
         recommendations.append("No delivery records were created in this reporting window; generate a test event to establish a baseline.")
 
@@ -204,7 +204,7 @@ def run(payload: dict) -> dict:
         "recommendations": recommendations,
         "note": (
             "This report uses bounded queue metadata only. It does not inspect or expose signed payloads, "
-            "request metadata, endpoint URLs, HMAC keys, remote response bodies or raw exception text. "
+            "request metadata, destination addresses, HMAC keys, remote response bodies or raw exception text. "
             "Rates use terminal delivered/dead-letter outcomes; active deliveries are not counted as settled."
         ),
     }

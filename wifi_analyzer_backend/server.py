@@ -964,7 +964,7 @@ class Handler(BaseHTTPRequestHandler):
                         "deliveries": records,
                     },
                 )
-                self.send_json({"report": report})
+                self.send_json({"report": report["result"]})
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
             return

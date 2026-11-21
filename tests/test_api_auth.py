@@ -698,8 +698,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 189)
-        self.assertEqual(len(catalog["features"]), 189)
+        self.assertEqual(catalog["count"], 190)
+        self.assertEqual(len(catalog["features"]), 190)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -1290,7 +1290,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 409)
         status, result = self.request("POST", delivery_path, delivery_payload, token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(result["feature"], "F189")
+        self.assertEqual(result["feature"], "F190")
         self.assertEqual(result["result"]["status"], "ready")
         self.assertTrue(result["result"]["egress"]["approved"])
         self.assertEqual(result["result"]["delivery"]["method"], "POST")
@@ -2307,7 +2307,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 189)
+        self.assertEqual(catalog["count"], 190)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,

@@ -250,7 +250,7 @@ export default function TeamAccessPanel() {
           {!loading && users.length === 0 ? <div style={styles.muted}>No accounts found.</div> : null}
         </div>
       </section>
-      <p style={{ ...styles.muted, margin: 0, lineHeight: 1.6 }}>Site assignments are enforced by the API. Existing accounts retain their previous all-site access until an owner narrows it; SSO and MFA remain separate enterprise identity requirements. Keep remote access behind a VPN and do not expose the local API directly to the public internet.</p>
+      <p style={{ ...styles.muted, margin: 0, lineHeight: 1.6 }}>Site assignments are enforced by the API. Existing accounts retain their previous all-site access until an owner narrows it. Local TOTP authenticator-app MFA is available under Account Security; OIDC/SAML SSO, WebAuthn and SCIM provisioning are not yet supported. Keep remote access behind a VPN and do not expose the local API directly to the public internet.</p>
     </div>
   );
 }
