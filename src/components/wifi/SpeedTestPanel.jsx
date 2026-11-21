@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Zap, Download, Upload, Clock, Play } from 'lucide-react';
+import { apiBase, apiFetch } from '../../lib/api.js';
 
-const API_BASE = 'http://localhost:199';
-
-export default function SpeedTestPanel() {
+ export default function SpeedTestPanel() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -14,11 +13,17 @@ export default function SpeedTestPanel() {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/speedtest`, { signal: AbortSignal.timeout(60000) });
+      const res = await apiFetch(`${apiBase()}/api/speedtest`, { signal: AbortSignal.timeout(60000) });
+      if (!res.ok) throw new Error(`Speed test returned HTTP ${res.status}`);
       const data = await res.json();
-      setResult(data);
+      if (data.error) throw new Error(data.error);
+      const values = [data.download, data.upload, data.ping].map(Number);
+      if (!values.every(value => Number.isFinite(value) && value >= 0)) {
+        throw new Error('Speed test returned invalid measurements.');
+      }
+      setResult({ download: values[0], upload: values[1], ping: values[2] });
     } catch (e) {
-      setError('Speed test failed. Backend required.');
+      setError(e.message || 'Speed test failed. Local backend is required.');
     } finally {
       setRunning(false);
     }
@@ -29,7 +34,7 @@ export default function SpeedTestPanel() {
       <div className="glass rounded-xl p-4 flex items-center justify-between">
         <div>
           <div className="text-sm font-medium text-foreground">Internet Speed Test</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Tests via fast.com public endpoint</div>
+          <div className="text-xs text-muted-foreground mt-0.5">Tests through Cloudflare's public speed-test endpoint</div>
         </div>
         <button
           onClick={runTest}
