@@ -388,6 +388,22 @@ class VendorLicenseServiceTests(unittest.TestCase):
         self.assertNotIn("activation_secret_hash", licenses["licenses"][0])
         self.assertNotIn("checkout_session_id", licenses["licenses"][0])
 
+    def test_active_stripe_subscription_with_unknown_price_is_not_paid_mrr(self):
+        checkout = self.checkout("business")
+        self.service.process_event(self.checkout_completed(checkout))
+        self.service.process_event(
+            self.subscription_event(
+                checkout, "evt_adminunknown1234", price="price_unknown1234",
+            )
+        )
+        summary = self.service.admin_summary()
+        self.assertEqual(summary["active_subscriptions"], 0)
+        self.assertEqual(summary["unmapped_price_subscriptions"], 1)
+        self.assertEqual(summary["catalog_mrr_by_currency"], [])
+        licence = self.service.admin_list_licenses()["licenses"][0]
+        self.assertEqual(licence["plan_id"], "unmapped")
+        self.assertEqual(licence["price_mapping_state"], "unmapped")
+
     def test_admin_authentication_requires_the_vendor_bearer_token(self):
         self.assertTrue(self.service.authenticate_admin("Bearer vendor-admin-token-for-tests-0123456789"))
         self.assertFalse(self.service.authenticate_admin(None))

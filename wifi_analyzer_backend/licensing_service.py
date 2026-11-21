@@ -725,8 +725,10 @@ class VendorLicenseService:
     @staticmethod
     def _is_access_active(row, now: float) -> bool:
         return (
-            row["subscription_status"] in {"active", "trialing"}
+            row["plan_id"] in {"pro", "business", "enterprise"}
+            and row["subscription_status"] in {"active", "trialing"}
             and isinstance(row["current_period_end"], (int, float))
+            and not isinstance(row["current_period_end"], bool)
             and row["current_period_end"] > now
         )
 
@@ -745,7 +747,7 @@ class VendorLicenseService:
                 "SELECT COUNT(*) AS count, MAX(processed_at) AS last_processed FROM vendor_stripe_events"
             ).fetchone()
         active = []
-        pending = grace = expired = canceling = 0
+        pending = grace = expired = canceling = unmapped = 0
         plan_counts: dict[str, int] = {}
         currency_totals: dict[str, dict[str, int]] = {}
         for row in rows:
@@ -759,6 +761,16 @@ class VendorLicenseService:
                 grace += 1
             elif self._is_access_active(row, now):
                 active.append(row)
+            elif (
+                row["subscription_status"] in {"active", "trialing"}
+                and isinstance(row["current_period_end"], (int, float))
+                and not isinstance(row["current_period_end"], bool)
+                and row["current_period_end"] > now
+                and row["plan_id"] not in {"pro", "business", "enterprise"}
+            ):
+                # An active Stripe record with an unknown/unconfigured Price
+                # is not a paid product entitlement and must not inflate MRR.
+                unmapped += 1
             else:
                 expired += 1
             if row["cancel_at_period_end"]:
@@ -787,6 +799,7 @@ class VendorLicenseService:
             "pending_checkouts": pending,
             "payment_grace_subscriptions": grace,
             "expired_or_cancelled": expired,
+            "unmapped_price_subscriptions": unmapped,
             "scheduled_cancellations": canceling,
             "active_plan_counts": dict(sorted(plan_counts.items())),
             "catalog_mrr_by_currency": [
@@ -813,7 +826,19 @@ class VendorLicenseService:
                 """,
                 (limit,),
             ).fetchall()
-        return {"licenses": [dict(row) for row in rows], "limit": limit}
+        records = []
+        for row in rows:
+            item = dict(row)
+            if (
+                item["subscription_status"] in {"active", "trialing"}
+                and item["plan_id"] not in {"pro", "business", "enterprise"}
+            ):
+                item["price_mapping_state"] = "unmapped"
+                item["plan_id"] = "unmapped"
+            else:
+                item["price_mapping_state"] = "mapped"
+            records.append(item)
+        return {"licenses": records, "limit": limit}
 
     def public_key(self) -> dict[str, str]:
         public = self.signing_private_key.public_key().public_bytes(
