@@ -75,7 +75,16 @@ export default function MultiApChannelPlanner() {
     setResult(null);
   }
   function updateEdge(id, patch) {
-    setEdges(current => current.map(edge => edge.rowId === id ? { ...edge, ...patch } : edge));
+    setEdges(current => current.map(edge => {
+      if (edge.rowId !== id) return edge;
+      const updated = { ...edge, ...patch };
+      delete updated.sampleCount;
+      delete updated.evidenceGrade;
+      delete updated.weightBasis;
+      delete updated.lastObservedAt;
+      delete updated.missingLoadSampleCount;
+      return updated;
+    }));
     setResult(null);
   }
   function changeBand(radio, band) {
@@ -115,6 +124,11 @@ export default function MultiApChannelPlanner() {
         right: edge.radio_ids[1],
         weight: String(edge.weight),
         source: edge.evidence_source,
+        sampleCount: edge.sample_count,
+        evidenceGrade: edge.evidence_grade,
+        weightBasis: edge.weight_basis,
+        lastObservedAt: edge.last_observed_at,
+        missingLoadSampleCount: edge.missing_load_sample_count,
       }));
       setEdges(nextEdges);
       setEdgeSequence(value => value + nextEdges.length);
@@ -207,14 +221,14 @@ export default function MultiApChannelPlanner() {
         </section>
         <section style={{ ...panel, borderColor: '#24506a' }}>
           <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700, marginBottom: 7 }}>Normalise measured RF observations · F202</div>
-          <p style={{ ...muted, marginTop: 0 }}>Paste timestamped directional RSSI observations recorded between the radios above. Optional channel-utilisation and retry-rate percentages improve the relative planning proxy. Pairwise sample weights replace the manual evidence links below.</p>
+          <p style={{ ...muted, marginTop: 0 }}>Paste timestamped paired RSSI readings collected by the same survey receiver at one location. radio_rssi_dbm[0] belongs to radios[0] in radio_ids; radio_rssi_dbm[1] belongs to radios[1]. Optional channel-utilisation and retry-rate percentages improve the relative planning proxy. These are not AP-to-AP transmission measurements.</p>
           <textarea
             value={surveyText}
             onChange={event => setSurveyText(event.target.value)}
             rows={6}
             spellCheck="false"
             aria-label="Timestamped RF survey observations JSON"
-            placeholder={'[\n  {\n    "sample_id": "survey-001",\n    "radio_ids": ["ap-01-24", "ap-02-24"],\n    "observed_at": "2026-11-21T08:30:00Z",\n    "evidence_source": "survey",\n    "radio_rssi_dbm": [-54, -63],\n    "channel_utilization_pct": 65,\n    "retry_rate_pct": 8\n  }\n]'}
+            placeholder={'[\n  {\n    "sample_id": "survey-001",\n    "radio_ids": ["ap-01-24", "ap-02-24"],\n    "observed_at": "2026-11-21T05:00:00Z",\n    "evidence_source": "survey",\n    "radio_rssi_dbm": [-54, -63],\n    "channel_utilization_pct": 65,\n    "retry_rate_pct": 8\n  }\n]'}
             style={{ ...field, resize: 'vertical', fontFamily: 'ui-monospace, monospace', lineHeight: 1.5 }}
           />
           {normaliseError ? <div role="alert" style={{ ...muted, color: '#fca5a5', marginTop: 8 }}>{normaliseError}</div> : null}
@@ -239,6 +253,7 @@ export default function MultiApChannelPlanner() {
               <label><span style={label}>Relative weight (0–1)</span><input required type="number" min="0" max="1" step="0.01" value={edge.weight} onChange={e => updateEdge(edge.rowId, { weight: e.target.value })} placeholder="0.75" style={field}/></label>
               <label><span style={label}>Evidence source</span><select required value={edge.source} onChange={e => updateEdge(edge.rowId, { source: e.target.value })} style={field}><option value="">Select source…</option><option value="survey">RF survey</option><option value="controller">Controller telemetry</option><option value="operator">Operator assessment</option></select></label>
               <button type="button" onClick={() => { setEdges(current => current.filter(item => item.rowId !== edge.rowId)); setResult(null); }} style={{ ...secondary, width: 'fit-content', color: '#fca5a5' }}><Trash2 size={12}/>Remove</button>
+              {edge.evidenceGrade ? <div style={{ ...muted, gridColumn: '1 / -1' }}>F202 · {edge.sampleCount} samples · {edge.evidenceGrade} evidence volume · {edge.weightBasis?.replaceAll('_', ' ')} · {edge.missingLoadSampleCount} samples missing load metrics · last observed {edge.lastObservedAt}</div> : null}
             </div>
           ))}
         </section>

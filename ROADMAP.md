@@ -194,6 +194,6 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 
 ### F202 delivered — RF observation evidence normalisation
 
-- ✅ F202 accepts bounded, timezone-aware, timestamped pairwise survey/controller observations, validates directional RSSI and optional channel-utilisation/retry measurements, rejects cross-site/cross-band evidence and excludes samples outside the configured freshness window.
+- ✅ F202 accepts bounded, timezone-aware, timestamped pairwise survey/controller observations, validates paired RSSI measurements collected at a common survey point and optional channel-utilisation/retry metrics, rejects cross-site/cross-band evidence and excludes samples outside the configured freshness window.
 - ✅ F202 produces deterministic pair-level relative co-visibility/load weights with explicit formulas, last-observed timestamp, source provenance and sample-volume grade; raw sample identifiers and radio addresses are not returned.
 - ⚠️ F202 weights are transparent planning proxies, not measured RF coupling, interference probabilities, airtime contention or capacity. Evidence source is caller-declared and is not cryptographically attested.

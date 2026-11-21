@@ -1602,6 +1602,40 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 403, denied)
         self.assertIn("outside your assigned access scope", denied["error"])
 
+        survey_payload = {
+            "radios": [
+                {"radio_id":"home-ap1-24","site_id":"home","band":"2.4GHz"},
+                {"radio_id":"home-ap2-24","site_id":"home","band":"2.4GHz"},
+            ],
+            "observations": [{
+                "sample_id":"home-survey-001",
+                "radio_ids":["home-ap1-24","home-ap2-24"],
+                "observed_at":"2026-11-20T10:00:00Z",
+                "evidence_source":"survey",
+                "radio_rssi_dbm":[-54,-63],
+                "channel_utilization_pct":60,
+            }],
+        }
+        status, normalized = self.request(
+            "POST", "/api/features/rf_survey_evidence_normalizer", survey_payload, token=planner_token,
+        )
+        self.assertEqual(status, 200, normalized)
+        self.assertEqual(normalized["feature"], "F202")
+        self.assertEqual(normalized["result"]["status"], "normalised")
+
+        cross_site_survey = {
+            **survey_payload,
+            "radios": [
+                survey_payload["radios"][0],
+                {**survey_payload["radios"][1], "site_id":"branch"},
+            ],
+        }
+        status, denied = self.request(
+            "POST", "/api/features/rf_survey_evidence_normalizer", cross_site_survey, token=planner_token,
+        )
+        self.assertEqual(status, 403, denied)
+        self.assertIn("outside your assigned access scope", denied["error"])
+
     def test_saved_history_report_requires_auth_and_limits_site_count(self):
         status, denied = self.request("GET", "/api/sites/history/report")
         self.assertEqual(status, 401)

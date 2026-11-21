@@ -1633,10 +1633,10 @@
     "slug": "rf_survey_evidence_normalizer",
     "name": "RF survey evidence normalizer",
     "category": "RF planning",
-    "description": "Normalize timestamped pairwise survey/controller RSSI and optional channel-load observations into fresh, provenance-labelled relative edge weights consumable by the F201 multi-AP planner.",
+    "description": "Normalize timestamped paired RSSI readings collected by one survey receiver at a common point, plus optional channel-load observations, into fresh provenance-labelled relative co-visibility/load weights for the F201 multi-AP planner.",
     "parameters": {
       "radios": "2-256 radio IDs with site and band context",
-      "observations": "1-8192 pair observations with sample ID, radio IDs, timezone-aware timestamp, two directional RSSI values and optional channel utilization/retry percentages",
+      "observations": "1-8192 pair observations with sample ID, radio IDs, timezone-aware timestamp, two RSSI readings captured at the same survey point in radio_ids order, and optional channel utilization/retry percentages",
       "max_age_days": "Optional 1-30 day freshness window; defaults to 7 days"
     }
   }

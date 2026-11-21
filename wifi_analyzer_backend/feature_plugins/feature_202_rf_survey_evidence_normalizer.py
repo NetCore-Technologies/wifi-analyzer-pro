@@ -116,7 +116,7 @@ def run(payload: dict) -> dict:
             stale_count += 1
             continue
 
-        # Each value is the measured RSSI of the other radio at this radio's receiver.
+        # Both readings come from one survey receiver/point, ordered as radio_ids.
         rssi_values = observation.get("radio_rssi_dbm")
         if not isinstance(rssi_values, list) or len(rssi_values) != 2:
             raise ValueError(f"{field}.radio_rssi_dbm must contain two measured RSSI values")
