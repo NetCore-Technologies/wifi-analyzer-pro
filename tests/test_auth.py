@@ -62,6 +62,30 @@ class AuthManagerTests(unittest.TestCase):
         self.auth._sessions[digest] = 0
         self.assertFalse(self.auth.validate(token))
 
+    def test_active_sessions_are_bounded_per_user_and_oldest_is_revoked(self):
+        from unittest.mock import patch
+
+        first = self.auth.setup("correct horse battery staple")
+        with patch("wifi_analyzer_backend.auth.MAX_SESSIONS_PER_USER", 2):
+            second = self.auth.login("correct horse battery staple")
+            third = self.auth.login("correct horse battery staple")
+
+        self.assertFalse(self.auth.validate(first))
+        self.assertTrue(self.auth.validate(second))
+        self.assertTrue(self.auth.validate(third))
+        self.assertEqual(len(self.auth._sessions), 2)
+
+    def test_expired_sessions_are_pruned_when_creating_a_new_session(self):
+        first = self.auth.setup("correct horse battery staple")
+        first_digest = __import__("hashlib").sha256(first.encode()).hexdigest()
+        self.auth._sessions[first_digest]["expires_at"] = 0
+
+        second = self.auth.login("correct horse battery staple")
+
+        self.assertNotIn(first_digest, self.auth._sessions)
+        self.assertTrue(self.auth.validate(second))
+        self.assertEqual(len(self.auth._sessions), 1)
+
     def test_corrupt_auth_file_fails_closed_and_cannot_be_replaced_by_setup(self):
         Path(self.auth_path).write_text("not-json", encoding="utf-8")
         broken = AuthManager(path=self.auth_path)
