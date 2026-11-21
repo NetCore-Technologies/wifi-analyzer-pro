@@ -651,3 +651,108 @@ class VendorLicenseStore:
                 except FileNotFoundError:
                     pass
             return removed
+
+
+class VendorLicenseRenewalWorker:
+    """Automatically refresh short-lived vendor licences for an installation."""
+
+    def __init__(
+        self,
+        store: VendorLicenseStore,
+        installation_id: str,
+        *,
+        check_interval_seconds: int = 15 * 60,
+        renewal_window_seconds: int = 12 * 60 * 60,
+        clock=time.time,
+    ):
+        if not isinstance(store, VendorLicenseStore):
+            raise TypeError("store must be a VendorLicenseStore")
+        if not isinstance(installation_id, str) or not _INSTALLATION_ID.fullmatch(installation_id):
+            raise ValueError("installation_id is invalid")
+        if (
+            isinstance(check_interval_seconds, bool)
+            or not isinstance(check_interval_seconds, int)
+            or not 60 <= check_interval_seconds <= 24 * 60 * 60
+        ):
+            raise ValueError("check_interval_seconds must be between 60 and 86400")
+        if (
+            isinstance(renewal_window_seconds, bool)
+            or not isinstance(renewal_window_seconds, int)
+            or not 60 * 60 <= renewal_window_seconds <= 23 * 60 * 60
+        ):
+            raise ValueError("renewal_window_seconds must be between 3600 and 82800")
+        self.store = store
+        self.installation_id = installation_id
+        self.check_interval_seconds = check_interval_seconds
+        self.renewal_window_seconds = renewal_window_seconds
+        self._clock = clock
+        self._stop_event = threading.Event()
+        self._run_lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+
+    def run_once(self) -> dict[str, Any]:
+        """Perform one renewal check without exposing activation credentials."""
+        if not self._run_lock.acquire(blocking=False):
+            return {"state": "already_running"}
+        try:
+            if not self.store.configured():
+                return {"state": "verification_key_unconfigured"}
+            if not self.store.renewal_configured():
+                return {"state": "no_renewal_credentials"}
+
+            current = self.store.status(self.installation_id)
+            expiry = current.get("expires_at")
+            now = float(self._clock())
+            if (
+                current.get("active") is True
+                and isinstance(expiry, (int, float))
+                and not isinstance(expiry, bool)
+                and float(expiry) - now > self.renewal_window_seconds
+            ):
+                return {
+                    "state": "not_due",
+                    "seconds_remaining": max(0, int(float(expiry) - now)),
+                }
+
+            try:
+                renewed = self.store.sync_from_vendor(installation_id=self.installation_id)
+            except (VendorLicenseServiceError, LicenseVerificationError, ValueError) as error:
+                # Never include remote bodies, URLs or stored credentials in logs/results.
+                return {"state": "deferred", "error_code": type(error).__name__}
+            return {
+                "state": "renewed",
+                "license_id": renewed.get("license_id"),
+                "plan_id": renewed.get("plan_id"),
+                "expires_at": renewed.get("expires_at"),
+            }
+        finally:
+            self._run_lock.release()
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            result = self.run_once()
+            if result["state"] == "renewed":
+                print(f"[LICENCE] Vendor licence renewed for plan {result.get('plan_id')}")
+            elif result["state"] == "deferred":
+                print(f"[LICENCE] Automatic renewal deferred ({result.get('error_code')}); will retry")
+            if self._stop_event.wait(self.check_interval_seconds):
+                break
+
+    def start(self) -> bool:
+        """Start the daemon worker once. Returns False if it is already running."""
+        if self._thread is not None and self._thread.is_alive():
+            return False
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="vendor-license-renewal",
+            daemon=True,
+        )
+        self._thread.start()
+        return True
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Signal the worker and wait briefly for any in-flight HTTPS call."""
+        self._stop_event.set()
+        if self._thread is not None and self._thread.is_alive():
+            self._thread.join(timeout=max(0.0, float(timeout)))

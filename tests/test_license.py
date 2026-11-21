@@ -11,7 +11,11 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from wifi_analyzer_backend.billing import PLAN_CATALOG
+from unittest import mock
+
 from wifi_analyzer_backend.license import (
+    VendorLicenseRenewalWorker,
+    VendorLicenseServiceError,
     LICENSE_SCHEMA,
     LicenseVerificationError,
     VendorLicenseStore,
@@ -222,6 +226,85 @@ class VendorLicenseTests(unittest.TestCase):
             "https://licenses.example.com/api/claim",
             "https://licenses.example.com/api/refresh",
         ])
+
+    def test_automatic_renewal_worker_skips_without_credentials_or_when_not_due(self):
+        worker = VendorLicenseRenewalWorker(
+            self.store,
+            INSTALLATION_ID,
+            clock=lambda: self.clock[0],
+        )
+        self.assertEqual(worker.run_once()["state"], "no_renewal_credentials")
+
+        self.store.configure_service(
+            service_url="https://licenses.example.com",
+            checkout_session_id="cs_test_123456789",
+            activation_secret="s" * 48,
+            license_id="lic_customer12345678",
+        )
+        self.store.activate(self.token(), INSTALLATION_ID)
+        with mock.patch.object(self.store, "sync_from_vendor") as sync:
+            result = worker.run_once()
+        self.assertEqual(result["state"], "not_due")
+        sync.assert_not_called()
+
+    def test_automatic_renewal_worker_refreshes_near_expiry_without_exposing_credentials(self):
+        self.store.configure_service(
+            service_url="https://licenses.example.com",
+            checkout_session_id="cs_test_123456789",
+            activation_secret="s" * 48,
+            license_id="lic_customer12345678",
+        )
+        self.store.activate(self.token(expires_at=NOW + 60 * 60), INSTALLATION_ID)
+        with mock.patch.object(
+            self.store,
+            "sync_from_vendor",
+            return_value={
+                "license_id": "lic_customer12345678",
+                "plan_id": "business",
+                "expires_at": NOW + 24 * 60 * 60,
+                "activation_secret": "must-not-leak",
+            },
+        ) as sync:
+            worker = VendorLicenseRenewalWorker(
+                self.store,
+                INSTALLATION_ID,
+                clock=lambda: self.clock[0],
+            )
+            result = worker.run_once()
+        self.assertEqual(result["state"], "renewed")
+        self.assertEqual(result["plan_id"], "business")
+        self.assertNotIn("activation_secret", result)
+        sync.assert_called_once_with(installation_id=INSTALLATION_ID)
+
+    def test_automatic_renewal_worker_defers_safely_when_vendor_is_unavailable(self):
+        self.store.configure_service(
+            service_url="https://licenses.example.com",
+            checkout_session_id="cs_test_123456789",
+            activation_secret="s" * 48,
+            license_id="lic_customer12345678",
+        )
+        self.store.activate(self.token(expires_at=NOW + 60 * 60), INSTALLATION_ID)
+        with mock.patch.object(
+            self.store,
+            "sync_from_vendor",
+            side_effect=VendorLicenseServiceError("private remote response must not leak"),
+        ):
+            result = VendorLicenseRenewalWorker(
+                self.store,
+                INSTALLATION_ID,
+                clock=lambda: self.clock[0],
+            ).run_once()
+        self.assertEqual(result, {
+            "state": "deferred",
+            "error_code": "VendorLicenseServiceError",
+        })
+        self.assertNotIn("private remote response", json.dumps(result))
+
+    def test_automatic_renewal_worker_validates_safe_intervals(self):
+        with self.assertRaises(ValueError):
+            VendorLicenseRenewalWorker(self.store, INSTALLATION_ID, check_interval_seconds=1)
+        with self.assertRaises(ValueError):
+            VendorLicenseRenewalWorker(self.store, INSTALLATION_ID, renewal_window_seconds=24 * 60 * 60)
 
     def test_vendor_signed_offline_grace_claim_overrides_generic_default(self):
         token = self.token(

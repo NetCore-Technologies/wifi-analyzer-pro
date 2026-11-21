@@ -24,6 +24,7 @@ if __package__:
     )
     from .license import (
         LicenseVerificationError, VendorLicenseServiceError, VendorLicenseStore,
+        VendorLicenseRenewalWorker,
     )
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
@@ -60,6 +61,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     )
     from license import (
         LicenseVerificationError, VendorLicenseServiceError, VendorLicenseStore,
+        VendorLicenseRenewalWorker,
     )
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
@@ -2495,9 +2497,26 @@ if __name__ == "__main__":
         print("[SECURITY] The local password gate protects API endpoints. Use a firewall and a VPN/authenticated reverse proxy for remote access.")
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     server.daemon_threads = True
+    renewal_worker = None
+    if LICENSES.configured():
+        try:
+            renewal_interval = int(os.getenv("WIFI_ANALYZER_VENDOR_LICENSE_RENEW_INTERVAL_SECONDS", "900"))
+            renewal_window = int(os.getenv("WIFI_ANALYZER_VENDOR_LICENSE_RENEW_WINDOW_SECONDS", "43200"))
+            renewal_worker = VendorLicenseRenewalWorker(
+                LICENSES,
+                BILLING.instance_id(),
+                check_interval_seconds=renewal_interval,
+                renewal_window_seconds=renewal_window,
+            )
+            renewal_worker.start()
+        except (TypeError, ValueError) as error:
+            server.server_close()
+            raise SystemExit(f"Vendor licence renewal configuration is invalid: {error}") from error
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[+] Shutting down WiFi Analyzer Pro...")
+        print("\\n[+] Shutting down WiFi Analyzer Pro...")
     finally:
+        if renewal_worker is not None:
+            renewal_worker.stop()
         server.server_close()
