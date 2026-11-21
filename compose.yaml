@@ -60,7 +60,8 @@ services:
       - licensing-control-plane
     command:
       - python
-      - licensing_service.py
+      - -m
+      - wifi_analyzer_backend.licensing_service
     restart: unless-stopped
     init: true
     environment:

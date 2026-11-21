@@ -36,6 +36,7 @@ try:
 except ImportError:  # Direct script execution inside the production container.
     from billing import (
         PLAN_CATALOG, StripeApiError, _stripe_post, verify_stripe_signature,
+        create_billing_portal_session,
     )
     from license import LicenseVerificationError, create_signed_license
     from rate_limit import TokenBucketRateLimiter
