@@ -2,11 +2,14 @@
 import hashlib
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from wifi_analyzer_backend.feature_plugins import catalog, run, count
 from wifi_analyzer_backend.feature_plugins.registry import FEATURE_MODULES
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
+
+_SURVEY_NOW = datetime.now(timezone.utc)
 
 SAMPLE = [
     {"ssid": "Lab", "bssid": "02:11:22:33:44:55", "band": "2.4GHz", "channel": 6, "rssi": -52, "security": "WPA3"},
@@ -974,6 +977,17 @@ PAYLOADS = {
             {"radio_ids":["hq-ap1-24","hq-ap3-24"],"weight":0.5,"evidence_source":"controller"},
             {"radio_ids":["hq-ap2-24","hq-ap3-24"],"weight":0.4,"evidence_source":"survey"}
         ]
+    },
+    "rf_survey_evidence_normalizer": {
+        "radios": [
+            {"radio_id":"hq-ap1-24","site_id":"hq","band":"2.4GHz"},
+            {"radio_id":"hq-ap2-24","site_id":"hq","band":"2.4GHz"}
+        ],
+        "observations": [
+            {"sample_id":"survey-sample-001","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-54,-63],"channel_utilization_pct":65,"retry_rate_pct":8},
+            {"sample_id":"survey-sample-002","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-56,-66],"channel_utilization_pct":55,"retry_rate_pct":6},
+            {"sample_id":"survey-sample-003","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-55,-64],"channel_utilization_pct":60,"retry_rate_pct":7}
+        ]
     }
 }
 
@@ -981,15 +995,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 198)
-        self.assertEqual(len(set(FEATURE_MODULES)), 198)
-        self.assertEqual(count(), 198)
-        self.assertEqual(len(entries), 198)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 198)
+        self.assertEqual(len(FEATURE_MODULES), 199)
+        self.assertEqual(len(set(FEATURE_MODULES)), 199)
+        self.assertEqual(count(), 199)
+        self.assertEqual(len(entries), 199)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 199)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1107,6 +1121,80 @@ class FeatureCatalogTests(unittest.TestCase):
         duplicate = {**payload, "reports": payload["reports"][:-1] + [payload["reports"][0]]}
         with self.assertRaisesRegex(ValueError, "duplicate report"):
             run("enterprise_network_security_evidence_report", duplicate)
+
+    def test_f202_normalises_fresh_survey_samples_into_f201_edges(self):
+        result = run("rf_survey_evidence_normalizer", PAYLOADS["rf_survey_evidence_normalizer"])["result"]
+        self.assertEqual(result["status"], "normalised")
+        self.assertEqual(result["accepted_observation_count"], 3)
+        self.assertEqual(result["normalised_edge_count"], 1)
+        edge = result["interference_edges"][0]
+        self.assertEqual(edge["radio_ids"], ["hq-ap1-24", "hq-ap2-24"])
+        self.assertEqual(edge["sample_count"], 3)
+        self.assertEqual(edge["evidence_grade"], "medium")
+        self.assertEqual(edge["weight_basis"], "co_visibility_and_measured_load")
+        self.assertGreater(edge["weight"], 0)
+        self.assertLessEqual(edge["weight"], 1)
+        self.assertEqual(edge["missing_load_sample_count"], 0)
+        self.assertNotIn("survey-sample-001", json.dumps(result))
+
+    def test_f202_output_is_accepted_directly_by_the_f201_channel_planner(self):
+        evidence = run("rf_survey_evidence_normalizer", PAYLOADS["rf_survey_evidence_normalizer"])["result"]
+        result = run("multi_ap_channel_reuse_planner", {
+            "radios": [
+                {"radio_id":"hq-ap1-24","ap_id":"hq-ap1","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+                {"radio_id":"hq-ap2-24","ap_id":"hq-ap2","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+            ],
+            "interference_edges": evidence["interference_edges"],
+        })["result"]
+        self.assertEqual(result["status"], "planned")
+        self.assertEqual(result["evidence_edge_count"], 1)
+
+    def test_f202_excludes_stale_samples_and_reports_insufficient_fresh_evidence(self):
+        payload = PAYLOADS["rf_survey_evidence_normalizer"]
+        stale = dict(payload["observations"][0], observed_at=(_SURVEY_NOW - timedelta(days=9)).isoformat())
+        result = run("rf_survey_evidence_normalizer", {
+            "radios": payload["radios"], "observations": [stale],
+        })["result"]
+        self.assertEqual(result["status"], "insufficient_fresh_evidence")
+        self.assertEqual(result["accepted_observation_count"], 0)
+        self.assertEqual(result["skipped_stale_observation_count"], 1)
+        self.assertEqual(result["interference_edges"], [])
+
+    def test_f202_rejects_cross_site_pairs_and_naive_timestamps(self):
+        payload = PAYLOADS["rf_survey_evidence_normalizer"]
+        radios = [dict(item) for item in payload["radios"]]
+        radios[1] = {**radios[1], "site_id": "branch"}
+        with self.assertRaisesRegex(ValueError, "same site and band"):
+            run("rf_survey_evidence_normalizer", {
+                "radios": radios, "observations": payload["observations"],
+            })
+        bad = dict(payload["observations"][0], observed_at=_SURVEY_NOW.replace(tzinfo=None).isoformat())
+        with self.assertRaisesRegex(ValueError, "timezone-aware ISO-8601"):
+            run("rf_survey_evidence_normalizer", {
+                "radios": payload["radios"], "observations": [bad],
+            })
+
+    def test_f202_rejects_invalid_rssi_load_and_future_observations(self):
+        payload = PAYLOADS["rf_survey_evidence_normalizer"]
+        cases = [
+            (dict(payload["observations"][0], radio_rssi_dbm=[-130, -60]), "radio_rssi_dbm"),
+            (dict(payload["observations"][0], channel_utilization_pct=101), "channel_utilization_pct"),
+            (dict(payload["observations"][0], observed_at=(_SURVEY_NOW + timedelta(hours=1)).isoformat()), "too far in the future"),
+        ]
+        for observation, message in cases:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                run("rf_survey_evidence_normalizer", {
+                    "radios": payload["radios"], "observations": [observation],
+                })
+
+    def test_f202_rejects_mixed_provenance_for_the_same_radio_pair(self):
+        payload = PAYLOADS["rf_survey_evidence_normalizer"]
+        second = dict(payload["observations"][1], evidence_source="controller")
+        with self.assertRaisesRegex(ValueError, "same evidence_source"):
+            run("rf_survey_evidence_normalizer", {
+                "radios": payload["radios"],
+                "observations": [payload["observations"][0], second],
+            })
 
     def test_f201_planner_reduces_same_channel_interference_deterministically(self):
         payload = PAYLOADS["multi_ap_channel_reuse_planner"]

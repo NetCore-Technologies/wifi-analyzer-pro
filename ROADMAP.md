@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 198 callable feature tools (F001–F168 and F172–F201), local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 199 callable feature tools (F001–F168 and F172–F202), local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 198 distinct callable feature modules (F001–F168 and F172–F201), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
+- ✅ 199 distinct callable feature modules (F001–F168 and F172–F202), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
@@ -190,3 +190,10 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 - ✅ F201 multi-AP RF channel reuse planner: deterministic weighted channel assignment across up to 256 same-site radios, explicit survey/controller/operator provenance, supplied regulatory channel options, bandwidth-aware spectral overlap, change-cost optimisation and before/after cost reporting. The API reports its bounded coordinate-descent method, iteration count and convergence state, and clearly discloses that it is a heuristic rather than a globally optimal solution.
 - ✅ F201 fails closed when interference evidence is absent; it does not infer AP proximity, fabricate RF measurements, assume regulatory availability or change network configuration.
 - 📋 Remaining F201+ wave: RF survey import/normalisation, floor-plan-aware measured propagation, per-country regulatory data provenance, DFS/PSC planning against actual controller capabilities and live AP configuration preview with explicit approval.
+
+
+### F202 delivered — RF observation evidence normalisation
+
+- ✅ F202 accepts bounded, timezone-aware, timestamped pairwise survey/controller observations, validates directional RSSI and optional channel-utilisation/retry measurements, rejects cross-site/cross-band evidence and excludes samples outside the configured freshness window.
+- ✅ F202 produces deterministic pair-level relative co-visibility/load weights with explicit formulas, last-observed timestamp, source provenance and sample-volume grade; raw sample identifiers and radio addresses are not returned.
+- ⚠️ F202 weights are transparent planning proxies, not measured RF coupling, interference probabilities, airtime contention or capacity. Evidence source is caller-declared and is not cryptographically attested.

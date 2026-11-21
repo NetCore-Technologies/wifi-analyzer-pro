@@ -1074,8 +1074,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 198)
-        self.assertEqual(len(catalog["features"]), 198)
+        self.assertEqual(catalog["count"], 199)
+        self.assertEqual(len(catalog["features"]), 199)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -1099,6 +1099,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("enterprise_network_asset_lifecycle_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("enterprise_network_security_evidence_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("multi_ap_channel_reuse_planner", {item["slug"] for item in catalog["features"]})
+        self.assertIn("rf_survey_evidence_normalizer", {item["slug"] for item in catalog["features"]})
 
     def test_f195_to_f201_security_and_rf_tools_run_through_authenticated_feature_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "owner passphrase is secure"})
@@ -1163,7 +1164,16 @@ class AuthenticatedApiTests(unittest.TestCase):
                 "interference_edges": [
                     {"radio_ids":["hq-ap1-24","hq-ap2-24"],"weight":0.9,"evidence_source":"survey"}
                 ],
-            }, "F201")
+            }, "F201"),
+            ("rf_survey_evidence_normalizer", {
+                "radios": [
+                    {"radio_id":"hq-ap1-24","site_id":"hq","band":"2.4GHz"},
+                    {"radio_id":"hq-ap2-24","site_id":"hq","band":"2.4GHz"},
+                ],
+                "observations": [
+                    {"sample_id":"api-survey-001","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":"2026-11-21T04:00:00Z","evidence_source":"survey","radio_rssi_dbm":[-54,-63],"channel_utilization_pct":65},
+                ],
+            }, "F202")
         ]
         for slug, payload, expected in cases:
             with self.subTest(feature=slug):
@@ -2887,7 +2897,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 198)
+        self.assertEqual(catalog["count"], 199)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,

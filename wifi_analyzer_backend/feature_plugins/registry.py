@@ -202,6 +202,7 @@ FEATURE_MODULES = (
     "feature_199_enterprise_network_asset_lifecycle_audit",
     "feature_200_enterprise_network_security_evidence_report",
     "feature_201_multi_ap_channel_reuse_planner",
+    "feature_202_rf_survey_evidence_normalizer",
 )
 
 @lru_cache(maxsize=1)

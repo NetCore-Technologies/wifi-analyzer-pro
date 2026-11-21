@@ -181,7 +181,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 198 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 199 built-in tools |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
@@ -400,3 +400,8 @@ and full customer onboarding.
 ## Multi-AP RF channel planning (F201)
 
 The Feature Workbench includes an evidence-weighted multi-AP channel reuse planner. It accepts per-radio channel options that the operator has already validated for the deployment's regulatory domain and explicit relative interference relationships imported from an RF survey, controller or operator assessment. It compares a proposed plan with the supplied current-channel baseline, accounts for spectral overlap and channel-change cost, and returns a deterministic recommendation. It does not scan spectrum, infer propagation from AP names, certify regulatory compliance or push configuration to access points. A result is withheld when no explicit interference relationships are supplied.
+
+
+### RF survey evidence and multi-AP planning (F201–F202)
+
+F202 normalises fresh, timestamped pairwise survey/controller observations into relative co-visibility/load weights for F201. Supply the RSSI of each radio as observed at the other radio, plus optional measured channel-utilisation and retry percentages. The normalizer reports missing load data, stale observations, source and sample-volume grade. Its score is a declared heuristic—not an RF interference probability, propagation model, airtime measurement or capacity estimate. The resulting edges can be passed directly to the F201 channel planner.

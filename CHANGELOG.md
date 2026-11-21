@@ -94,3 +94,6 @@ All notable changes to WiFi Analyzer Pro are documented here.
 ## Unreleased
 
 - Add F201, a deterministic multi-AP RF channel reuse planner using operator-supplied regulatory channel options and explicit weighted survey/controller interference evidence. It evaluates channel-width spectral overlap, balances interference cost against configuration churn, reports before/after scores, and never applies changes or invents RF measurements.
+
+
+- Add F202, a bounded timestamped RF evidence normalizer. It validates directional pairwise RSSI and optional channel-load observations, filters stale evidence, groups samples by same-site/same-band radio pair, and emits provenance-labelled relative co-visibility/load weights for F201 without returning raw sample identifiers.

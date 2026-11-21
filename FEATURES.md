@@ -1,4 +1,4 @@
-# 198 WiFi Analyzer Pro feature tools (F001–F168, F172–F201)
+# 199 WiFi Analyzer Pro feature tools (F001–F168, F172–F202)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -248,3 +248,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F200 | Enterprise network security evidence report (`enterprise_network_security_evidence_report`) | Security | Combine F194–F199 audits into a deterministic, privacy-minimised report with evidence gaps, severity rollups and a SHA-256 integrity digest. |
 
 | F201 | Multi-AP RF channel reuse planner (`multi_ap_channel_reuse_planner`) | RF planning | Use channel options already validated by the operator for the radio and regulatory domain, plus explicit weighted survey/controller/operator relationships, to calculate a bounded coordinate-descent recommendation, baseline cost and residual overlaps. Reports convergence and heuristic limitations; never applies configuration. |
+
+| F202 | RF survey evidence normalizer (`rf_survey_evidence_normalizer`) | RF planning | Normalize fresh, timestamped pairwise directional RSSI and optional channel-load observations into relative co-visibility/load weights for F201, retaining evidence source and sample volume while excluding stale data. Scores are not measured interference or capacity. |

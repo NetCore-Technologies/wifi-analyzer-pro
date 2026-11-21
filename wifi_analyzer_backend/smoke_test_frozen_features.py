@@ -14,8 +14,9 @@ REQUIRED_FEATURES = {
     "pcap_capture_analyzer",
     "router_webhook_delivery_orchestrator",
     "multi_ap_channel_reuse_planner",
+    "rf_survey_evidence_normalizer",
 }
-MINIMUM_FEATURE_COUNT = 198
+MINIMUM_FEATURE_COUNT = 199
 PCAP_FIXTURE = "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"
 
 
@@ -108,6 +109,23 @@ def main() -> None:
     )
     if rf_plan.get("feature") != "F201" or rf_plan.get("result", {}).get("status") != "planned":
         raise SystemExit("Frozen multi-AP RF channel planner did not execute successfully")
+    rf_evidence = request(
+        "/api/features/rf_survey_evidence_normalizer",
+        {
+            "radios": [
+                {"radio_id": "smoke-ap1-24", "site_id": "smoke", "band": "2.4GHz"},
+                {"radio_id": "smoke-ap2-24", "site_id": "smoke", "band": "2.4GHz"},
+            ],
+            "observations": [
+                {"sample_id": "frozen-survey-001", "radio_ids": ["smoke-ap1-24", "smoke-ap2-24"],
+                 "observed_at": now, "evidence_source": "survey", "radio_rssi_dbm": [-54, -63],
+                 "channel_utilization_pct": 65},
+            ],
+        },
+        token=token,
+    )
+    if rf_evidence.get("feature") != "F202" or rf_evidence.get("result", {}).get("status") != "normalised":
+        raise SystemExit("Frozen RF survey evidence normalizer did not execute successfully")
     print(f"Frozen feature smoke test passed ({catalog['count']} registered features)")
 
 

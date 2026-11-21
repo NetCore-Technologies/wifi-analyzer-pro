@@ -29,6 +29,10 @@ export default function MultiApChannelPlanner() {
   const [importBusy, setImportBusy] = useState(false);
   const [importMessage, setImportMessage] = useState('');
   const [importError, setImportError] = useState('');
+  const [surveyText, setSurveyText] = useState('');
+  const [normaliseBusy, setNormaliseBusy] = useState(false);
+  const [normaliseError, setNormaliseError] = useState('');
+  const [normaliseMessage, setNormaliseMessage] = useState('');
 
   async function importSavedSnapshot(event) {
     event.preventDefault();
@@ -78,6 +82,53 @@ export default function MultiApChannelPlanner() {
     const width = Number(radio.width);
     const allowed = band === '2.4GHz' ? [20, 40] : band === '5GHz' ? [20, 40, 80, 160] : widths;
     updateRadio(radio.rowId, { band, width: String(allowed.includes(width) ? width : 20), options: '' });
+  }
+
+  async function normaliseSurveyEvidence() {
+    setNormaliseBusy(true);
+    setNormaliseError('');
+    setNormaliseMessage('');
+    try {
+      const observations = JSON.parse(surveyText);
+      if (!Array.isArray(observations)) throw new Error('RF observations must be a JSON array.');
+      const radioContext = radios.map((radio, index) => {
+        const radioId = String(radio.radio_id || '').trim();
+        const siteId = String(radio.site_id || '').trim();
+        if (!radioId || !siteId) throw new Error('Complete each radio ID and site ID before importing RF observations (radio ' + (index + 1) + ').');
+        return { radio_id: radioId, site_id: siteId, band: radio.band };
+      });
+      const response = await apiFetch(apiBase() + '/api/features/rf_survey_evidence_normalizer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ radios: radioContext, observations, max_age_days: 7 }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'RF evidence normalizer returned HTTP ' + response.status);
+      const normalized = data.result || data;
+      if (normalized.status !== 'normalised' || !normalized.interference_edges?.length) {
+        throw new Error('No fresh pairwise RF evidence was available. Skipped ' + (normalized.skipped_stale_observation_count || 0) + ' stale observations.');
+      }
+      const nextEdges = normalized.interference_edges.map((edge, index) => ({
+        rowId: edgeSequence + index,
+        left: edge.radio_ids[0],
+        right: edge.radio_ids[1],
+        weight: String(edge.weight),
+        source: edge.evidence_source,
+      }));
+      setEdges(nextEdges);
+      setEdgeSequence(value => value + nextEdges.length);
+      setResult(null);
+      setNormaliseMessage(
+        'Imported ' + normalized.accepted_observation_count + ' fresh observations into ' + nextEdges.length
+        + ' pairwise evidence links. Excluded ' + normalized.skipped_stale_observation_count
+        + ' stale observations. Scores are relative co-visibility/load proxies, not measured interference probabilities.',
+      );
+    } catch (err) {
+      setNormaliseError(err.message || 'Unable to normalise the supplied RF observations.');
+    } finally {
+      setNormaliseBusy(false);
+    }
   }
 
   async function execute(event) {
@@ -152,6 +203,27 @@ export default function MultiApChannelPlanner() {
                 <div style={muted}>{Number(radio.width) === 20 ? 'Enter channel numbers separated by commas.' : 'Enter channel@centre-frequency-MHz pairs. Obtain centre frequencies from the controller or an approved RF plan.'} Include only channels permitted for this radio and regulatory domain.</div>
               </div>
             ))}
+          </div>
+        </section>
+        <section style={{ ...panel, borderColor: '#24506a' }}>
+          <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700, marginBottom: 7 }}>Normalise measured RF observations · F202</div>
+          <p style={{ ...muted, marginTop: 0 }}>Paste timestamped directional RSSI observations recorded between the radios above. Optional channel-utilisation and retry-rate percentages improve the relative planning proxy. Pairwise sample weights replace the manual evidence links below.</p>
+          <textarea
+            value={surveyText}
+            onChange={event => setSurveyText(event.target.value)}
+            rows={6}
+            spellCheck="false"
+            aria-label="Timestamped RF survey observations JSON"
+            placeholder={'[\n  {\n    "sample_id": "survey-001",\n    "radio_ids": ["ap-01-24", "ap-02-24"],\n    "observed_at": "2026-11-21T08:30:00Z",\n    "evidence_source": "survey",\n    "radio_rssi_dbm": [-54, -63],\n    "channel_utilization_pct": 65,\n    "retry_rate_pct": 8\n  }\n]'}
+            style={{ ...field, resize: 'vertical', fontFamily: 'ui-monospace, monospace', lineHeight: 1.5 }}
+          />
+          {normaliseError ? <div role="alert" style={{ ...muted, color: '#fca5a5', marginTop: 8 }}>{normaliseError}</div> : null}
+          {normaliseMessage ? <div role="status" style={{ ...muted, color: '#a5f3fc', marginTop: 8 }}>{normaliseMessage}</div> : null}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 9 }}>
+            <button type="button" disabled={normaliseBusy || !surveyText.trim()} onClick={normaliseSurveyEvidence} style={{ ...secondary, opacity: normaliseBusy || !surveyText.trim() ? 0.5 : 1 }}>
+              {normaliseBusy ? 'Normalising…' : 'Normalise and load evidence links'}
+            </button>
+            <span style={muted}>The backend enforces the seven-day freshness window and site scope.</span>
           </div>
         </section>
         <section style={panel}>
