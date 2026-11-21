@@ -1254,7 +1254,22 @@ export default function App() {
       !navQuery.trim() || `${item.label} ${group.g}`.toLowerCase().includes(navQuery.trim().toLowerCase())
     ),
   })).filter(group=>group.items.length>0);
-  const commandItems=accessibleNavGroups.flatMap(group=>group.items.map(item=>({...item,group:group.g})));
+  const commandItems=[
+    ...accessibleNavGroups.flatMap(group=>group.items.map(item=>({...item,group:group.g}))),
+    {id:"settings",label:"Settings",Icon:Settings,group:"System"},
+    {id:"signout",label:"Sign out",Icon:Lock,group:"Account"},
+  ];
+  const handleCommandNavigation=id=>{
+    if(id==="settings"){
+      setSettingsOpen(true);
+      return;
+    }
+    if(id==="signout"){
+      logout();
+      return;
+    }
+    switchTab(id);
+  };
 
   return (
     <div className="wa-shell" style={{display:"flex",height:"100vh",background:C.bg,color:C.text,fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
@@ -1271,7 +1286,7 @@ export default function App() {
         open={commandOpen}
         items={commandItems}
         onClose={()=>setCommandOpen(false)}
-        onNavigate={switchTab}
+        onNavigate={handleCommandNavigation}
       />
       {settingsOpen&&<SettingsOverlay preferences={preferences}
         onChange={updates=>setPreferences(current=>({...current,...updates}))}
