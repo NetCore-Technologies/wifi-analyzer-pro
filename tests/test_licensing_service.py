@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import io
 import json
+import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
