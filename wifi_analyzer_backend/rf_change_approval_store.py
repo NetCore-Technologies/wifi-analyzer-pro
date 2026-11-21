@@ -228,12 +228,14 @@ class RfChangeApprovalStore:
 
     def create(self, site_id, packet):
         site_id = _site(site_id)
-        if not isinstance(packet, dict) or packet.get("site_id") != site_id:
-            raise ValueError("packet site_id must match the requested site")
+        if not isinstance(packet, dict):
+            raise ValueError("packet must be a validated F208 result")
         if packet.get("status") != "approval_packet_created":
             raise ValueError("packet must be a validated F208 result")
         body = packet.get("packet")
-        if not isinstance(body, dict) or body.get("execution", {}).get("applied") is not False:
+        if not isinstance(body, dict) or body.get("site_id") != site_id:
+            raise ValueError("packet site_id must match the requested site")
+        if body.get("execution", {}).get("applied") is not False:
             raise ValueError("packet must explicitly represent a non-applied configuration preview")
         encoded, digest = _canonical(body)
         if packet.get("packet_sha256") != digest:
