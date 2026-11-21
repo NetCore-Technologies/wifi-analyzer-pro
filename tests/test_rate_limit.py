@@ -5,7 +5,7 @@ import concurrent.futures
 import threading
 import unittest
 
-from wifi_analyzer_backend.rate_limit import TokenBucketRateLimiter
+from wifi_analyzer_backend.rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
 
 
 class TokenBucketRateLimiterTests(unittest.TestCase):
