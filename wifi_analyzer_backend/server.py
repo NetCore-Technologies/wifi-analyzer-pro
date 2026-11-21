@@ -2515,7 +2515,7 @@ if __name__ == "__main__":
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\\n[+] Shutting down WiFi Analyzer Pro...")
+        print("\n[+] Shutting down WiFi Analyzer Pro...")
     finally:
         if renewal_worker is not None:
             renewal_worker.stop()
