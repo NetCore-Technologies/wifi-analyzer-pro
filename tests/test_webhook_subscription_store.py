@@ -101,6 +101,17 @@ class WebhookSubscriptionStoreTests(unittest.TestCase):
                 allowed_site_ids=["office"],
             )
 
+    def test_subscription_count_limit_is_enforced_without_partial_insert(self):
+        store = WebhookSubscriptionStore(Path(self.temp.name) / "limited.sqlite3")
+        for index in range(100):
+            store.create(
+                subscription(f"sub-{index:03d}", ["office"]),
+                now="2026-11-21T00:00:00Z",
+            )
+        with self.assertRaisesRegex(ValueError, "at most 100"):
+            store.create(subscription("sub-overflow", ["office"]), now="2026-11-21T00:00:00Z")
+        self.assertEqual(len(store.list_subscriptions()), 100)
+
     def test_restart_preserves_subscription_configuration(self):
         self.store.create(subscription(), now="2026-11-21T00:00:00Z")
         restarted = WebhookSubscriptionStore(self.store.path)

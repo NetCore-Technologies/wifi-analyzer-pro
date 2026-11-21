@@ -125,6 +125,9 @@ The local HTTP service exposes:
 | `POST /api/reports/jobs/{id}/renew` | Extend an active worker lease without reviving expired leases |
 | `POST /api/reports/jobs/{id}/delivery-package` | Verify the current SQLite lease and prepare an approved, signed delivery package without sending it |
 | `POST /api/reports/jobs/{id}/complete`, `/fail`, `/cancel` | Complete a lease, schedule a bounded retry/dead-letter, or cancel a pending job |
+| `GET /api/webhooks/subscriptions` | Site-scoped saved subscription metadata (signing secrets are never returned or stored) |
+| `POST /api/webhooks/subscriptions` | Create a saved, site-scoped subscription definition |
+| `POST /api/webhooks/subscriptions/{id}/update`, `/delete` | Update or remove a saved subscription |
 | `GET /api/webhooks/deliveries` | Site-scoped durable webhook delivery queue and state counts |
 | `POST /api/webhooks/deliveries/enqueue` | Idempotently enqueue prepared, HMAC-signed subscription envelopes |
 | `POST /api/webhooks/deliveries/{id}/retry`, `/cancel` | Retry dead-lettered deliveries or cancel pending work |
@@ -239,8 +242,10 @@ again. Use this alongside VPN/reverse-proxy access controls and protected
 backups of the local account file.
 
 
-The **Webhook Delivery Center** prepares signed multi-subscription envelopes,
-queues them into a durable site-scoped outbox and displays delivery state,
-attempt counts and safe error codes. A separate worker performs fresh DNS
-resolution, pinned-IP TLS delivery, redirect refusal, retries and dead-letter
-recovery. The API stores signed payloads but never stores HMAC signing secrets.
+The **Webhook Delivery Center** saves site-scoped subscription metadata (endpoint,
+exact host allowlist, event filters and key ID), prepares signed multi-subscription
+envelopes and queues them into a durable outbox. HMAC secrets are entered only
+for a preparation request and are never saved in the subscription directory or
+outbox. The screen displays queue state, attempt counts and safe error codes.
+A separate worker performs fresh DNS resolution, pinned-IP TLS delivery,
+redirect refusal, retries and dead-letter recovery.

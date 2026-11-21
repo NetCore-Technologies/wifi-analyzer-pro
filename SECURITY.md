@@ -103,3 +103,11 @@ use a shared network filesystem for SQLite queue databases without validating
 locking semantics. The example systemd units use a dedicated account, restrictive
 umask, NoNewPrivileges and filesystem/kernel hardening. They do not grant
 CAP_NET_ADMIN or CAP_NET_RAW.
+
+
+Webhook subscription records retain only endpoint metadata, exact DNS host
+allowlists, event filters, site assignments and key identifiers. HMAC signing
+secrets are not accepted by the subscription CRUD API and are not stored in
+the subscription database. Operators provide signing keys transiently when
+preparing an envelope; the API clears them from the editor after success and
+stores only the resulting signed envelope in the protected delivery outbox.

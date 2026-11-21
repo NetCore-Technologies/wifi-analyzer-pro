@@ -58,3 +58,19 @@ currently leased rows are never removed by retention cleanup. The default is
 between 7 and 3650 before starting the API/worker. The worker performs pruning
 at the start of each queue cycle and reports only a deleted-row count to logs;
 no event content is emitted.
+
+
+## Subscription directory
+
+Use the Webhook Delivery Center to save subscription definitions. The registry
+stores subscription ID, endpoint, exact DNS host allowlist, key ID, event types,
+minimum severity, site allowlist and bounded batch settings. It deliberately
+does not store HMAC signing secrets. The preparation form receives the signing
+key for the selected key ID transiently and returns a signed envelope; the
+delivery queue persists the envelope, not the secret.
+
+New subscriptions are limited to 100 per local workspace. Restricted site users
+must define an explicit non-empty site allowlist entirely contained in their
+assigned sites. Global/all-site definitions can be created only by all-site
+administrators. Subscription list, update and delete operations hide records
+outside the caller's site scope.

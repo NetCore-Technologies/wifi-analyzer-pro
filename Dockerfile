@@ -27,6 +27,7 @@ COPY --chown=10001:10001 wifi_analyzer_backend/rate_limit.py ./rate_limit.py
 COPY --chown=10001:10001 wifi_analyzer_backend/site_history.py ./site_history.py
 COPY --chown=10001:10001 wifi_analyzer_backend/report_worker.py ./report_worker.py
 COPY --chown=10001:10001 wifi_analyzer_backend/webhook_delivery_store.py ./webhook_delivery_store.py
+COPY --chown=10001:10001 wifi_analyzer_backend/webhook_subscription_store.py ./webhook_subscription_store.py
 COPY --chown=10001:10001 wifi_analyzer_backend/webhook_dispatch_worker.py ./webhook_dispatch_worker.py
 COPY --chown=10001:10001 wifi_analyzer_backend/router_adapters ./router_adapters
 COPY --chown=10001:10001 wifi_analyzer_backend/feature_plugins ./feature_plugins

@@ -133,6 +133,9 @@ class WebhookSubscriptionStore:
             ).fetchone()
             if existing:
                 raise WebhookSubscriptionConflictError("subscription_id is already registered")
+            count = connection.execute("SELECT COUNT(*) AS count FROM webhook_subscriptions").fetchone()["count"]
+            if count >= MAX_SUBSCRIPTIONS:
+                raise ValueError(f"the workspace supports at most {MAX_SUBSCRIPTIONS} webhook subscriptions")
             connection.execute(
                 "INSERT INTO webhook_subscriptions(subscription_id, configuration_json, created_at, updated_at) "
                 "VALUES (?, ?, ?, ?)",
