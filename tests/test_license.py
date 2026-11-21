@@ -169,6 +169,60 @@ class VendorLicenseTests(unittest.TestCase):
         self.assertFalse(self.store.path.exists())
         self.assertFalse(self.store.status(INSTALLATION_ID)["installed"])
 
+    def test_vendor_checkout_client_keeps_activation_secret_off_the_api_result(self):
+        requests = []
+        def opener(request, timeout):
+            requests.append((request, timeout))
+            return __import__("io").BytesIO(json.dumps({
+                "license_id": "lic_customer12345678",
+                "checkout_session_id": "cs_test_123456789",
+                "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_123456789",
+                "activation_secret": "s" * 48,
+            }).encode())
+        result = self.store.start_checkout(
+            service_url="https://licenses.example.com",
+            installation_id=INSTALLATION_ID,
+            plan_id="business",
+            customer_email="customer@example.com",
+            opener=opener,
+        )
+        self.assertEqual(result["plan_id"], "business")
+        self.assertNotIn("activation_secret", result)
+        request, timeout = requests[0]
+        self.assertEqual(request.full_url, "https://licenses.example.com/api/checkout")
+        self.assertEqual(timeout, 15)
+        sent = json.loads(request.data)
+        self.assertNotIn("activation_secret", sent)
+        stored = self.store.refresh_credentials()
+        self.assertEqual(stored["activation_secret"], "s" * 48)
+
+    def test_vendor_sync_claims_once_then_uses_refresh_endpoint(self):
+        token = self.token()
+        calls = []
+        def opener(request, timeout):
+            calls.append(request.full_url)
+            return __import__("io").BytesIO(json.dumps({
+                "license_token": token,
+                "license_id": "lic_customer12345678",
+                "plan_id": "business",
+                "expires_at": NOW + 30 * 24 * 60 * 60,
+                "subscription_status": "active",
+            }).encode())
+        self.store.configure_service(
+            service_url="https://licenses.example.com",
+            checkout_session_id="cs_test_123456789",
+            activation_secret="s" * 48,
+            license_id="lic_customer12345678",
+        )
+        first = self.store.sync_from_vendor(installation_id=INSTALLATION_ID, opener=opener)
+        second = self.store.sync_from_vendor(installation_id=INSTALLATION_ID, opener=opener)
+        self.assertEqual(first["plan_id"], "business")
+        self.assertEqual(second["plan_id"], "business")
+        self.assertEqual(calls, [
+            "https://licenses.example.com/api/claim",
+            "https://licenses.example.com/api/refresh",
+        ])
+
     def test_vendor_signed_offline_grace_claim_overrides_generic_default(self):
         token = self.token(
             issued_at=NOW - 7 * 24 * 60 * 60,

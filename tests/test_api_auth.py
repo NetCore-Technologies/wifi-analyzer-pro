@@ -136,6 +136,37 @@ class AuthenticatedApiTests(unittest.TestCase):
             connection.close()
 
 
+    def test_vendor_checkout_and_sync_are_owner_only_and_never_expose_activation_secret(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "vendor checkout owner secure password",
+        })
+        token = setup["token"]
+        server.LICENSES.public_keys = {"vendor-key": b"v" * 32}
+        checkout_payload = {
+            "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_123456789",
+            "checkout_session_id": "cs_test_123456789",
+            "license_id": "lic_customer12345678",
+            "plan_id": "business",
+        }
+        with patch.dict("os.environ", {
+            "WIFI_ANALYZER_VENDOR_LICENSE_SERVICE_URL": "https://licenses.example.com",
+        }):
+            with patch.object(server.LICENSES, "start_checkout", return_value=checkout_payload) as start:
+                status, result = self.request(
+                    "POST", "/api/license/checkout", {"plan_id": "business"}, token=token,
+                )
+            self.assertEqual(status, 201, result)
+            self.assertEqual(result["checkout"]["checkout_url"], checkout_payload["checkout_url"])
+            self.assertNotIn("activation_secret", json.dumps(result))
+            self.assertEqual(start.call_args.kwargs["installation_id"], server.BILLING.instance_id())
+
+            synced = {"license_id": "lic_customer12345678", "plan_id": "business", "plan_label": "Business"}
+            with patch.object(server.LICENSES, "sync_from_vendor", return_value=synced) as sync:
+                status, result = self.request("POST", "/api/license/sync", {}, token=token)
+            self.assertEqual(status, 200, result)
+            self.assertEqual(result["license"]["plan_id"], "business")
+            sync.assert_called_once_with(installation_id=server.BILLING.instance_id())
+
     def test_vendor_license_activation_grants_signed_plan_without_customer_stripe_secrets(self):
         _, setup = self.request("POST", "/api/auth/setup", {
             "password": "vendor license owner secure password",
