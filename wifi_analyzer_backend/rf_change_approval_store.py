@@ -234,7 +234,7 @@ class RfChangeApprovalStore:
             raise ValueError("packet must be a validated F208 result")
         body = packet.get("packet")
         if not isinstance(body, dict) or body.get("site_id") != site_id:
-            raise ValueError("packet site_id must match the requested site")
+            raise ValueError("packet site_id does not match the requested site")
         if body.get("execution", {}).get("applied") is not False:
             raise ValueError("packet must explicitly represent a non-applied configuration preview")
         encoded, digest = _canonical(body)
