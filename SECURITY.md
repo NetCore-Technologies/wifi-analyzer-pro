@@ -38,6 +38,10 @@ For multi-worker or horizontally scaled deployments, enforce aggregate limits
 at the gateway as well; these local buckets do not coordinate between processes.
 
 
+## Session lifecycle and memory bounds
+
+Bearer sessions are process-local and expire after the configured session TTL. The local account directory is limited to 100 users, and each account may hold at most 16 concurrent sessions. On a new successful login at that limit, the oldest session for that same account is revoked; another user's sessions are never evicted to make room. Expired or malformed session records are pruned when a new session is issued. This places a hard upper bound of 1,600 entries on the in-memory session table. Users should sign out of unused devices and sign in again if an older session is displaced.
+
 ## Account multi-factor authentication
 
 Local accounts can enable TOTP authenticator-app MFA. Enrolment requires the
