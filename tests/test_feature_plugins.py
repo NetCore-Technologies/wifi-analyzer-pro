@@ -1336,6 +1336,45 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(insufficient["status"], "insufficient_evidence")
         self.assertIsNone(insufficient["overall"]["sla_attainment_delta_pct_points"])
 
+    def test_f293_fleet_headline_is_not_driven_by_site_sample_volume(self):
+        payload = PAYLOADS["client_experience_slo_window_comparator"]
+
+        def samples(site_id, prefix, count, metrics, observed_at):
+            return [{
+                "sample_id": f"{prefix}-{index}",
+                "site_id": site_id,
+                "client_ref": f"client-{site_id}-{index}",
+                "observed_at": observed_at,
+                "evidence_source": "probe",
+                "metrics": metrics,
+            } for index in range(count)]
+
+        good_metrics = {"rssi_dbm": -60, "packet_loss_pct": 0.1, "rtt_ms": 25}
+        poor_metrics = {"rssi_dbm": -82, "packet_loss_pct": 3.0, "rtt_ms": 210}
+        balanced_sites = {
+            **payload,
+            "baseline": {
+                "as_of": payload["baseline"]["as_of"],
+                "samples": samples("hq", "base-hq", 5, good_metrics, "2026-11-13T11:50:00Z")
+                    + samples("branch", "base-branch", 5, poor_metrics, "2026-11-13T11:50:00Z"),
+            },
+            "comparison": {
+                "as_of": payload["comparison"]["as_of"],
+                "samples": samples("hq", "current-hq", 5, good_metrics, "2026-11-21T11:50:00Z")
+                    + samples("branch", "current-branch", 15, poor_metrics, "2026-11-21T11:50:00Z"),
+            },
+            "minimum_eligible_samples": 5,
+        }
+        result = run("client_experience_slo_window_comparator", balanced_sites)["result"]
+        self.assertEqual(result["overall"]["status"], "regression")
+        self.assertEqual(result["overall"]["sla_attainment_delta_pct_points"], -25.0)
+        self.assertEqual(result["status"], "stable")
+        self.assertEqual(result["summary"]["regressing_site_count"], 0)
+        self.assertEqual(result["summary"]["improving_site_count"], 0)
+        self.assertEqual(result["summary"]["stable_site_count"], 2)
+        self.assertEqual(result["summary"]["site_balanced_mean_sla_attainment_delta_pct_points"], 0.0)
+        self.assertEqual(result["summary"]["pooled_sample_weighted_sla_attainment_delta_pct_points"], -25.0)
+
     def test_f293_rejects_overlapping_periods_future_samples_and_reused_ids(self):
         payload = PAYLOADS["client_experience_slo_window_comparator"]
         with self.assertRaisesRegex(ValueError, "must not overlap"):

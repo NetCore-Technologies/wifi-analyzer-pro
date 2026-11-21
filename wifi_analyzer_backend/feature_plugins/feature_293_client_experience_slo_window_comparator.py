@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import statistics
 from datetime import datetime, timedelta, timezone
 
 from .feature_292_client_experience_slo_evaluator import run as evaluate_slo
@@ -242,16 +243,23 @@ def run(payload: dict) -> dict:
         "baseline_eligible_sample_count": baseline_view["eligible_slo_sample_count"],
         "comparison_eligible_sample_count": comparison_view["eligible_slo_sample_count"],
         "sla_attainment_delta_pct_points": overall["sla_attainment_delta_pct_points"],
+        "pooled_sample_weighted_sla_attainment_delta_pct_points": overall["sla_attainment_delta_pct_points"],
+        "site_balanced_mean_sla_attainment_delta_pct_points": round(
+            statistics.mean(item["sla_attainment_delta_pct_points"] for item in comparable), 2
+        ) if comparable else None,
+        "site_balanced_median_sla_attainment_delta_pct_points": round(
+            statistics.median(item["sla_attainment_delta_pct_points"] for item in comparable), 2
+        ) if comparable else None,
     }
-    # Confirmed site regressions remain actionable with incomplete fleet coverage.
-    # Improvement/stable headlines require every site to have enough evidence.
-    if overall["status"] == "regression" or summary["regressing_site_count"]:
+    # Fleet classifications are derived from comparable per-site outcomes, not the pooled sample mix.
+    # A site with more observations must not outweigh another site with unchanged or worsening results.
+    if summary["regressing_site_count"]:
         status = "regression_detected"
-    elif overall["status"] == "insufficient_evidence":
+    elif not comparable:
         status = "insufficient_evidence"
     elif incomplete_site_count:
         status = "partial_evidence"
-    elif overall["status"] == "improvement" or summary["improving_site_count"]:
+    elif summary["improving_site_count"]:
         status = "improvement_detected"
     else:
         status = "stable"
@@ -271,9 +279,11 @@ def run(payload: dict) -> dict:
         "note": (
             "Both periods are evaluated by F292 with identical required metrics and thresholds. "
             "Windows are non-overlapping, stale observations are excluded, and a site is compared only "
-            "when it has sufficient eligible samples in both periods. A positive fleet-wide improvement/stable " 
-            "headline is withheld when any site is missing or has insufficient comparison evidence. SLA attainment is sample-weighted; "
-            "a percentage-point change is not duration-weighted uptime or a statistical confidence interval. "
+            "when it has sufficient eligible samples in both periods. Fleet status is classified from per-site outcomes, "
+            "not pooled sample counts. A positive improvement/stable headline is withheld when any site is missing or "
+            "has insufficient comparison evidence. The pooled sample-weighted delta is descriptive and can shift when "
+            "sample volume changes between sites; site-balanced mean/median deltas weight each comparable site equally. "
+            "Neither is duration-weighted uptime or a statistical confidence interval. "
             "Metric p95 deltas are descriptive and do not independently determine regression status. "
             "Client identifiers and raw samples are not returned or persisted."
         ),
