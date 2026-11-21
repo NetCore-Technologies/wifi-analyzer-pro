@@ -1283,7 +1283,10 @@ class FeatureCatalogTests(unittest.TestCase):
     def test_f292_client_experience_rejects_duplicates_future_samples_and_unknown_sources(self):
         sample = PAYLOADS["client_experience_slo_evaluator"]["samples"][0]
         with self.assertRaisesRegex(ValueError, "unique"):
-            run("client_experience_slo_evaluator", {"samples":[sample,sample]})
+            run("client_experience_slo_evaluator", {
+                "as_of": PAYLOADS["client_experience_slo_evaluator"]["as_of"],
+                "samples":[sample,sample],
+            })
         future = {**sample,"observed_at":"2026-11-21T12:10:00Z"}
         with self.assertRaisesRegex(ValueError, "future"):
             run("client_experience_slo_evaluator", {
