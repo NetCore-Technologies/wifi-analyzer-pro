@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { apiFetch, apiBase } from '../lib/api.js';
+import { parseClientExperienceCsv } from '../lib/clientExperienceCsv.js';
 import { Activity, AlertCircle, Play, ShieldCheck } from 'lucide-react';
 
 const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
@@ -46,6 +47,23 @@ export default function ClientExperienceSloPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
+
+  async function importCsv(event) {
+    const inputElement = event.currentTarget;
+    const file = inputElement.files?.[0];
+    if (!file) return;
+    setError('');
+    try {
+      if (file.size > 1024 * 1024) throw new Error('CSV exceeds the 1 MiB import limit.');
+      const samples = parseClientExperienceCsv(await file.text());
+      setSamplesText(JSON.stringify(samples, null, 2));
+      setResult(null);
+    } catch (err) {
+      setError(err.message || 'Unable to import client observations from CSV.');
+    } finally {
+      inputElement.value = '';
+    }
+  }
 
   function toggleMetric(key, checked) {
     setRequiredMetrics(current => checked ? [...current, key] : current.filter(item => item !== key));
@@ -114,6 +132,16 @@ export default function ClientExperienceSloPanel() {
       </section>
 
       <section style={panel}>
+        <div style={{ display: 'flex', alignItems: 'end', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <div>
+            <div style={{ color: '#cbd5e1', fontSize: 11, fontWeight: 700 }}>Import controller or client CSV</div>
+            <p style={{ ...muted, margin: '4px 0 0' }}>Strict columns: sample_id, site_id, client_ref, observed_at, evidence_source, optional ap_id, and supported metric columns.</p>
+          </div>
+          <label style={{ ...field, width: 'auto', display: 'inline-flex', alignItems: 'center', cursor: 'pointer' }}>
+            Import CSV
+            <input type="file" accept=".csv,text/csv" onChange={importCsv} aria-label="Import client experience CSV" style={{ width: 1, height: 1, opacity: 0, position: 'absolute', pointerEvents: 'none' }}/>
+          </label>
+        </div>
         <label style={{ display: 'block', color: '#cbd5e1', fontSize: 11, fontWeight: 700, marginBottom: 7 }}>Client observation records (JSON array)</label>
         <textarea
           value={samplesText}
