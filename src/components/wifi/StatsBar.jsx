@@ -18,9 +18,17 @@ export default function StatsBar({ networks, systemInfo, backendConnected, lastS
     { label: 'Open (Unsecured)', value: open, icon: open > 0 ? ShieldOff : Shield, color: open > 0 ? 'text-red-400' : 'text-green-400' },
   ];
 
-  if (systemInfo?.cpu_percent !== undefined) {
-    stats.push({ label: 'CPU', value: `${systemInfo.cpu_percent}%`, icon: Cpu, color: 'text-muted-foreground' });
-    stats.push({ label: 'RAM', value: `${systemInfo.memory_percent}%`, icon: Cpu, color: 'text-muted-foreground' });
+  const cpu = systemInfo?.cpu_pct ?? systemInfo?.cpu_percent;
+  const ram = systemInfo?.ram_pct ?? systemInfo?.memory_percent;
+  const disk = systemInfo?.disk_pct;
+  if (cpu !== undefined && cpu !== null && Number.isFinite(Number(cpu))) {
+    stats.push({ label: 'CPU', value: `${Number(cpu)}%`, icon: Cpu, color: 'text-muted-foreground' });
+  }
+  if (ram !== undefined && ram !== null && Number.isFinite(Number(ram))) {
+    stats.push({ label: 'RAM', value: `${Number(ram)}%`, icon: Cpu, color: 'text-muted-foreground' });
+  }
+  if (disk !== undefined && disk !== null && Number.isFinite(Number(disk))) {
+    stats.push({ label: 'Disk', value: `${Number(disk)}%`, icon: Cpu, color: 'text-muted-foreground' });
   }
 
   return (
