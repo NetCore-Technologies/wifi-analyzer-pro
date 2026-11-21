@@ -458,6 +458,59 @@ class WebhookDeliveryStore:
             """, (delivery_id, lease_id, moment.isoformat())).fetchone()
         return self._job(row) if row else None
 
+    def analytics_records(
+        self,
+        *,
+        site_ids=None,
+        window_days: int = 7,
+        now: Any = None,
+        limit: int = 5000,
+    ) -> list[dict]:
+        """Return bounded, metadata-only records for reliability analytics."""
+        scope = self._validate_scope(site_ids)
+        if isinstance(window_days, bool) or not isinstance(window_days, int) or not 1 <= window_days <= 90:
+            raise ValueError("window_days must be an integer from 1 to 90")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 5000:
+            raise ValueError("limit must be an integer from 1 to 5000")
+        moment = _now(now)
+        cutoff = (moment - timedelta(days=window_days)).isoformat()
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, subscription_id, event_count, site_ids_json,
+                       has_unscoped_events, status, attempts, max_attempts,
+                       last_error_code, response_status, created_at, updated_at,
+                       delivered_at
+                FROM webhook_deliveries
+                WHERE created_at >= ?
+                ORDER BY id DESC LIMIT ?
+                """,
+                (cutoff, limit),
+            ).fetchall()
+        result = []
+        for row in rows:
+            sites = json.loads(row["site_ids_json"])
+            if scope is not None and (
+                bool(row["has_unscoped_events"]) or not sites or not set(sites).issubset(scope)
+            ):
+                continue
+            result.append({
+                "id": row["id"],
+                "subscription_id": row["subscription_id"],
+                "event_count": row["event_count"],
+                "site_ids": sites,
+                "has_unscoped_events": bool(row["has_unscoped_events"]),
+                "status": row["status"],
+                "attempts": row["attempts"],
+                "max_attempts": row["max_attempts"],
+                "last_error_code": row["last_error_code"],
+                "response_status": row["response_status"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "delivered_at": row["delivered_at"],
+            })
+        return result
+
     def list_deliveries(self, *, status: str | None = None, limit: int = 50, site_ids=None) -> list[dict]:
         if status is not None and status not in STATUSES:
             raise ValueError("status is not a supported webhook-delivery state")

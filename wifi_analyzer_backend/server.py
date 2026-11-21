@@ -939,6 +939,36 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 400)
             return
 
+        if path == "/api/webhooks/deliveries/report":
+            scope = AUTH.site_access(self.bearer_token())
+            site_filter = None if scope["all_sites"] else scope["site_ids"]
+            parameters = parse_qs(request_url.query, keep_blank_values=True)
+            window_values = parameters.get("window_days", ["7"])
+            if len(window_values) != 1 or not window_values[0].isdigit():
+                self.send_json({"error": "window_days must be an integer from 1 to 90"}, 400)
+                return
+            window_days = int(window_values[0])
+            now = datetime.now(timezone.utc)
+            try:
+                records = WEBHOOK_DELIVERIES.analytics_records(
+                    site_ids=site_filter,
+                    window_days=window_days,
+                    now=now,
+                    limit=5000,
+                )
+                report = run_feature(
+                    "router_webhook_delivery_health_report",
+                    {
+                        "now": now.isoformat(),
+                        "window_days": window_days,
+                        "deliveries": records,
+                    },
+                )
+                self.send_json({"report": report})
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+            return
+
         if path == "/api/webhooks/deliveries":
             scope = AUTH.site_access(self.bearer_token())
             site_filter = None if scope["all_sites"] else scope["site_ids"]

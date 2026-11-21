@@ -548,7 +548,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["evidence"]["peer_ip"], "1.1.1.1")
         self.assertEqual(result["evidence"]["tls_version"], "TLSv1.3")
         self.assertIn("no HTTP request was sent", result["note"])
-        connect.assert_called_once_with("hooks.example.net", "1.1.1.1", 5)
+        connect.assert_called_once_with("hooks.example.net", "1.1.1.1", 3)
         verify.assert_called_once()
         self.assertTrue(fake.closed)
 
@@ -592,6 +592,91 @@ class AuthenticatedApiTests(unittest.TestCase):
             )
         self.assertEqual(status, 404)
         connect.assert_not_called()
+
+    def test_webhook_delivery_health_report_is_site_scoped_and_metadata_only(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+
+        def queued(batch_id, site_id):
+            body = json.dumps({
+                "schema_version": "1.0",
+                "batch_id": batch_id,
+                "key_id": "health-report-key",
+                "created_at": "2026-11-21T00:00:00Z",
+                "events": [{
+                    "event_id": "b" * 64,
+                    "event_type": "router.health",
+                    "severity": "warning",
+                    "occurred_at": "2026-11-21T00:00:00Z",
+                    "site_id": site_id,
+                    "router_id": "router-" + site_id,
+                    "summary": "Router health warning",
+                    "attributes": {},
+                }],
+            }, sort_keys=True, separators=(",", ":"))
+            return {
+                "subscription_id": site_id + "-alerts",
+                "batch_id": batch_id,
+                "event_count": 1,
+                "status": "prepared",
+                "endpoint": "https://hooks.example.net/router/events",
+                "allowed_hosts": ["hooks.example.net"],
+                "headers": {
+                    "Content-Type": "application/json",
+                    "X-WiFiAnalyzer-Key-Id": "health-report-key",
+                    "X-WiFiAnalyzer-Timestamp": "1795219200",
+                    "X-WiFiAnalyzer-Signature": "v1=" + ("c" * 64),
+                    "Idempotency-Key": batch_id,
+                },
+                "body": body,
+            }
+
+        server.WEBHOOK_DELIVERIES.enqueue_many([
+            queued("a" * 64, "office"),
+            queued("d" * 64, "branch"),
+        ])
+        status, owner_report = self.request(
+            "GET", "/api/webhooks/deliveries/report?window_days=7", token=owner_token,
+        )
+        self.assertEqual(status, 200, owner_report)
+        report = owner_report["report"]
+        self.assertEqual(report["window"]["days"], 7)
+        self.assertEqual(report["summary"]["total_deliveries"], 2)
+        self.assertEqual(report["summary"]["counts_by_status"]["pending"], 2)
+        self.assertEqual(
+            {item["site_id"] for item in report["by_site"]},
+            {"office", "branch"},
+        )
+        self.assertNotIn("body", str(report))
+        self.assertNotIn("headers", str(report))
+        self.assertNotIn("endpoint", str(report))
+        self.assertNotIn("signing_secret", str(report))
+
+        status, created = self.request("POST", "/api/users", {
+            "username": "office.health",
+            "password": "office health report password",
+            "role": "analyst",
+            "all_sites": False,
+            "site_ids": ["office"],
+        }, token=owner_token)
+        self.assertEqual(status, 201, created)
+        scoped_token = self.request("POST", "/api/auth/login", {
+            "username": "office.health",
+            "password": "office health report password",
+        })[1]["token"]
+        status, scoped_report = self.request(
+            "GET", "/api/webhooks/deliveries/report?window_days=7", token=scoped_token,
+        )
+        self.assertEqual(status, 200, scoped_report)
+        self.assertEqual(scoped_report["report"]["summary"]["total_deliveries"], 1)
+        self.assertEqual([item["site_id"] for item in scoped_report["report"]["by_site"]], ["office"])
+
+        status, invalid = self.request(
+            "GET", "/api/webhooks/deliveries/report?window_days=91", token=owner_token,
+        )
+        self.assertEqual(status, 400)
 
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")
