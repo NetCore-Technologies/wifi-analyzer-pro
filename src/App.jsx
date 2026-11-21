@@ -1252,15 +1252,20 @@ export default function App() {
 
   const allItems=NAV.flatMap(g=>g.items);
   const current=allItems.find(n=>n.id===tab);
-  const visibleNavGroups=NAV.map(group=>({
+  const accessibleNavGroups=NAV.map(group=>({
     ...group,
     items:group.items.filter(item=>
       (!["teamAccess","securityAudit","billing"].includes(item.id) || ["owner","admin"].includes(identity?.role))
       && (item.id!=="webhookDelivery" || ["owner","admin","network_admin","analyst"].includes(identity?.role))
-      && (!navQuery.trim() || `${item.label} ${group.g}`.toLowerCase().includes(navQuery.trim().toLowerCase()))
     ),
   })).filter(group=>group.items.length>0);
-  const commandItems=visibleNavGroups.flatMap(group=>group.items.map(item=>({...item,group:group.g})));
+  const visibleNavGroups=accessibleNavGroups.map(group=>({
+    ...group,
+    items:group.items.filter(item=>
+      !navQuery.trim() || `${item.label} ${group.g}`.toLowerCase().includes(navQuery.trim().toLowerCase())
+    ),
+  })).filter(group=>group.items.length>0);
+  const commandItems=accessibleNavGroups.flatMap(group=>group.items.map(item=>({...item,group:group.g})));
 
   return (
     <div className="wa-shell" style={{display:"flex",height:"100vh",background:C.bg,color:C.text,fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
