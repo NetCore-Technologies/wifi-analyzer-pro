@@ -1,6 +1,7 @@
 const MAX_CSV_BYTES = 1024 * 1024;
 const MAX_ROWS = 10000;
 const MAX_FIELD_LENGTH = 4096;
+const MAX_COLUMNS = 64;
 const REQUIRED_COLUMNS = ['sample_id', 'site_id', 'client_ref', 'observed_at', 'evidence_source'];
 const METRIC_LIMITS = {
   rssi_dbm: [-120, -10],
@@ -33,7 +34,7 @@ function parseCsvRows(input) {
     row.push(field);
     field = '';
     afterQuote = false;
-    if (row.length > ALLOWED_COLUMNS.size) {
+    if (row.length > MAX_COLUMNS) {
       throw new Error('A CSV record contains more columns than the supported schema.');
     }
   };
