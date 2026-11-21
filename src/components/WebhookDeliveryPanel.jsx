@@ -7,6 +7,25 @@ const muted = { color: "#94a3b8", fontSize: 11, lineHeight: 1.6 };
 const input = { boxSizing: "border-box", width: "100%", minWidth: 0, resize: "vertical", background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: 10, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 10, lineHeight: 1.55 };
 const button = { border: "1px solid #06d6f0", borderRadius: 7, background: "rgba(6,214,240,.1)", color: "#06d6f0", padding: "9px 12px", fontWeight: 700, fontSize: 11, cursor: "pointer" };
 
+function emptySubscriptionDraft() {
+  return {
+    subscription_id: "",
+    endpoint: "",
+    allowed_hosts: "",
+    key_id: "",
+    event_types: "router.health",
+    minimum_severity: "warning",
+    site_allowlist: "",
+    maximum_events_per_batch: "100",
+    maximum_batches: "10",
+    enabled: true,
+  };
+}
+
+function csvValues(value) {
+  return String(value || "").split(",").map(item => item.trim()).filter(Boolean);
+}
+
 function createExample() {
   const now = new Date();
   const connectedAt = now.toISOString();
@@ -68,6 +87,15 @@ export default function WebhookDeliveryPanel() {
   const [enqueueBusy, setEnqueueBusy] = useState(false);
   const [queueError, setQueueError] = useState("");
   const [queueNotice, setQueueNotice] = useState("");
+  const [subscriptions, setSubscriptions] = useState([]);
+  const [subscriptionsBusy, setSubscriptionsBusy] = useState(false);
+  const [subscriptionSaving, setSubscriptionSaving] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState("");
+  const [subscriptionNotice, setSubscriptionNotice] = useState("");
+  const [subscriptionDraft, setSubscriptionDraft] = useState(emptySubscriptionDraft);
+  const [editingSubscriptionId, setEditingSubscriptionId] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState("");
+  const [signingKeyDrafts, setSigningKeyDrafts] = useState({});
 
   const loadQueue = useCallback(async () => {
     setQueueBusy(true);
@@ -89,6 +117,203 @@ export default function WebhookDeliveryPanel() {
   useEffect(() => {
     loadQueue();
   }, [loadQueue]);
+
+  const loadSubscriptions = useCallback(async () => {
+    setSubscriptionsBusy(true);
+    setSubscriptionError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/webhooks/subscriptions", {
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await readResponse(response);
+      setSubscriptions(Array.isArray(data.subscriptions) ? data.subscriptions : []);
+    } catch (requestError) {
+      setSubscriptionError(
+        requestError instanceof Error ? requestError.message : "Could not load saved webhook subscriptions."
+      );
+    } finally {
+      setSubscriptionsBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSubscriptions();
+  }, [loadSubscriptions]);
+
+  const saveSubscription = async event => {
+    event.preventDefault();
+    if (subscriptionSaving) return;
+    setSubscriptionSaving(true);
+    setSubscriptionError("");
+    setSubscriptionNotice("");
+    const configuration = {
+      subscription_id: subscriptionDraft.subscription_id.trim(),
+      endpoint: subscriptionDraft.endpoint.trim(),
+      allowed_hosts: csvValues(subscriptionDraft.allowed_hosts),
+      key_id: subscriptionDraft.key_id.trim(),
+      event_types: csvValues(subscriptionDraft.event_types),
+      minimum_severity: subscriptionDraft.minimum_severity,
+      site_allowlist: csvValues(subscriptionDraft.site_allowlist),
+      maximum_events_per_batch: Number(subscriptionDraft.maximum_events_per_batch),
+      maximum_batches: Number(subscriptionDraft.maximum_batches),
+      enabled: Boolean(subscriptionDraft.enabled),
+    };
+    const target = editingSubscriptionId
+      ? "/api/webhooks/subscriptions/" + encodeURIComponent(editingSubscriptionId) + "/update"
+      : "/api/webhooks/subscriptions";
+    try {
+      const response = await apiFetch(API_BASE + target, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: configuration }),
+        signal: AbortSignal.timeout(12000),
+      });
+      const data = await readResponse(response);
+      setSubscriptionNotice(
+        (editingSubscriptionId ? "Updated " : "Saved ") +
+        data.subscription.subscription_id + ". Signing secrets are not part of saved subscription metadata."
+      );
+      setSubscriptionDraft(emptySubscriptionDraft());
+      setEditingSubscriptionId("");
+      await loadSubscriptions();
+    } catch (requestError) {
+      setSubscriptionError(
+        requestError instanceof Error ? requestError.message : "Could not save the webhook subscription."
+      );
+    } finally {
+      setSubscriptionSaving(false);
+    }
+  };
+
+  const editSubscription = item => {
+    setEditingSubscriptionId(item.subscription_id);
+    setSubscriptionDraft({
+      subscription_id: item.subscription_id,
+      endpoint: item.endpoint,
+      allowed_hosts: (item.allowed_hosts || []).join(", "),
+      key_id: item.key_id,
+      event_types: (item.event_types || []).join(", "),
+      minimum_severity: item.minimum_severity,
+      site_allowlist: (item.site_allowlist || []).join(", "),
+      maximum_events_per_batch: String(item.maximum_events_per_batch),
+      maximum_batches: String(item.maximum_batches),
+      enabled: Boolean(item.enabled),
+    });
+    setSubscriptionError("");
+    setSubscriptionNotice("Editing " + item.subscription_id + ".");
+  };
+
+  const changeSubscriptionState = async item => {
+    setSubscriptionError("");
+    setSubscriptionNotice("");
+    try {
+      const configuration = {
+        subscription_id: item.subscription_id,
+        endpoint: item.endpoint,
+        allowed_hosts: item.allowed_hosts || [],
+        key_id: item.key_id,
+        event_types: item.event_types || [],
+        minimum_severity: item.minimum_severity,
+        site_allowlist: item.site_allowlist || [],
+        maximum_events_per_batch: item.maximum_events_per_batch,
+        maximum_batches: item.maximum_batches,
+        enabled: !item.enabled,
+      };
+      const response = await apiFetch(
+        API_BASE + "/api/webhooks/subscriptions/" + encodeURIComponent(item.subscription_id) + "/update",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: configuration }),
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      await readResponse(response);
+      setSubscriptionNotice(item.subscription_id + (item.enabled ? " disabled." : " enabled."));
+      await loadSubscriptions();
+    } catch (requestError) {
+      setSubscriptionError(requestError instanceof Error ? requestError.message : "Could not update subscription state.");
+    }
+  };
+
+  const deleteSubscription = async item => {
+    if (confirmDeleteId !== item.subscription_id) {
+      setConfirmDeleteId(item.subscription_id);
+      setSubscriptionNotice("Press Delete again to remove " + item.subscription_id + ".");
+      return;
+    }
+    setSubscriptionError("");
+    setSubscriptionNotice("");
+    try {
+      const response = await apiFetch(
+        API_BASE + "/api/webhooks/subscriptions/" + encodeURIComponent(item.subscription_id) + "/delete",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      await readResponse(response);
+      if (editingSubscriptionId === item.subscription_id) {
+        setEditingSubscriptionId("");
+        setSubscriptionDraft(emptySubscriptionDraft());
+      }
+      setConfirmDeleteId("");
+      setSubscriptionNotice("Deleted " + item.subscription_id + ".");
+      await loadSubscriptions();
+    } catch (requestError) {
+      setSubscriptionError(requestError instanceof Error ? requestError.message : "Could not delete subscription.");
+    }
+  };
+
+  const useSavedSubscriptions = () => {
+    const enabled = subscriptions.filter(item => item.enabled);
+    if (!enabled.length) {
+      setSubscriptionError("Save and enable at least one subscription before building a request.");
+      return;
+    }
+    let request = {};
+    if (payloadText.trim()) {
+      try {
+        request = JSON.parse(payloadText);
+      } catch {
+        setSubscriptionError("Fix the current JSON request before inserting saved subscriptions.");
+        return;
+      }
+    }
+    if (!request || Array.isArray(request) || typeof request !== "object") {
+      setSubscriptionError("The current request must be a JSON object.");
+      return;
+    }
+    const subscriptionsForRequest = enabled.map(item => ({
+      subscription_id: item.subscription_id,
+      endpoint: item.endpoint,
+      allowed_hosts: item.allowed_hosts,
+      key_id: item.key_id,
+      event_types: item.event_types,
+      minimum_severity: item.minimum_severity,
+      site_allowlist: item.site_allowlist,
+      maximum_events_per_batch: item.maximum_events_per_batch,
+      maximum_batches: item.maximum_batches,
+      enabled: true,
+    }));
+    const signingKeys = { ...(request.signing_keys || {}) };
+    for (const item of enabled) {
+      const draftKey = signingKeyDrafts[item.key_id];
+      if (typeof draftKey === "string" && draftKey.length) signingKeys[item.key_id] = draftKey;
+    }
+    request.now = request.now || new Date().toISOString();
+    request.subscriptions = subscriptionsForRequest;
+    request.signing_keys = signingKeys;
+    request.events = Array.isArray(request.events) ? request.events : [];
+    request.egress_evidence = Array.isArray(request.egress_evidence) ? request.egress_evidence : [];
+    setPayloadText(JSON.stringify(request, null, 2));
+    setSubscriptionNotice(
+      "Inserted " + enabled.length + " enabled subscription(s). Add real event data and fresh egress evidence before preparation."
+    );
+    setSubscriptionError("");
+  };
 
   const enqueuePrepared = async () => {
     if (!prepared.length || enqueueBusy) return;
@@ -160,7 +385,8 @@ export default function WebhookDeliveryPanel() {
         payload.signing_keys = {};
         setPayloadText(JSON.stringify(payload, null, 2));
       }
-      setNotice("Preparation completed. Signing keys were cleared from the editor.");
+      setSigningKeyDrafts({});
+      setNotice("Preparation completed. Signing keys were cleared from the editor and saved subscription definitions were left unchanged.");
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Webhook delivery preparation failed.");
     } finally { setBusy(false); }
@@ -210,6 +436,146 @@ export default function WebhookDeliveryPanel() {
       {error ? <div role="alert" style={{ color: "#fca5a5", border: "1px solid rgba(248,113,113,.35)", background: "rgba(248,113,113,.07)", borderRadius: 8, padding: 10, fontSize: 11 }}>{error}</div> : null}
       {notice ? <div role="status" style={{ color: "#86efac", border: "1px solid rgba(74,222,128,.3)", background: "rgba(74,222,128,.06)", borderRadius: 8, padding: 10, fontSize: 11 }}>{notice}</div> : null}
 
+
+      <section style={panel}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 750 }}>Saved subscription directory</div>
+            <div style={muted}>Up to 100 definitions · site-scoped · HMAC secrets are never saved</div>
+          </div>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            <button type="button" style={{ ...button, background: "transparent", borderColor: "#475569", color: "#cbd5e1" }}
+              onClick={loadSubscriptions} disabled={subscriptionsBusy}>{subscriptionsBusy ? "Refreshing…" : "Refresh"}</button>
+            <button type="button" style={button} onClick={useSavedSubscriptions} disabled={!subscriptions.some(item => item.enabled)}>
+              Use enabled subscriptions in request
+            </button>
+          </div>
+        </div>
+        {subscriptionError ? <div role="alert" style={{ color: "#fca5a5", fontSize: 11, marginTop: 9 }}>{subscriptionError}</div> : null}
+        {subscriptionNotice ? <div role="status" style={{ color: "#86efac", fontSize: 11, marginTop: 9 }}>{subscriptionNotice}</div> : null}
+        <form onSubmit={saveSubscription} style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 9 }}>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Subscription ID
+              <input style={input} value={subscriptionDraft.subscription_id} maxLength={64} required
+                disabled={Boolean(editingSubscriptionId)}
+                onChange={event => setSubscriptionDraft(current => ({ ...current, subscription_id: event.target.value }))}
+                placeholder="office-alerts"/>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Key ID
+              <input style={input} value={subscriptionDraft.key_id} maxLength={64} required
+                onChange={event => setSubscriptionDraft(current => ({ ...current, key_id: event.target.value }))}
+                placeholder="office-key-v1"/>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5, gridColumn: "1 / -1" }}>
+              HTTPS endpoint
+              <input style={input} value={subscriptionDraft.endpoint} maxLength={2048} type="url" required
+                onChange={event => setSubscriptionDraft(current => ({ ...current, endpoint: event.target.value }))}
+                placeholder="https://hooks.example.net/router/events"/>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Exact DNS host allowlist (comma-separated)
+              <input style={input} value={subscriptionDraft.allowed_hosts} required
+                onChange={event => setSubscriptionDraft(current => ({ ...current, allowed_hosts: event.target.value }))}
+                placeholder="hooks.example.net"/>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Event types (comma-separated)
+              <input style={input} value={subscriptionDraft.event_types} required
+                onChange={event => setSubscriptionDraft(current => ({ ...current, event_types: event.target.value }))}
+                placeholder="router.health, radio.down"/>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Minimum severity
+              <select style={input} value={subscriptionDraft.minimum_severity}
+                onChange={event => setSubscriptionDraft(current => ({ ...current, minimum_severity: event.target.value }))}>
+                <option value="critical">Critical</option>
+                <option value="warning">Warning</option>
+                <option value="info">Info</option>
+              </select>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Site allowlist (comma-separated, empty = all sites; owner only)
+              <input style={input} value={subscriptionDraft.site_allowlist}
+                onChange={event => setSubscriptionDraft(current => ({ ...current, site_allowlist: event.target.value }))}
+                placeholder="office, floor-2"/>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Events per batch (1–500)
+              <input style={input} type="number" min="1" max="500" value={subscriptionDraft.maximum_events_per_batch}
+                onChange={event => setSubscriptionDraft(current => ({ ...current, maximum_events_per_batch: event.target.value }))}/>
+            </label>
+            <label style={{ ...muted, display: "grid", gap: 5 }}>
+              Maximum batches (1–100)
+              <input style={input} type="number" min="1" max="100" value={subscriptionDraft.maximum_batches}
+                onChange={event => setSubscriptionDraft(current => ({ ...current, maximum_batches: event.target.value }))}/>
+            </label>
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#cbd5e1", fontSize: 11 }}>
+            <input type="checkbox" checked={subscriptionDraft.enabled}
+              onChange={event => setSubscriptionDraft(current => ({ ...current, enabled: event.target.checked }))}/>
+            Subscription enabled
+          </label>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            {editingSubscriptionId ? (
+              <button type="button" style={{ ...button, background: "transparent", borderColor: "#475569", color: "#cbd5e1" }}
+                onClick={() => { setEditingSubscriptionId(""); setSubscriptionDraft(emptySubscriptionDraft()); }}>
+                Cancel edit
+              </button>
+            ) : null}
+            <button type="submit" style={button} disabled={subscriptionSaving}>
+              {subscriptionSaving ? "Saving…" : editingSubscriptionId ? "Update subscription" : "Save subscription"}
+            </button>
+          </div>
+        </form>
+        <div style={{ marginTop: 13, borderTop: "1px solid #1e2d47", paddingTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 750, marginBottom: 8 }}>Saved subscriptions ({subscriptions.length}/100)</div>
+          {!subscriptions.length ? (
+            <div style={muted}>{subscriptionsBusy ? "Loading…" : "No saved subscriptions. Add one above; signing secrets are entered separately for each preparation run."}</div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {subscriptions.map(item => (
+                <div key={item.subscription_id} style={{ border: "1px solid #1e2d47", borderRadius: 8, background: "#070b14", padding: 10, display: "grid", gap: 9 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <strong style={{ fontSize: 11 }}>{item.subscription_id}</strong>
+                        <span style={{ color: item.enabled ? "#4ade80" : "#fbbf24", fontSize: 9, fontWeight: 800 }}>{item.enabled ? "ENABLED" : "DISABLED"}</span>
+                      </div>
+                      <div style={{ ...muted, overflowWrap: "anywhere", marginTop: 3 }}>{item.endpoint}</div>
+                      <div style={{ ...muted, marginTop: 3 }}>
+                        {item.key_id} · {(item.event_types || []).join(", ")} · {item.minimum_severity} · {(item.site_allowlist || []).join(", ") || "All sites"}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <button type="button" style={{ ...button, padding: "6px 8px" }} onClick={() => editSubscription(item)}>Edit</button>
+                      <button type="button" style={{ ...button, padding: "6px 8px", background: "transparent", borderColor: "#475569", color: "#cbd5e1" }}
+                        onClick={() => changeSubscriptionState(item)}>{item.enabled ? "Disable" : "Enable"}</button>
+                      <button type="button" style={{ ...button, padding: "6px 8px", background: "transparent", borderColor: confirmDeleteId === item.subscription_id ? "#f87171" : "#475569", color: "#fca5a5" }}
+                        onClick={() => deleteSubscription(item)}>{confirmDeleteId === item.subscription_id ? "Confirm delete" : "Delete"}</button>
+                    </div>
+                  </div>
+                  <label style={{ ...muted, display: "grid", gap: 5 }}>
+                    One-time HMAC signing secret for {item.key_id}
+                    <input
+                      type="password"
+                      autoComplete="off"
+                      value={signingKeyDrafts[item.key_id] || ""}
+                      onChange={event => setSigningKeyDrafts(current => ({ ...current, [item.key_id]: event.target.value }))}
+                      style={input}
+                      placeholder="Enter for this preparation only; never saved"
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <p style={{ ...muted, margin: "10px 0 0" }}>
+          Subscription records contain routing metadata only. Signing secrets remain transient in this page, are added to the request only when you insert saved subscriptions, and are cleared after a successful preparation.
+        </p>
+      </section>
       <section style={panel}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, fontWeight: 750 }}>Orchestration request</div>
