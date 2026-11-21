@@ -698,8 +698,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 190)
-        self.assertEqual(len(catalog["features"]), 190)
+        self.assertEqual(catalog["count"], 191)
+        self.assertEqual(len(catalog["features"]), 191)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -715,6 +715,40 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("router_agent_credential_scope", {item["slug"] for item in catalog["features"]})
         self.assertIn("openwrt_snapshot_delivery_envelope", {item["slug"] for item in catalog["features"]})
         self.assertIn("router_agent_negotiation_audit", {item["slug"] for item in catalog["features"]})
+        self.assertIn("enterprise_wlan_security_audit", {item["slug"] for item in catalog["features"]})
+
+    def test_enterprise_wlan_security_audit_runs_through_authenticated_feature_api(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        token = setup["token"]
+        payload = {
+            "profiles": [{
+                "profile_id": "hq-corporate",
+                "site_id": "hq",
+                "purpose": "corporate",
+                "enabled": True,
+                "security_mode": "WPA3-Enterprise",
+                "ieee8021x_enabled": True,
+                "pmf": "required",
+                "eap_methods": ["EAP-TLS"],
+                "validate_server_certificate": True,
+                "client_certificate_required": True,
+                "radius_servers": [
+                    {"server_id": "radius-primary", "address": "192.0.2.10", "auth_port": 1812, "shared_secret_configured": True},
+                    {"server_id": "radius-secondary", "address": "192.0.2.11", "auth_port": 1812, "shared_secret_configured": True},
+                ],
+                "wps_enabled": False,
+            }],
+        }
+        status, response = self.request(
+            "POST", "/api/features/enterprise_wlan_security_audit", payload, token=token,
+        )
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["feature"], "F194")
+        self.assertEqual(response["result"]["summary"]["profile_count"], 1)
+        self.assertEqual(response["result"]["summary"]["compliant_profile_count"], 1)
+        self.assertEqual(response["result"]["summary"]["finding_count"], 0)
 
     def test_multi_subscription_delivery_orchestrator_requires_site_scope_and_fresh_egress(self):
         _, setup = self.request("POST", "/api/auth/setup", {
@@ -2307,7 +2341,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 190)
+        self.assertEqual(catalog["count"], 191)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,
