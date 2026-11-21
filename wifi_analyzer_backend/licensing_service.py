@@ -508,15 +508,35 @@ class VendorLicenseService:
                     if not stale:
                         item_list = obj.get("items") if isinstance(obj.get("items"), dict) else {}
                         items = item_list.get("data") if isinstance(item_list.get("data"), list) else []
+                        observed_prices = []
                         recognised_items = []
                         for item in items[:20]:
                             if isinstance(item, dict) and isinstance(item.get("price"), dict):
-                                candidate = item["price"].get("id")
-                                if isinstance(candidate, str) and candidate in self.price_plans:
-                                    recognised_items.append(item["price"])
-                        price_object = recognised_items[0] if recognised_items else {}
-                        matched_price = price_object.get("id") if isinstance(price_object.get("id"), str) else None
-                        plan_id = self.price_plans.get(matched_price, "free")
+                                price = item["price"]
+                                candidate = price.get("id")
+                                if isinstance(candidate, str) and _PRICE_ID.fullmatch(candidate):
+                                    observed_prices.append(price)
+                                    if candidate in self.price_plans:
+                                        recognised_items.append(price)
+                        # Prefer a configured recurring Price when Stripe sends
+                        # multiple line items. Otherwise retain the actual
+                        # unknown Price ID for support/reconciliation while
+                        # withholding all paid-product entitlements.
+                        price_object = recognised_items[0] if recognised_items else (
+                            observed_prices[0] if observed_prices else {}
+                        )
+                        observed_price_id = price_object.get("id")
+                        matched_price = (
+                            observed_price_id
+                            if isinstance(observed_price_id, str) and observed_price_id in self.price_plans
+                            else None
+                        )
+                        stored_price_id = (
+                            observed_price_id
+                            if isinstance(observed_price_id, str) and _PRICE_ID.fullmatch(observed_price_id)
+                            else row["price_id"]
+                        )
+                        plan_id = self.price_plans.get(matched_price, "unmapped")
                         amount = price_object.get("unit_amount")
                         unit_amount = (
                             amount if isinstance(amount, int) and not isinstance(amount, bool) and amount >= 0
@@ -577,7 +597,7 @@ class VendorLicenseService:
                             """,
                             (
                                 customer_id if isinstance(customer_id, str) else None,
-                                subscription_id, status, plan_id, matched_price,
+                                subscription_id, status, plan_id, stored_price_id,
                                 unit_amount, currency, billing_interval, interval_count,
                                 period_end, grace_until, int(cancel_at_period_end),
                                 float(created), now, license_id,

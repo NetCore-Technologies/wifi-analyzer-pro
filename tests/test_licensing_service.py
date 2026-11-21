@@ -404,6 +404,7 @@ class VendorLicenseServiceTests(unittest.TestCase):
         licence = self.service.admin_list_licenses()["licenses"][0]
         self.assertEqual(licence["plan_id"], "unmapped")
         self.assertEqual(licence["price_mapping_state"], "unmapped")
+        self.assertEqual(licence["price_id"], "price_unknown1234")
 
     def test_admin_authentication_requires_the_vendor_bearer_token(self):
         self.assertTrue(self.service.authenticate_admin("Bearer vendor-admin-token-for-tests-0123456789"))
