@@ -19,6 +19,9 @@ def main() -> int:
         parser.error("UID and GID must be non-negative")
     output = args.output.expanduser().absolute()
     output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt" and (args.uid is not None or args.gid is not None):
+        os.chown(output.parent, -1 if args.uid is None else args.uid, -1 if args.gid is None else args.gid)
+        os.chmod(output.parent, 0o700)
     if output.exists() or output.is_symlink():
         parser.error(f"refusing to overwrite existing key file: {output}")
     private_key = Ed25519PrivateKey.generate()

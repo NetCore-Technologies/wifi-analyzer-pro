@@ -63,5 +63,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate customer Compose deployment
+        run: docker compose --env-file .env.example -f compose.yaml config --quiet
+      - name: Validate isolated vendor licensing deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'dGVzdA==\\n' > /tmp/vendor-license-signing-key.b64
+          chmod 600 /tmp/vendor-license-signing-key.b64
+          cat > /tmp/vendor-compose.env <<'EOF'
+          WIFI_ANALYZER_IMAGE=wifi-analyzer-pro:ci
+          WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL=https://licenses.example.com
+          WIFI_ANALYZER_LICENSE_BIND_ADDRESS=127.0.0.1
+          WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID=primary
+          WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE=/tmp/vendor-license-signing-key.b64
+          WIFI_ANALYZER_VENDOR_STRIPE_SECRET_KEY=sk_test_ci12345678
+          WIFI_ANALYZER_VENDOR_STRIPE_WEBHOOK_SECRET=whsec_ci12345678
+          WIFI_ANALYZER_VENDOR_STRIPE_PRICE_PRO=price_ci_pro1234
+          WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS=
+          WIFI_ANALYZER_VENDOR_STRIPE_PRICE_ENTERPRISE=
+          EOF
+          docker compose --env-file /tmp/vendor-compose.env -f compose.vendor-licensing.yaml config --quiet
       - name: Build the production container image
         run: docker build --pull --tag wifi-analyzer-pro:ci .

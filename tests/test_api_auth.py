@@ -191,6 +191,56 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, denied = self.request("POST", "/api/license/portal", {}, token=viewer_token)
         self.assertEqual(status, 403, denied)
 
+    def test_vendor_checkout_endpoint_keeps_activation_secret_out_of_browser_response(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "vendor checkout endpoint owner secure password",
+        })
+        token = setup["token"]
+        with patch.dict("os.environ", {
+            "WIFI_ANALYZER_VENDOR_LICENSE_SERVICE_URL": "https://licenses.example.com",
+        }):
+            with patch.object(
+                server.LICENSES,
+                "start_checkout",
+                return_value={
+                    "checkout_url": "https://checkout.stripe.com/c/pay/cs_test_123456789",
+                    "checkout_session_id": "cs_test_123456789",
+                    "license_id": "lic_checkout_test_123456",
+                    "plan_id": "pro",
+                },
+            ):
+                status, response = self.request(
+                    "POST", "/api/license/checkout", {"plan_id": "pro"}, token=token,
+                )
+        self.assertEqual(status, 201, response)
+        self.assertIn("checkout_url", response["checkout"])
+        self.assertNotIn("activation_secret", json.dumps(response))
+
+    def test_vendor_license_sync_and_portal_routes_require_owner_permission(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "vendor sync owner secure password",
+        })
+        owner_token = setup["token"]
+        with patch.object(
+            server.LICENSES,
+            "sync_from_vendor",
+            return_value={"license_id": "lic_sync_test_12345", "plan_id": "pro", "plan_label": "Pro"},
+        ) as sync:
+            status, response = self.request("POST", "/api/license/sync", {}, token=owner_token)
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["license"]["plan_id"], "pro")
+        sync.assert_called_once()
+
+        with patch.object(
+            server.LICENSES,
+            "open_vendor_portal",
+            return_value={"url": "https://billing.stripe.com/p/session_123456"},
+        ) as portal:
+            status, response = self.request("POST", "/api/license/portal", {}, token=owner_token)
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["portal"]["url"], "https://billing.stripe.com/p/session_123456")
+        portal.assert_called_once()
+
     def test_vendor_license_activation_grants_signed_plan_without_customer_stripe_secrets(self):
         _, setup = self.request("POST", "/api/auth/setup", {
             "password": "vendor license owner secure password",

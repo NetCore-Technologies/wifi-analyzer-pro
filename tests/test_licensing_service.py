@@ -8,6 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from urllib.parse import parse_qs
+from http.server import ThreadingHTTPServer
+from threading import Thread
+from urllib.request import Request, urlopen
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -17,6 +20,7 @@ from wifi_analyzer_backend.license import verify_license_token
 from wifi_analyzer_backend.licensing_service import (
     LicenseNotReady,
     LicenseServiceConflict,
+    LicensingHandler,
     VendorLicenseService,
     load_vendor_signing_key,
     vendor_public_key_text,
@@ -357,6 +361,42 @@ class VendorLicenseServiceTests(unittest.TestCase):
                 "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_PRO": "price_vendorpro1234",
                 "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS": "price_vendorpro1234",
             })
+
+    def test_public_http_api_serves_health_public_key_and_vendor_checkout(self):
+        LicensingHandler.service = self.service
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), LicensingHandler)
+        thread = Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{httpd.server_port}"
+        try:
+            with urlopen(f"{base}/health", timeout=3) as response:
+                self.assertEqual(json.loads(response.read())["status"], "ok")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-store")
+            with urlopen(f"{base}/api/public-key", timeout=3) as response:
+                public = json.loads(response.read())
+                self.assertEqual(public["key_id"], "test-key")
+                self.assertNotIn("private", json.dumps(public))
+
+            request = Request(
+                f"{base}/api/checkout",
+                data=json.dumps({
+                    "installation_id": INSTALLATION,
+                    "plan_id": "business",
+                    "customer_email": "buyer@example.com",
+                }).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urlopen(request, timeout=3) as response:
+                checkout = json.loads(response.read())
+                self.assertEqual(response.status, 201)
+                self.assertTrue(checkout["checkout_url"].startswith("https://checkout.stripe.com/"))
+                self.assertEqual(checkout["license_id"].startswith("lic_"), True)
+                self.assertIn("activation_secret", checkout)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+            thread.join(timeout=3)
 
     def test_public_key_exposes_only_verification_key_not_private_material(self):
         result = self.service.public_key()
