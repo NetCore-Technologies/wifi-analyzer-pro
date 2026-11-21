@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from statistics import median, fmean
 
 MAX_REPORT_MEASUREMENTS = 20_000
@@ -109,7 +109,7 @@ def _measurement_points(result: dict, field: str, ap_map: dict, width: float, he
         x = _number(measurement.get("survey_x_px"), prefix + ".survey_x_px", 0.0, width)
         y = _number(measurement.get("survey_y_px"), prefix + ".survey_y_px", 0.0, height)
         rssi = _number(measurement.get("rssi_dbm"), prefix + ".rssi_dbm", -120.0, -10.0)
-        key = (ap_id, round(x, 1), round(y, 1))
+        key = (ap_id, x, y)
         points.setdefault(key, []).append(rssi)
     return {key: round(median(values), 2) for key, values in points.items()}
 
@@ -184,6 +184,8 @@ def run(payload: dict) -> dict:
     moved_ids = [ap_id for ap_id in common_ids if ap_id not in stable_ids]
     removed_ids = sorted(set(baseline_aps) - set(current_aps))
     added_ids = sorted(set(current_aps) - set(baseline_aps))
+    removed_ids = sorted(set(baseline_aps) - set(current_aps))
+    added_ids = sorted(set(current_aps) - set(baseline_aps))
     baseline_points = _measurement_points(baseline, "baseline_report", baseline_aps, width, height)
     current_points = _measurement_points(current, "current_report", current_aps, width, height)
     allowed_ids = set(stable_ids)
@@ -252,6 +254,8 @@ def run(payload: dict) -> dict:
             "scale_difference_pct": round(scale_delta_pct, 4),
             "unchanged_ap_count": len(stable_ids),
             "moved_or_repositioned_ap_ids": moved_ids,
+            "removed_ap_ids": removed_ids,
+            "added_ap_ids": added_ids,
             "removed_ap_ids": removed_ids,
             "added_ap_ids": added_ids,
             "limitations": [

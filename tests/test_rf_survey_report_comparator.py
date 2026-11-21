@@ -143,6 +143,29 @@ class RfSurveyReportComparatorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "evidence_source"):
             run("rf_survey_report_comparator", payload)
 
+    def test_f204_reports_added_and_removed_access_points(self):
+        payload = _payload()
+        payload["baseline_report"]["result"]["access_points"].append(
+            {"ap_id": "ap-removed", "x_px": 700, "y_px": 100}
+        )
+        payload["current_report"]["result"]["access_points"].append(
+            {"ap_id": "ap-added", "x_px": 800, "y_px": 100}
+        )
+        result = run("rf_survey_report_comparator", payload)["result"]
+        self.assertEqual(result["comparability"]["removed_ap_ids"], ["ap-removed"])
+        self.assertEqual(result["comparability"]["added_ap_ids"], ["ap-added"])
+
+    def test_f204_requires_exact_coordinate_matches_and_valid_provenance(self):
+        payload = _payload()
+        payload["current_report"]["result"]["measurements"][0]["survey_x_px"] = 200.01
+        result = run("rf_survey_report_comparator", payload)["result"]
+        self.assertEqual(result["summary"]["matched_point_count"], 3)
+
+        payload = _payload()
+        payload["current_report"]["result"]["measurements"][0]["evidence_source"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "evidence_source"):
+            run("rf_survey_report_comparator", payload)
+
     def test_f204_rejects_same_report_and_invalid_thresholds(self):
         payload = _payload()
         payload["current_report"]["report"]["survey_id"] = "survey-001"
