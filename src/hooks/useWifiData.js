@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiBase, apiFetch } from '../lib/api.js';
 import { getScanSource } from '../lib/observationProvenance.js';
 
- const MOCK_NETWORKS = [
+const MOCK_NETWORKS = [
   { ssid: 'HomeNetwork_5G', bssid: 'AA:BB:CC:DD:EE:01', rssi: -48, channel: 36, band: '5GHz', frequency: 5.18, security: 'WPA3', security_detail: 'WPA3', noise: -95, snr: 47, rsrp: -48, rsrq: -8, sinr: 44, link_speed: 867, quality: 104 },
   { ssid: 'HomeNetwork_2G', bssid: 'AA:BB:CC:DD:EE:02', rssi: -55, channel: 6, band: '2.4GHz', frequency: 2.437, security: 'WPA2', security_detail: 'WPA2', noise: -95, snr: 40, rsrp: -55, rsrq: -10, sinr: 37, link_speed: 300, quality: 90 },
   { ssid: 'Neighbor_WiFi', bssid: 'AA:BB:CC:DD:EE:03', rssi: -68, channel: 11, band: '2.4GHz', frequency: 2.462, security: 'WPA2', security_detail: 'WPA2', noise: -95, snr: 27, rsrp: -68, rsrq: -14, sinr: 24, link_speed: 72, quality: 64 },
@@ -15,7 +15,7 @@ import { getScanSource } from '../lib/observationProvenance.js';
 export default function useWifiData(autoRefresh = true, interval = 5000) {
   const [networks, setNetworks] = useState(MOCK_NETWORKS);
   const [congestion, setCongestion] = useState({ '2.4GHz': { 1: 2, 6: 3, 11: 1 }, '5GHz': { 36: 1, 48: 1, 100: 1 } });
-  const [systemInfo, setSystemInfo] = useState({ os: 'Demo Mode', cpu_percent: 12, memory_percent: 58 });
+  const [systemInfo, setSystemInfo] = useState({ os: 'Demo Mode' });
   const [phyInfo, setPhyInfo] = useState(null);
   const [linkStats, setLinkStats] = useState(null);
   const [diagnostics, setDiagnostics] = useState(null);
@@ -23,7 +23,7 @@ export default function useWifiData(autoRefresh = true, interval = 5000) {
   const [error, setError] = useState(null);
   const [backendConnected, setBackendConnected] = useState(false);
   const [observationSource, setObservationSource] = useState('demo');
-  const [lastScan, setLastScan] = useState(new Date());
+  const [lastScan, setLastScan] = useState(null);
   const [history, setHistory] = useState({});
   const [devices, setDevices] = useState([]);
   const timerRef = useRef(null);
@@ -62,7 +62,10 @@ export default function useWifiData(autoRefresh = true, interval = 5000) {
       setBackendConnected(true);
       setObservationSource(source);
       setError(null);
-      setLastScan(new Date());
+      const scanTimestamp = Number(scanData.timestamp);
+      setLastScan(Number.isFinite(scanTimestamp) && scanTimestamp > 0
+        ? new Date(scanTimestamp * 1000)
+        : new Date());
       setHistory(prev => {
         const now = Date.now();
         const updated = { ...prev };
