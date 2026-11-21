@@ -1366,7 +1366,7 @@ class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
         self.assertEqual(len(FEATURE_MODULES), 206)
-        self.assertEqual(len(set(FEATURE_MODULES)), 205)
+        self.assertEqual(len(set(FEATURE_MODULES)), 206)
         self.assertEqual(count(), 206)
         self.assertEqual(len(entries), 206)
         self.assertEqual(len({entry["slug"] for entry in entries}), 206)

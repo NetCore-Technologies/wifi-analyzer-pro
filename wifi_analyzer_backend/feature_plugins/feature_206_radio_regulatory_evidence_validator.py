@@ -379,7 +379,7 @@ def run(payload: dict) -> dict:
         "sources": [source_map[key] for key in sorted(source_map)],
         "rules": sorted(normalised_rules, key=lambda item: item["rule_id"]),
         "limitations": [
-            "The supplied source URL and document metadata are not fetched or independently authenticated by this feature.",
+            "The supplied source URL and document metadata are not independently authenticated or fetched by this feature.",
             "content_sha256 is a caller-provided digest; the original document bytes are not supplied and cannot be verified here.",
             "A source domain matching this built-in authority list is a provenance hint, not proof that the linked document is official, current or applicable.",
             "Regulatory rules are validated for structure, time metadata and source references, not interpreted as legal advice or confirmed law.",
