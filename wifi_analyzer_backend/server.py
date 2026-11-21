@@ -37,6 +37,7 @@ if __package__:
         WebhookSubscriptionConflictError, WebhookSubscriptionNotFoundError, WebhookSubscriptionStore,
     )
     from .rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
+    from .host_diagnostics import diagnose_host
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .telemetry_store import WiFiTelemetryStore
@@ -79,6 +80,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
         WebhookSubscriptionConflictError, WebhookSubscriptionNotFoundError, WebhookSubscriptionStore,
     )
     from rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
+    from host_diagnostics import diagnose_host
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from telemetry_store import WiFiTelemetryStore
@@ -590,6 +592,7 @@ def get_diagnostics():
             with open("/etc/resolv.conf") as f:
                 diag["dns_servers"]=re.findall(r"nameserver ([\d.]+)",f.read())
     except: pass
+    diag["host_capabilities"] = diagnose_host(OS)
     return diag
 
 

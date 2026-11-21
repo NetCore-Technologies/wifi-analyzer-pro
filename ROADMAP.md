@@ -30,8 +30,8 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Resolve the npm manifest/lockfile mismatch and the ESM Vite alias.
 - ✅ Remove the old repository path from active README links.
 - 🚧 Audit all demo placeholders and clearly separate examples from live measurements.
-- 📋 Improve diagnostics when `iw`, `iwconfig` or platform Wi-Fi APIs are missing or lack permission.
-- 📋 Document operating-system permissions and commands required for each live data source.
+- ✅ Live Diagnostics reports missing/non-executable Wi-Fi tools and available scan fallbacks on Linux, macOS and Windows; OS privacy/adapter privileges remain explicitly unverified.
+- ✅ Document per-platform utilities, privacy/permission limitations and operator remediation in [Host scan capability diagnostics](wifi_analyzer_backend/HOST_DIAGNOSTICS.md).
 - 📋 Publish v1.0.7 only after release assets and a clean release workflow are verified.
 
 ---
