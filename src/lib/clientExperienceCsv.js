@@ -137,7 +137,7 @@ export function parseClientExperienceCsv(input) {
 
   const text = input.charCodeAt(0) === 0xFEFF ? input.slice(1) : input;
   const rows = parseCsvRows(text);
-  if (rows.length < 2) throw new Error('CSV must contain a header and at least one observation row.');
+  if (rows.length < 1) throw new Error('CSV must contain a header row.');
 
   const headers = rows[0].map(value => value.trim());
   if (headers.some(value => !value)) throw new Error('CSV headers cannot be empty.');
@@ -146,6 +146,7 @@ export function parseClientExperienceCsv(input) {
   if (unknown.length) throw new Error('Unsupported CSV column(s): ' + unknown.join(', '));
   const missing = REQUIRED_COLUMNS.filter(value => !headers.includes(value));
   if (missing.length) throw new Error('CSV is missing required column(s): ' + missing.join(', '));
+  if (rows.length < 2) throw new Error('CSV must contain at least one observation row.');
 
   const columnIndex = new Map(headers.map((value, index) => [value, index]));
   const samples = [];
