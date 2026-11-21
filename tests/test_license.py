@@ -169,6 +169,51 @@ class VendorLicenseTests(unittest.TestCase):
         self.assertFalse(self.store.path.exists())
         self.assertFalse(self.store.status(INSTALLATION_ID)["installed"])
 
+    def test_vendor_signed_offline_grace_claim_overrides_generic_default(self):
+        token = self.token(
+            issued_at=NOW - 7 * 24 * 60 * 60,
+            expires_at=NOW - 60,
+            offline_grace_seconds=6 * 60 * 60,
+        )
+        with self.assertRaisesRegex(LicenseVerificationError, "expired"):
+            verify_license_token(
+                token, public_keys=self.public_keys,
+                expected_installation_id=INSTALLATION_ID,
+                now=NOW - 60 + 6 * 60 * 60 + 1,
+            )
+
+    def test_refresh_credentials_are_private_and_validate_fixed_https_origin(self):
+        self.store.configure_service(
+            service_url="https://licenses.example.com",
+            checkout_session_id="cs_test_123456789",
+            activation_secret="a" * 48,
+            license_id="lic_customer12345678",
+        )
+        credentials = self.store.refresh_credentials()
+        self.assertEqual(credentials["service_url"], "https://licenses.example.com")
+        self.assertEqual(credentials["activation_secret"], "a" * 48)
+        self.assertTrue(self.store.renewal_configured())
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(self.store.refresh_path.stat().st_mode), 0o600)
+        with self.assertRaises(ValueError):
+            self.store.configure_service(
+                service_url="http://127.0.0.1:1999",
+                checkout_session_id="cs_test_123456789",
+                activation_secret="a" * 48,
+                license_id="lic_customer12345678",
+            )
+
+    def test_deactivation_removes_refresh_credentials_as_well_as_token(self):
+        self.store.configure_service(
+            service_url="https://licenses.example.com",
+            checkout_session_id="cs_test_123456789",
+            activation_secret="a" * 48,
+            license_id="lic_customer12345678",
+        )
+        self.store.activate(self.token(), INSTALLATION_ID)
+        self.assertTrue(self.store.deactivate())
+        self.assertIsNone(self.store.refresh_credentials())
+
     def test_missing_public_key_configuration_fails_closed(self):
         store = VendorLicenseStore(
             self.root / "unconfigured.json",

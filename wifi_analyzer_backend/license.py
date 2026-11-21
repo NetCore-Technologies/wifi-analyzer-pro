@@ -32,6 +32,8 @@ DEFAULT_OFFLINE_GRACE_SECONDS = 72 * 60 * 60
 _LICENSE_ID = re.compile(r"^lic_[A-Za-z0-9_-]{12,120}$")
 _INSTALLATION_ID = re.compile(r"^[a-f0-9]{32}$")
 _KEY_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_CHECKOUT_ID = re.compile(r"^cs_(?:test|live)_[A-Za-z0-9]{8,128}$")
+_VENDOR_LICENSE_ID = re.compile(r"^lic_[A-Za-z0-9_-]{12,120}$")
 _B64URL = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -188,7 +190,14 @@ def verify_license_token(
         raise ValueError("now must be a Unix timestamp")
     if issued_at > moment + 300:
         raise LicenseVerificationError("Product licence was issued in the future")
-    if moment > expires_at + offline_grace_seconds:
+    signed_offline_grace = claims.get("offline_grace_seconds", offline_grace_seconds)
+    if (
+        isinstance(signed_offline_grace, bool)
+        or not isinstance(signed_offline_grace, int)
+        or not 0 <= signed_offline_grace <= DEFAULT_OFFLINE_GRACE_SECONDS
+    ):
+        raise LicenseVerificationError("Product licence offline grace period is invalid")
+    if moment > expires_at + signed_offline_grace:
         raise LicenseVerificationError("Product licence has expired")
 
     grace = moment > expires_at
@@ -202,6 +211,7 @@ def verify_license_token(
         "plan_label": PLAN_CATALOG[plan_id]["label"],
         "issued_at": issued_at,
         "expires_at": expires_at,
+        "offline_grace_seconds": signed_offline_grace,
         "limits": dict(limits),
         "key_id": key_id,
     }
@@ -225,9 +235,124 @@ class VendorLicenseStore:
         clock=time.time,
     ):
         self.path = Path(path).expanduser() if path is not None else default_license_path()
+        self.refresh_path = self.path.with_name("vendor-license-refresh.json")
         self.public_keys = load_public_keys() if public_keys is None else dict(public_keys)
         self._clock = clock
         self._lock = threading.RLock()
+
+    @staticmethod
+    def _service_origin(value: str) -> str:
+        parsed = __import__("urllib.parse", fromlist=["urlsplit"]).urlsplit(
+            value.strip() if isinstance(value, str) else ""
+        )
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or parsed.path not in {"", "/"}
+            or parsed.port not in {None, 443}
+        ):
+            raise ValueError("Vendor licence service must use a trusted HTTPS origin")
+        return f"https://{parsed.netloc}"
+
+    def _write_refresh_credentials(self, credentials: dict[str, str]) -> None:
+        parent_existed = self.refresh_path.parent.exists()
+        self.refresh_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if os.name != "nt" and not parent_existed:
+            os.chmod(self.refresh_path.parent, 0o700)
+        descriptor, temporary = tempfile.mkstemp(
+            prefix=".vendor-license-refresh-", suffix=".tmp", dir=str(self.refresh_path.parent),
+        )
+        try:
+            if os.name != "nt":
+                os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(credentials, handle, sort_keys=True, separators=(",", ":"))
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, self.refresh_path)
+            if os.name != "nt":
+                os.chmod(self.refresh_path, 0o600)
+        finally:
+            try:
+                os.unlink(temporary)
+            except FileNotFoundError:
+                pass
+
+    def configure_service(
+        self,
+        *,
+        service_url: str,
+        checkout_session_id: str,
+        activation_secret: str,
+        license_id: str,
+    ) -> None:
+        if not isinstance(checkout_session_id, str) or not _CHECKOUT_ID.fullmatch(checkout_session_id):
+            raise ValueError("Vendor checkout session identifier is invalid")
+        if not isinstance(activation_secret, str) or not 32 <= len(activation_secret) <= 256:
+            raise ValueError("Vendor activation credential is invalid")
+        if not isinstance(license_id, str) or not _VENDOR_LICENSE_ID.fullmatch(license_id):
+            raise ValueError("Vendor licence identifier is invalid")
+        credentials = {
+            "version": 1,
+            "service_url": self._service_origin(service_url),
+            "checkout_session_id": checkout_session_id,
+            "activation_secret": activation_secret,
+            "license_id": license_id,
+        }
+        with self._lock:
+            self._write_refresh_credentials(credentials)
+
+    def refresh_credentials(self) -> dict[str, str] | None:
+        with self._lock:
+            if not self.refresh_path.exists():
+                return None
+            try:
+                if self.refresh_path.stat().st_size > 4096:
+                    raise ValueError("Stored vendor refresh credentials exceed the size limit")
+                credentials = json.loads(self.refresh_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+                raise LicenseVerificationError("Stored vendor refresh credentials cannot be read") from error
+            if not isinstance(credentials, dict) or credentials.get("version") != 1:
+                raise LicenseVerificationError("Stored vendor refresh credentials are invalid")
+            try:
+                service_url = self._service_origin(credentials.get("service_url"))
+            except (TypeError, ValueError) as error:
+                raise LicenseVerificationError("Stored vendor service URL is invalid") from error
+            checkout_id = credentials.get("checkout_session_id")
+            activation_secret = credentials.get("activation_secret")
+            license_id = credentials.get("license_id")
+            if (
+                not isinstance(checkout_id, str) or not _CHECKOUT_ID.fullmatch(checkout_id)
+                or not isinstance(activation_secret, str) or not 32 <= len(activation_secret) <= 256
+                or not isinstance(license_id, str) or not _VENDOR_LICENSE_ID.fullmatch(license_id)
+            ):
+                raise LicenseVerificationError("Stored vendor refresh credentials are invalid")
+            return {
+                "service_url": service_url,
+                "checkout_session_id": checkout_id,
+                "activation_secret": activation_secret,
+                "license_id": license_id,
+            }
+
+    def update_vendor_license_id(self, license_id: str) -> None:
+        credentials = self.refresh_credentials()
+        if credentials is None:
+            raise LicenseVerificationError("Vendor refresh credentials are not configured")
+        if not isinstance(license_id, str) or not _VENDOR_LICENSE_ID.fullmatch(license_id):
+            raise ValueError("Vendor licence identifier is invalid")
+        credentials["license_id"] = license_id
+        with self._lock:
+            self._write_refresh_credentials({"version": 1, **credentials})
+
+    def renewal_configured(self) -> bool:
+        try:
+            return self.refresh_credentials() is not None
+        except LicenseVerificationError:
+            return False
 
     def configured(self) -> bool:
         return bool(self.public_keys)
@@ -322,8 +447,11 @@ class VendorLicenseStore:
 
     def deactivate(self) -> bool:
         with self._lock:
-            try:
-                self.path.unlink()
-                return True
-            except FileNotFoundError:
-                return False
+            removed = False
+            for target in (self.path, self.refresh_path):
+                try:
+                    target.unlink()
+                    removed = True
+                except FileNotFoundError:
+                    pass
+            return removed
