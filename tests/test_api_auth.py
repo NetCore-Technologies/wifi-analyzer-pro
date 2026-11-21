@@ -18,6 +18,7 @@ from wifi_analyzer_backend.rate_limit import TokenBucketRateLimiter, DEFAULT_POL
 from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
 from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
+from wifi_analyzer_backend.billing import verify_stripe_signature
 
 
 class AuthenticatedApiTests(unittest.TestCase):
@@ -31,6 +32,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_live_capture = server.LIVE_CAPTURE
         self.previous_webhook_deliveries = server.WEBHOOK_DELIVERIES
         self.previous_webhook_subscriptions = server.WEBHOOK_SUBSCRIPTIONS
+        self.previous_billing = server.BILLING
         self.previous_rate_limiter = server.RATE_LIMITER
         self.previous_rate_policies = server.RATE_LIMIT_POLICIES
         server.RATE_LIMITER = TokenBucketRateLimiter()
@@ -43,6 +45,9 @@ class AuthenticatedApiTests(unittest.TestCase):
             "wifi_analyzer_backend.webhook_subscription_store",
             fromlist=["WebhookSubscriptionStore"],
         ).WebhookSubscriptionStore(path=str(Path(self.temp.name) / "webhook-subscriptions.sqlite3"))
+        server.BILLING = __import__(
+            "wifi_analyzer_backend.billing", fromlist=["WorkspaceBillingStore"]
+        ).WorkspaceBillingStore(path=str(Path(self.temp.name) / "billing.sqlite3"))
         server.LIVE_CAPTURE = Mock()
         server.LIVE_CAPTURE.list_interfaces.return_value = {
             "available": True,
@@ -77,6 +82,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.LIVE_CAPTURE = self.previous_live_capture
         server.WEBHOOK_DELIVERIES = self.previous_webhook_deliveries
         server.WEBHOOK_SUBSCRIPTIONS = self.previous_webhook_subscriptions
+        server.BILLING = self.previous_billing
         server.RATE_LIMITER = self.previous_rate_limiter
         server.RATE_LIMIT_POLICIES = self.previous_rate_policies
         self.temp.cleanup()

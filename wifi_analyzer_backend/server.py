@@ -17,6 +17,11 @@ import psutil
 
 if __package__:
     from .auth import AuthManager, MFARequiredError
+    from .billing import (
+        PLAN_CATALOG, StripeApiError, StripeSignatureError, WorkspaceBillingStore,
+        configured_price_plans, create_billing_portal_session, create_checkout_session,
+        verify_stripe_signature,
+    )
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
     from .live_capture import LiveCaptureManager
@@ -45,6 +50,11 @@ if __package__:
     )
 else:  # Direct execution: python wifi_analyzer_backend/server.py
     from auth import AuthManager, MFARequiredError
+    from billing import (
+        PLAN_CATALOG, StripeApiError, StripeSignatureError, WorkspaceBillingStore,
+        configured_price_plans, create_billing_portal_session, create_checkout_session,
+        verify_stripe_signature,
+    )
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
     from live_capture import LiveCaptureManager
@@ -89,6 +99,8 @@ AUDIT = SecurityAuditStore()
 LIVE_CAPTURE = LiveCaptureManager()
 WEBHOOK_DELIVERIES = WebhookDeliveryStore()
 WEBHOOK_SUBSCRIPTIONS = WebhookSubscriptionStore()
+BILLING = WorkspaceBillingStore()
+BILLING_QUOTA_LOCK = __import__("threading").RLock()
 RATE_LIMITER = TokenBucketRateLimiter()
 RATE_LIMIT_POLICIES = dict(DEFAULT_POLICIES)
 
@@ -767,6 +779,18 @@ class Handler(BaseHTTPRequestHandler):
         )
         return False
 
+    def enforce_subscription_capacity(self, resource, used):
+        decision = BILLING.capacity(resource, used)
+        if decision["allowed"]:
+            return True
+        self.send_json({
+            "error": "The current plan limit has been reached",
+            "code": "plan_limit_reached",
+            **decision,
+            "upgrade_required": True,
+        }, 402)
+        return False
+
     def require_auth(self, permission=None):
         token = self.bearer_token()
         if not AUTH.validate(token):
@@ -868,6 +892,21 @@ class Handler(BaseHTTPRequestHandler):
             in scope["site_ids"]
         ]
 
+    def read_raw_body(self, maximum_bytes):
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except (TypeError, ValueError):
+            raise ValueError("Invalid Content-Length")
+        if length <= 0 or length > maximum_bytes:
+            raise ValueError("Request body is empty or exceeds the configured limit")
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+        if content_type != "application/json":
+            raise ValueError("Content-Type must be application/json")
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            raise ValueError("Request body was truncated")
+        return raw
+
     def read_json_body(self):
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -924,10 +963,37 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.read"
             elif path.startswith("/api/security/audit"):
                 permission = "users.manage"
+            elif path == "/api/billing/status":
+                permission = "billing.manage"
             elif path == "/api/users":
                 permission = "users.manage"
             if not self.require_auth(permission):
                 return
+
+        if path == "/api/billing/status":
+            try:
+                usage = {
+                    "users": len(AUTH.list_users(self.bearer_token())),
+                    "agents": sum(1 for item in AGENT_HEALTH.list_agent_credentials() if item["status"] == "active"),
+                    "webhook_subscriptions": len(WEBHOOK_SUBSCRIPTIONS.list_subscriptions()),
+                }
+                billing_status = BILLING.status()
+                billing_status["usage"] = usage
+                available_plans = [
+                    {
+                        "plan_id": plan_id,
+                        "label": definition["label"],
+                        "limits": dict(definition["limits"]),
+                        "available_for_checkout": plan_id in configured_price_plans().values(),
+                    }
+                    for plan_id, definition in PLAN_CATALOG.items()
+                ]
+                self.send_json({"billing": billing_status, "plans": available_plans})
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 503)
+            except Exception:
+                self.send_json({"error": "Billing status is temporarily unavailable"}, 503)
+            return
 
         if path == "/api/webhooks/subscriptions":
             scope = AUTH.site_access(self.bearer_token())
@@ -1285,6 +1351,43 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "Origin is not allowed"}, 403)
             return
 
+        if path == "/api/billing/webhook":
+            if not self.enforce_rate_limit("api.billing.webhook", client_only=True):
+                return
+            webhook_secret = os.getenv("WIFI_ANALYZER_STRIPE_WEBHOOK_SECRET", "")
+            if not webhook_secret:
+                self.send_json({"error": "Stripe webhook signing secret is not configured"}, 503)
+                return
+            try:
+                raw_body = self.read_raw_body(256 * 1024)
+                event = verify_stripe_signature(
+                    raw_body, self.headers.get("Stripe-Signature"), webhook_secret,
+                )
+                processed = BILLING.process_stripe_event(
+                    event, price_plans=configured_price_plans(),
+                )
+            except StripeSignatureError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception:
+                self.send_json({"error": "Billing webhook processing failed"}, 503)
+                return
+            self.audit_event(
+                "billing.webhook.received",
+                target_type="billing_event",
+                target_id=event["id"],
+                metadata={"event_type": event["type"], "duplicate": not processed},
+            )
+            self.send_json({"received": True, "duplicate": not processed})
+            return
+
+        if path in {"/api/billing/checkout", "/api/billing/portal"}:
+            if not self.require_auth("billing.manage"):
+                return
+
         # Authenticate diagnostic controls before rate limiting them, but rate
         # limit login/setup before parsing or deriving expensive credentials.
         if path.startswith("/api/capture/") and not self.require_auth("diagnostics.run"):
@@ -1301,6 +1404,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
+            "/api/billing/webhook": ("api.billing.webhook", True),
         }.get(path)
         if rate_policy and not self.enforce_rate_limit(rate_policy[0], client_only=rate_policy[1]):
             return
@@ -1326,6 +1430,69 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/billing/checkout":
+            plan_id = payload.get("plan_id")
+            if plan_id not in {"pro", "business", "enterprise"}:
+                self.send_json({"error": "plan_id must be pro, business or enterprise"}, 400)
+                return
+            current = BILLING.status()
+            if current["active"]:
+                self.send_json({"error": "An active subscription already exists; use the billing portal to change or cancel it"}, 409)
+                return
+            try:
+                prices = configured_price_plans()
+                price_id = next((price for price, mapped_plan in prices.items() if mapped_plan == plan_id), None)
+                if not price_id:
+                    self.send_json({"error": f"Stripe price for the {plan_id} plan is not configured"}, 503)
+                    return
+                secret_key = os.getenv("WIFI_ANALYZER_STRIPE_SECRET_KEY", "")
+                public_url = os.getenv("WIFI_ANALYZER_PUBLIC_URL", "")
+                if not secret_key or not public_url:
+                    self.send_json({"error": "Stripe secret key and public application URL must be configured on the server"}, 503)
+                    return
+                result = create_checkout_session(
+                    secret_key=secret_key,
+                    price_id=price_id,
+                    instance_id=BILLING.instance_id(),
+                    public_url=public_url,
+                    customer_id=BILLING.stripe_customer_id(),
+                )
+            except StripeApiError as error:
+                self.send_json({"error": str(error)}, 502)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event("billing.checkout.created", target_type="billing_plan", target_id=plan_id)
+            self.send_json({"checkout": result})
+            return
+
+        if path == "/api/billing/portal":
+            customer_id = BILLING.stripe_customer_id()
+            if not customer_id:
+                self.send_json({"error": "No Stripe customer is linked to this workspace yet"}, 409)
+                return
+            try:
+                secret_key = os.getenv("WIFI_ANALYZER_STRIPE_SECRET_KEY", "")
+                public_url = os.getenv("WIFI_ANALYZER_PUBLIC_URL", "")
+                if not secret_key or not public_url:
+                    self.send_json({"error": "Stripe secret key and public application URL must be configured on the server"}, 503)
+                    return
+                result = create_billing_portal_session(
+                    secret_key=secret_key,
+                    customer_id=customer_id,
+                    public_url=public_url,
+                )
+            except StripeApiError as error:
+                self.send_json({"error": str(error)}, 502)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event("billing.portal.created", target_type="billing_customer")
+            self.send_json({"portal": result})
             return
 
         if path == "/api/auth/setup":
@@ -1434,12 +1601,16 @@ class Handler(BaseHTTPRequestHandler):
             if not self.require_auth("users.manage"):
                 return
             try:
-                user = AUTH.create_user(
-                    self.bearer_token(), payload.get("username"),
-                    payload.get("password"), payload.get("role"),
-                    all_sites=payload.get("all_sites", False),
-                    site_ids=payload.get("site_ids", []),
-                )
+                with BILLING_QUOTA_LOCK:
+                    users_now = AUTH.list_users(self.bearer_token())
+                    if not self.enforce_subscription_capacity("users", len(users_now)):
+                        return
+                    user = AUTH.create_user(
+                        self.bearer_token(), payload.get("username"),
+                        payload.get("password"), payload.get("role"),
+                        all_sites=payload.get("all_sites", False),
+                        site_ids=payload.get("site_ids", []),
+                    )
             except PermissionError as error:
                 self.send_json({"error": str(error)}, 403)
                 return
@@ -1528,10 +1699,14 @@ class Handler(BaseHTTPRequestHandler):
             scope = AUTH.site_access(self.bearer_token())
             allowed_sites = None if scope["all_sites"] else scope["site_ids"]
             try:
-                subscription = WEBHOOK_SUBSCRIPTIONS.create(
-                    payload.get("subscription"),
-                    allowed_site_ids=allowed_sites,
-                )
+                with BILLING_QUOTA_LOCK:
+                    subscription_count = len(WEBHOOK_SUBSCRIPTIONS.list_subscriptions())
+                    if not self.enforce_subscription_capacity("webhook_subscriptions", subscription_count):
+                        return
+                    subscription = WEBHOOK_SUBSCRIPTIONS.create(
+                        payload.get("subscription"),
+                        allowed_site_ids=allowed_sites,
+                    )
             except PermissionError as error:
                 self.send_json({"error": str(error)}, 403)
                 return
@@ -1866,17 +2041,24 @@ class Handler(BaseHTTPRequestHandler):
             ):
                 return
             try:
-                scope = run_feature("router_agent_credential_scope", payload)["result"]
-                negotiation = run_feature("router_agent_negotiation_audit", scope)["result"]
-                credential = AGENT_HEALTH.enroll_agent(
-                    agent_id=scope["agent_id"],
-                    adapter_id=scope["adapter_id"],
-                    agent_version=scope["agent_version"],
-                    allowed_capabilities=scope["allowed_capabilities"],
-                    ttl_days=payload.get("ttl_days", 90),
-                    negotiation=negotiation,
-                    site_id=requested_site,
-                )
+                with BILLING_QUOTA_LOCK:
+                    active_agents = sum(
+                        1 for item in AGENT_HEALTH.list_agent_credentials()
+                        if item["status"] == "active"
+                    )
+                    if not self.enforce_subscription_capacity("agents", active_agents):
+                        return
+                    scope = run_feature("router_agent_credential_scope", payload)["result"]
+                    negotiation = run_feature("router_agent_negotiation_audit", scope)["result"]
+                    credential = AGENT_HEALTH.enroll_agent(
+                        agent_id=scope["agent_id"],
+                        adapter_id=scope["adapter_id"],
+                        agent_version=scope["agent_version"],
+                        allowed_capabilities=scope["allowed_capabilities"],
+                        ttl_days=payload.get("ttl_days", 90),
+                        negotiation=negotiation,
+                        site_id=requested_site,
+                    )
             except AgentCredentialConflictError as error:
                 self.send_json({"error": str(error)}, 409)
                 return
