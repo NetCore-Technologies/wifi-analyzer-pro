@@ -196,7 +196,7 @@ export default function ClientExperienceSloWindowComparator() {
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(125px,1fr))', gap: 8 }}>
         <Metric label="Pooled SLA Δ (sample weighted)" value={summary.pooled_sample_weighted_sla_attainment_delta_pct_points == null ? "n/a" : (summary.pooled_sample_weighted_sla_attainment_delta_pct_points > 0 ? "+" : "") + summary.pooled_sample_weighted_sla_attainment_delta_pct_points + " pp"}/>
-        <Metric label="Mean site SLO Δ (equal site weight)" value={summary.site_balanced_mean_sla_attainment_delta_pct_points == null ? "n/a" : (summary.site_balanced_mean_sla_attainment_delta_pct_points > 0 ? "+" : "") + summary.site_balanced_mean_sla_attainment_delta_pct_points + " pp"/>
+        <Metric label="Mean site SLO Δ (equal site weight)" value={summary.site_balanced_mean_sla_attainment_delta_pct_points == null ? "n/a" : (summary.site_balanced_mean_sla_attainment_delta_pct_points > 0 ? "+" : "") + summary.site_balanced_mean_sla_attainment_delta_pct_points + " pp"}/>
         <Metric label="Regressing sites" value={summary.regressing_site_count}/>
         <Metric label="Improving sites" value={summary.improving_site_count}/>
         <Metric label="Comparable sites" value={summary.comparable_site_count}/>
