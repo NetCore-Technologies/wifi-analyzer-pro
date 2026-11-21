@@ -15,6 +15,9 @@ import re
 import tempfile
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +42,65 @@ _B64URL = re.compile(r"^[A-Za-z0-9_-]+$")
 
 class LicenseVerificationError(ValueError):
     """A vendor licence is missing, malformed, invalid or outside its grace."""
+
+class VendorLicenseServiceError(RuntimeError):
+    """The configured vendor licensing service could not complete an operation."""
+
+
+class _RejectVendorRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, file_pointer, code, message, headers, new_url):
+        # Requests carry activation secrets. Never forward them to another host.
+        return None
+
+
+def _post_vendor_service(
+    url: str,
+    payload: dict[str, Any],
+    *,
+    opener=None,
+) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Vendor licensing request must be a JSON object")
+    encoded = json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=encoded,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "WiFi-Analyzer-Pro/1.0",
+        },
+        method="POST",
+    )
+    if opener is None:
+        open_request = urllib.request.build_opener(_RejectVendorRedirects()).open
+    elif hasattr(opener, "open"):
+        open_request = opener.open
+    else:
+        open_request = opener
+    try:
+        response = open_request(request, timeout=15)
+        with response:
+            raw = response.read(64 * 1024 + 1)
+    except urllib.error.HTTPError as error:
+        try:
+            raw = error.read(4096)
+            detail = json.loads(raw.decode("utf-8")).get("error")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            detail = None
+        message = detail if isinstance(detail, str) and len(detail) <= 256 else f"Vendor service returned HTTP {error.code}"
+        raise VendorLicenseServiceError(message) from None
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        raise VendorLicenseServiceError("Could not reach the vendor licensing service") from None
+    if len(raw) > 64 * 1024:
+        raise VendorLicenseServiceError("Vendor licensing response exceeded the size limit")
+    try:
+        result = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise VendorLicenseServiceError("Vendor licensing service returned invalid JSON") from None
+    if not isinstance(result, dict):
+        raise VendorLicenseServiceError("Vendor licensing service returned an invalid response")
+    return result
 
 
 def _canonical(value: Any) -> bytes:
@@ -238,6 +300,7 @@ class VendorLicenseStore:
         self.refresh_path = self.path.with_name("vendor-license-refresh.json")
         self.public_keys = load_public_keys() if public_keys is None else dict(public_keys)
         self._clock = clock
+        self._service_opener = None
         self._lock = threading.RLock()
 
     @staticmethod
@@ -281,6 +344,89 @@ class VendorLicenseStore:
                 os.unlink(temporary)
             except FileNotFoundError:
                 pass
+
+    def start_checkout(
+        self,
+        *,
+        service_url: str,
+        installation_id: str,
+        plan_id: str,
+        customer_email: str | None = None,
+        opener=None,
+    ) -> dict[str, str]:
+        if not self.configured():
+            raise LicenseVerificationError("Vendor public verification key is not configured")
+        if not isinstance(installation_id, str) or not _INSTALLATION_ID.fullmatch(installation_id):
+            raise ValueError("Installation identifier is invalid")
+        if plan_id not in {"pro", "business", "enterprise"}:
+            raise ValueError("plan_id must be pro, business or enterprise")
+        origin = self._service_origin(service_url)
+        payload = {
+            "installation_id": installation_id,
+            "plan_id": plan_id,
+            "customer_email": customer_email,
+        }
+        result = _post_vendor_service(f"{origin}/api/checkout", payload, opener=opener)
+        checkout_url = result.get("checkout_url")
+        parsed = urllib.parse.urlsplit(checkout_url) if isinstance(checkout_url, str) else None
+        if (
+            not parsed
+            or parsed.scheme != "https"
+            or parsed.hostname != "checkout.stripe.com"
+            or parsed.username is not None
+            or parsed.password is not None
+            or not isinstance(result.get("checkout_session_id"), str)
+            or not _CHECKOUT_ID.fullmatch(result["checkout_session_id"])
+            or not isinstance(result.get("activation_secret"), str)
+            or not 32 <= len(result["activation_secret"]) <= 256
+            or not isinstance(result.get("license_id"), str)
+            or not _VENDOR_LICENSE_ID.fullmatch(result["license_id"])
+        ):
+            raise VendorLicenseServiceError("Vendor service returned an invalid Checkout response")
+        self.configure_service(
+            service_url=origin,
+            checkout_session_id=result["checkout_session_id"],
+            activation_secret=result["activation_secret"],
+            license_id=result["license_id"],
+        )
+        return {
+            "checkout_url": checkout_url,
+            "checkout_session_id": result["checkout_session_id"],
+            "license_id": result["license_id"],
+            "plan_id": plan_id,
+        }
+
+    def sync_from_vendor(
+        self,
+        *,
+        installation_id: str,
+        opener=None,
+    ) -> dict[str, Any]:
+        credentials = self.refresh_credentials()
+        if credentials is None:
+            raise LicenseVerificationError("No vendor checkout or renewal credentials are stored")
+        if not isinstance(installation_id, str) or not _INSTALLATION_ID.fullmatch(installation_id):
+            raise ValueError("Installation identifier is invalid")
+        result = _post_vendor_service(
+            f"{credentials['service_url']}/api/claim",
+            {
+                "installation_id": installation_id,
+                "checkout_session_id": credentials["checkout_session_id"],
+                "activation_secret": credentials["activation_secret"],
+            },
+            opener=opener,
+        )
+        token = result.get("license_token")
+        if not isinstance(token, str):
+            raise VendorLicenseServiceError("Vendor service did not return a signed licence")
+        activated = self.activate(token, installation_id)
+        if result.get("license_id") != activated["license_id"]:
+            raise VendorLicenseServiceError("Vendor licence identity does not match its signed token")
+        return {
+            **activated,
+            "subscription_status": result.get("subscription_status"),
+            "product_license": self.status(installation_id),
+        }
 
     def configure_service(
         self,
@@ -375,17 +521,20 @@ class VendorLicenseStore:
             except LicenseVerificationError as error:
                 return {
                     "configured": self.configured(), "installed": True, "active": False,
-                    "grace_period": False, "plan_id": "free", "error": str(error),
+                    "grace_period": False, "plan_id": "free",
+                    "renewal_configured": self.renewal_configured(), "error": str(error),
                 }
             if token is None:
                 return {
                     "configured": self.configured(), "installed": False, "active": False,
                     "grace_period": False, "plan_id": None,
+                    "renewal_configured": self.renewal_configured(),
                 }
             if not self.configured():
                 return {
                     "configured": False, "installed": True, "active": False,
                     "grace_period": False, "plan_id": "free",
+                    "renewal_configured": self.renewal_configured(),
                     "error": "Vendor licence verification is not configured on this installation",
                 }
             try:
@@ -398,10 +547,12 @@ class VendorLicenseStore:
             except (LicenseVerificationError, ValueError) as error:
                 return {
                     "configured": True, "installed": True, "active": False,
-                    "grace_period": False, "plan_id": "free", "error": str(error),
+                    "grace_period": False, "plan_id": "free",
+                    "renewal_configured": self.renewal_configured(), "error": str(error),
                 }
             return {
                 "configured": True, "installed": True,
+                "renewal_configured": self.renewal_configured(),
                 **verified,
             }
 
