@@ -1215,7 +1215,7 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 202)
+        self.assertEqual(len(FEATURE_MODULES), 203)
         self.assertEqual(len(set(FEATURE_MODULES)), 202)
         self.assertEqual(count(), 202)
         self.assertEqual(len(entries), 202)

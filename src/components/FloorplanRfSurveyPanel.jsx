@@ -9,7 +9,7 @@ import {
 import { apiBase, apiFetch } from '../lib/api.js';
 
 const SERIES_COLORS = ['#06d6f0', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#60a5fa', '#f97316'];
-const MAX_JSON_BYTES = 2 * 1024 * 1024;
+const MAX_JSON_BYTES = 900 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 function defaultSurveyPayload() {
@@ -217,7 +217,7 @@ export default function FloorplanRfSurveyPanel() {
     event.target.value = '';
     if (!file) return;
     if (file.size > MAX_JSON_BYTES) {
-      setError('Survey JSON files must not exceed 2 MiB.');
+      setError('Survey JSON files must not exceed 900 KiB so the API request stays below its 1 MiB limit.');
       return;
     }
     try {
@@ -299,7 +299,7 @@ export default function FloorplanRfSurveyPanel() {
       <section className="glass rounded-xl p-4 space-y-2">
         <div className="flex justify-between items-center gap-2">
           <div className="text-sm font-semibold text-foreground">Survey evidence JSON</div>
-          <div className="text-xs text-muted-foreground">Maximum 2 MiB</div>
+          <div className="text-xs text-muted-foreground">Maximum 900 KiB</div>
         </div>
         <textarea value={payloadText} onChange={event => { setPayloadText(event.target.value); setSamplePayload(false); }}
           spellCheck="false" rows={18} aria-label="Floor-plan RF survey JSON payload"

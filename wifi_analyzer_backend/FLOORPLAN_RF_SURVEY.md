@@ -12,7 +12,7 @@ Run the feature through the authenticated endpoint:
 - Requires diagnostics.run and access to the supplied site_id.
 - Request bodies are bounded by the API's normal JSON request limit.
 - The Feature Workbench also exposes a guided editor and accepts a JSON file up
-  to 2 MiB.
+  to 900 KiB to stay below the API's 1 MiB JSON request limit.
 
 The JSON object contains:
 
