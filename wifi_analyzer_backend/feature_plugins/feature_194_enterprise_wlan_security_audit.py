@@ -232,6 +232,7 @@ def run(payload: dict) -> dict:
     severity_counts = Counter()
     status_counts = Counter()
     risk_total = 0
+    risk_scored_count = 0
     enabled_count = 0
     gap_count = 0
     violation_count = 0
@@ -383,15 +384,28 @@ def run(payload: dict) -> dict:
             elif wps_enabled is None and policy["require_wps_disabled"]:
                 add("WPS_STATE_UNKNOWN", "low", "WPS state was not supplied for this profile.", "missing")
 
-            gap_count += sum(1 for item in profile_findings if item["evidence_state"] == "missing")
-            violation_count += sum(1 for item in profile_findings if item["evidence_state"] == "violation")
-            if any(item["evidence_state"] == "violation" for item in profile_findings):
+            profile_gap_count = sum(1 for item in profile_findings if item["evidence_state"] == "missing")
+            profile_violation_count = sum(1 for item in profile_findings if item["evidence_state"] == "violation")
+            gap_count += profile_gap_count
+            violation_count += profile_violation_count
+            if profile_violation_count:
                 profile_status = "non_compliant"
-            elif any(item["evidence_state"] == "missing" for item in profile_findings):
+            elif profile_gap_count:
                 profile_status = "evidence_incomplete"
             else:
                 profile_status = "compliant"
-            risk_total += min(100, profile_risk)
+            # A numeric risk score is defensible only when all required evidence
+            # for this profile is present. Never let unknown controls look safe.
+            if profile_gap_count == 0:
+                risk_total += min(100, profile_risk)
+                risk_scored_count += 1
+
+        if enabled is False:
+            profile_gap_count = 0
+            profile_violation_count = 0
+            profile_risk_score = 0
+        else:
+            profile_risk_score = min(100, profile_risk) if profile_gap_count == 0 else None
 
         status_counts[profile_status] += 1
         profile_results.append({
@@ -404,7 +418,9 @@ def run(payload: dict) -> dict:
             "eap_methods": eap_methods,
             "radius_server_count": radius_count,
             "status": profile_status,
-            "observed_risk_score": 0 if enabled is False else min(100, profile_risk),
+            "observed_risk_score": profile_risk_score,
+            "evidence_gap_count": profile_gap_count,
+            "violation_count": profile_violation_count,
             "finding_count": len(profile_findings),
             "finding_codes": [item["code"] for item in profile_findings],
         })
@@ -412,20 +428,17 @@ def run(payload: dict) -> dict:
     for item in findings:
         severity_counts[item["severity"]] += 1
 
-    assessed = status_counts["compliant"] + sum(
+    assessed = sum(
         1 for item in profile_results
-        if item["status"] == "non_compliant"
-        and not any(
-            finding["profile_id"] == item["profile_id"] and finding["evidence_state"] == "missing"
-            for finding in findings
-        )
+        if item["enabled"] is not False and item["evidence_gap_count"] == 0
     )
     fully_compliant = sum(
         1 for item in profile_results
         if item["status"] == "compliant" and item["enabled"] is not False
+        and item["evidence_gap_count"] == 0
     )
     compliance_pct = round(fully_compliant / assessed * 100, 2) if assessed else None
-    observed_risk = round(risk_total / enabled_count, 2) if enabled_count else None
+    observed_risk = round(risk_total / risk_scored_count, 2) if risk_scored_count else None
 
     recommendation_by_code = {
         "CORPORATE_REQUIRES_ENTERPRISE_AUTH": "Move corporate and management WLANs to 802.1X-backed WPA2-Enterprise or WPA3-Enterprise.",
@@ -469,7 +482,7 @@ def run(payload: dict) -> dict:
             "management_profile_count": sum(1 for item in profile_results if item["purpose"] == "management" and item["enabled"] is not False),
             "compliant_profile_count": status_counts["compliant"],
             "non_compliant_profile_count": status_counts["non_compliant"],
-            "evidence_incomplete_profile_count": status_counts["evidence_incomplete"],
+            "evidence_incomplete_profile_count": sum(1 for item in profile_results if item["evidence_gap_count"] > 0),
             "profiles_with_findings": sum(1 for item in profile_results if item["finding_count"]),
             "finding_count": len(findings),
             "violation_count": violation_count,

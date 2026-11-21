@@ -65,6 +65,21 @@ class EnterpriseWlanSecurityAuditTests(unittest.TestCase):
         self.assertEqual(result["summary"]["violation_count"], 0)
         self.assertGreater(result["summary"]["evidence_gap_count"], 0)
         self.assertIsNone(result["summary"]["compliance_pct"])
+        self.assertIsNone(result["summary"]["observed_risk_score"])
+        self.assertIsNone(result["profiles"][0]["observed_risk_score"])
+
+    def test_profiles_with_both_known_violations_and_missing_evidence_have_unknown_risk(self):
+        result = run({"profiles": [corporate_profile(
+            security_mode="WPA2-Personal",
+            pmf=None,
+        )]})
+        profile = result["profiles"][0]
+        self.assertEqual(profile["status"], "non_compliant")
+        self.assertGreater(profile["violation_count"], 0)
+        self.assertGreater(profile["evidence_gap_count"], 0)
+        self.assertIsNone(profile["observed_risk_score"])
+        self.assertEqual(result["summary"]["evidence_incomplete_profile_count"], 1)
+        self.assertIsNone(result["summary"]["observed_risk_score"])
 
     def test_corporate_personal_security_is_a_critical_policy_violation(self):
         result = run({"profiles": [corporate_profile(
