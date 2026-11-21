@@ -1309,6 +1309,44 @@ PAYLOADS = {
         },
         "zones": [{"zone_id": "west-wing", "x1_px": 100, "y1_px": 50, "x2_px": 450, "y2_px": 200}]
     },
+    "radio_regulatory_evidence_validator": {
+        "jurisdiction": "AU",
+        "dataset_id": "regulatory-fixture-au",
+        "version": "fixture-1",
+        "regulator": "ACMA fixture authority",
+        "retrieved_at": _SURVEY_NOW.isoformat(),
+        "effective_from": "2025-10-01",
+        "as_of": _SURVEY_NOW.date().isoformat(),
+        "sources": [{
+            "source_id": "source-fixture",
+            "source_type": "official_guidance",
+            "title": "Fixture only — not an operational radio-rule recommendation",
+            "authority": "ACMA test fixture",
+            "document_reference": "TEST-FIXTURE-ONLY",
+            "revision": "fixture-1",
+            "source_url": "https://www.acma.gov.au/test-fixture-only",
+            "published_at": "2025-10-01",
+            "effective_from": "2025-10-01",
+            "retrieved_at": _SURVEY_NOW.isoformat(),
+            "content_sha256": "a" * 64,
+            "clause_references": ["Fixture clause 1"]
+        }],
+        "rules": [{
+            "rule_id": "fixture-rule-1",
+            "band": "2.4GHz",
+            "lower_frequency_mhz": 2400,
+            "upper_frequency_mhz": 2483.5,
+            "maximum_eirp_dbm": 20,
+            "channel_widths_mhz": [20, 40],
+            "channel_numbers": [1, 6, 11],
+            "device_classes": ["LPI"],
+            "indoor_only": False,
+            "outdoor_allowed": True,
+            "dfs_required": False,
+            "afc_required": False,
+            "source_references": [{"source_id": "source-fixture", "clause": "Fixture clause 1"}]
+        }]
+    },
     "client_roam_transaction_analyzer": {
         "events": [
             {"event_id":"evt-a1","site_id":"office","client_ref":"station-alpha","event_type":"roam_start","roam_id":"roam-a","from_ap_id":"ap-01","to_ap_id":"ap-02","occurred_at":_ROAM_NOW.isoformat(),"evidence_source":"controller"},
@@ -1327,15 +1365,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 205)
+        self.assertEqual(len(FEATURE_MODULES), 206)
         self.assertEqual(len(set(FEATURE_MODULES)), 205)
-        self.assertEqual(count(), 205)
-        self.assertEqual(len(entries), 205)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 205)
+        self.assertEqual(count(), 206)
+        self.assertEqual(len(entries), 206)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 206)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F205", "F291", "F292", "F293"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F205", "F206", "F291", "F292", "F293"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1725,6 +1763,14 @@ class FeatureCatalogTests(unittest.TestCase):
             run("client_roam_transaction_analyzer", {"events": [bad_reason]})
         with self.assertRaisesRegex(ValueError, "slow_roam_threshold_ms"):
             run("client_roam_transaction_analyzer", {"events": [payload["events"][0]], "slow_roam_threshold_ms": 1})
+
+    def test_f206_validates_jurisdiction_scoped_radio_rule_provenance(self):
+        result = run("radio_regulatory_evidence_validator", PAYLOADS["radio_regulatory_evidence_validator"])["result"]
+        self.assertEqual(result["status"], "validated")
+        self.assertEqual(result["jurisdiction"], "AU")
+        self.assertEqual(result["provenance_status"], "allowlisted_domains")
+        self.assertEqual(result["rule_count"], 1)
+        self.assertEqual(result["authority_allowlist_version"], "2026.11.21")
 
     def test_f205_audits_saved_rf_survey_against_customer_acceptance_policy(self):
         result = run("rf_survey_acceptance_auditor", PAYLOADS["rf_survey_acceptance_auditor"])["result"]

@@ -189,7 +189,8 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 
 - ✅ F201 multi-AP RF channel reuse planner: deterministic weighted channel assignment across up to 256 same-site radios, explicit survey/controller/operator provenance, supplied regulatory channel options, bandwidth-aware spectral overlap, change-cost optimisation and before/after cost reporting. The API reports its bounded coordinate-descent method, iteration count and convergence state, and clearly discloses that it is a heuristic rather than a globally optimal solution.
 - ✅ F201 fails closed when interference evidence is absent; it does not infer AP proximity, fabricate RF measurements, assume regulatory availability or change network configuration.
-- 📋 Remaining F201+ wave: RF survey import/normalisation, floor-plan-aware measured propagation, per-country regulatory data provenance, DFS/PSC planning against actual controller capabilities and live AP configuration preview with explicit approval.
+- ✅ F202–F206 now deliver RF evidence normalisation, floor-plan-aligned measured surveys, immutable site-scoped survey history, repeat-survey comparison, customer acceptance scoring and jurisdiction-aware regulatory source provenance validation.
+- 📋 Remaining RF wave: DFS/PSC planning against actual controller radio capabilities, retained regulator-backed rule dataset management and live AP configuration preview with explicit approval. F206 does not itself establish legal compliance or fetch regulator documents.
 
 
 ### F202 delivered — RF observation evidence normalisation

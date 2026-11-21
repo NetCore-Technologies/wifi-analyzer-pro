@@ -1682,6 +1682,24 @@
     }
   },
   {
+    "slug": "radio_regulatory_evidence_validator",
+    "name": "Radio regulatory evidence validator",
+    "category": "RF assurance",
+    "description": "Validate jurisdiction-scoped radio rule datasets, effective dates, source citations, document digests and known regulator domains; report unverified provenance explicitly without asserting legal compliance.",
+    "parameters": {
+      "jurisdiction": "Uppercase ISO alpha-2 code or EU",
+      "dataset_id": "Stable identifier for the imported regulatory dataset",
+      "version": "Publisher/source revision or immutable import version",
+      "regulator": "Name of the regulator or standards authority",
+      "retrieved_at": "Timezone-aware timestamp when source material was retrieved",
+      "effective_from": "Dataset effective start date",
+      "effective_to": "Optional dataset effective end date",
+      "sources": "1-100 source documents with official URL, revision, dates, SHA-256 digest and clause references",
+      "rules": "1-5000 radio restrictions linked to exact source clauses",
+      "as_of": "Optional assessment date; defaults to UTC today"
+    }
+  },
+  {
     "slug": "client_roam_transaction_analyzer",
     "name": "Client roam transaction analyzer",
     "category": "Roaming",

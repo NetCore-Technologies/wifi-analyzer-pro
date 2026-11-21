@@ -1087,8 +1087,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 205)
-        self.assertEqual(len(catalog["features"]), 205)
+        self.assertEqual(catalog["count"], 206)
+        self.assertEqual(len(catalog["features"]), 206)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -1116,6 +1116,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("client_experience_slo_evaluator", {item["slug"] for item in catalog["features"]})
         self.assertIn("client_experience_slo_window_comparator", {item["slug"] for item in catalog["features"]})
         self.assertIn("rf_survey_acceptance_auditor", {item["slug"] for item in catalog["features"]})
+        self.assertIn("radio_regulatory_evidence_validator", {item["slug"] for item in catalog["features"]})
 
     def test_f195_to_f201_security_and_rf_tools_run_through_authenticated_feature_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "owner passphrase is secure"})
@@ -3078,7 +3079,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 205)
+        self.assertEqual(catalog["count"], 206)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,
