@@ -1547,5 +1547,15 @@
       "window_days": "reporting window from 1 to 90 days",
       "deliveries": "up to 5000 sanitized webhook delivery metadata records"
     }
+  },
+  {
+    "slug": "enterprise_wlan_security_audit",
+    "name": "Enterprise WLAN security posture audit",
+    "category": "Security",
+    "description": "Audit office, guest, IoT and management WLAN profiles for 802.1X/EAP policy, RADIUS redundancy, certificate validation, PMF, WPS and network segmentation. Distinguishes confirmed policy violations from missing evidence and never returns credentials or RADIUS addresses.",
+    "parameters": {
+      "profiles": "Up to 1024 normalized WLAN profile records with purpose, security mode, EAP, PMF, RADIUS and segmentation evidence",
+      "policy": "Optional policy overrides for minimum enterprise security, approved EAP methods, RADIUS redundancy and required controls"
+    }
   }
 ]

@@ -249,3 +249,8 @@ for a preparation request and are never saved in the subscription directory or
 outbox. The screen displays queue state, attempt counts and safe error codes.
 A separate worker performs fresh DNS resolution, pinned-IP TLS delivery,
 redirect refusal, retries and dead-letter recovery.
+
+
+## Enterprise WLAN security audit (F194)
+
+The `enterprise_wlan_security_audit` feature evaluates supplied office, guest, IoT and management profile evidence for 802.1X/EAP policy, RADIUS redundancy, certificate validation, Protected Management Frames, WPS and network segmentation. It is offline and read-only: it does not connect to controllers or return SSIDs, RADIUS addresses or credential material, and it reports missing evidence separately from observed policy violations.

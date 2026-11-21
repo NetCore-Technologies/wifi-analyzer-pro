@@ -1,4 +1,4 @@
-# 190 WiFi Analyzer Pro feature tools (F001–F168, F172–F193)
+# 191 WiFi Analyzer Pro feature tools (F001–F168, F172–F194)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -232,3 +232,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F192 | Multi-subscription webhook delivery orchestrator (`router_webhook_delivery_orchestrator`) | Router operations | Coordinate subscription routing, independent HMAC signing and per-subscription egress evidence; produce bounded delivery batches without exposing signing secrets or sending network requests. |
 
 | F193 | Webhook delivery reliability report (`router_webhook_delivery_health_report`) | Router operations | Summarise delivery outcomes, retries, latency, safe failure codes and site/subscription health from bounded metadata without reading signed payloads or destination details. |
+
+| F194 | Enterprise WLAN security posture audit (`enterprise_wlan_security_audit`) | Security | Assess supplied office, guest, IoT and management WLAN configuration for enterprise authentication, EAP policy, RADIUS redundancy, certificate validation, PMF, WPS and segmentation. Missing evidence is reported separately from observed violations; secrets and server addresses are not returned. |

@@ -9,7 +9,6 @@ from __future__ import annotations
 import ipaddress
 import re
 from collections import Counter
-from typing import Any
 
 MAX_PROFILES = 1024
 MAX_RADIUS_SERVERS = 16
@@ -106,7 +105,6 @@ def _eap_method(value: object, field: str) -> str:
         "eaptls": "eap-tls", "tls": "eap-tls",
         "peap": "eap-peap-mschapv2", "peapmschapv2": "eap-peap-mschapv2",
         "eappeap": "eap-peap-mschapv2", "eappeapmschapv2": "eap-peap-mschapv2",
-        "eapttls pap": "eap-ttls-pap",
         "eapttlspap": "eap-ttls-pap", "ttlspap": "eap-ttls-pap",
         "eapttlsmschapv2": "eap-ttls-mschapv2", "ttlsmschapv2": "eap-ttls-mschapv2",
         "eapfast": "eap-fast", "fast": "eap-fast",
