@@ -1,6 +1,7 @@
 """Durable, idempotent queue for prepared multi-subscription router webhooks."""
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
