@@ -272,9 +272,12 @@ def create_billing_portal_session(
 class WorkspaceBillingStore:
     """Single-deployment billing state and idempotent Stripe event ledger."""
 
-    def __init__(self, path: str | None = None, *, clock=time.time):
+    def __init__(
+        self, path: str | None = None, *, clock=time.time, license_store: Any | None = None,
+    ):
         self.path = Path(path).expanduser() if path else default_billing_path()
         self._clock = clock
+        self.license_store = license_store
 
     @contextmanager
     def _connection(self):
@@ -380,6 +383,7 @@ class WorkspaceBillingStore:
 
     def status(self) -> dict[str, Any]:
         now = float(self._clock())
+        installation_id = self.instance_id() if self.license_store is not None else None
         with self._connection() as connection:
             row = connection.execute(
                 "SELECT * FROM workspace_subscription WHERE id=1"
@@ -401,24 +405,49 @@ class WorkspaceBillingStore:
             row.get("plan_id") in _PLAN_IDS - {"free"}
             and raw_status in {"active", "trialing"}
             and isinstance(period_end, (int, float))
+            and not isinstance(period_end, bool)
             and period_end > now
         )
         grace_access = (
             row.get("plan_id") in _PLAN_IDS - {"free"}
             and raw_status == "past_due"
             and isinstance(grace_until, (int, float))
+            and not isinstance(grace_until, bool)
             and grace_until > now
         )
-        active_plan = row.get("plan_id") if paid_access or grace_access else "free"
+
+        product_license = None
+        if self.license_store is not None and installation_id is not None:
+            product_license = self.license_store.status(installation_id)
+            # A vendor-issued licence is authoritative once installed. An
+            # invalid or expired vendor token fails closed to Free rather than
+            # silently falling back to a customer-managed Stripe subscription.
+            if product_license.get("installed"):
+                if product_license.get("active"):
+                    paid_access = True
+                    grace_access = bool(product_license.get("grace_period"))
+                    raw_status = "license_grace" if grace_access else "licensed"
+                    period_end = product_license.get("expires_at")
+                else:
+                    paid_access = False
+                    grace_access = False
+                    raw_status = "license_invalid"
+                    period_end = None
+        if product_license and product_license.get("installed"):
+            active_plan = product_license.get("plan_id") if product_license.get("active") else "free"
+        else:
+            active_plan = row.get("plan_id") if paid_access or grace_access else "free"
         plan = PLAN_CATALOG[active_plan]
         period_end_text = (
             datetime.fromtimestamp(period_end, timezone.utc).isoformat()
-            if isinstance(period_end, (int, float)) and period_end > 0 else None
+            if isinstance(period_end, (int, float)) and not isinstance(period_end, bool) and period_end > 0 else None
         )
         grace_text = (
             datetime.fromtimestamp(grace_until, timezone.utc).isoformat()
-            if isinstance(grace_until, (int, float)) and grace_until > 0 else None
+            if isinstance(grace_until, (int, float)) and not isinstance(grace_until, bool) and grace_until > 0 else None
         )
+        if product_license and product_license.get("installed") and product_license.get("active"):
+            grace_text = period_end_text if product_license.get("grace_period") else None
         return {
             "plan_id": active_plan,
             "plan_label": plan["label"],
@@ -426,11 +455,15 @@ class WorkspaceBillingStore:
             "active": bool(paid_access or grace_access),
             "grace_period": bool(grace_access),
             "current_period_end": period_end_text,
-            "cancel_at_period_end": bool(row.get("cancel_at_period_end", False)),
+            "cancel_at_period_end": (
+                False if product_license and product_license.get("installed")
+                else bool(row.get("cancel_at_period_end", False))
+            ),
             "grace_period_ends_at": grace_text,
             "limits": dict(plan["limits"]),
             "usage_period": usage_month,
             "monthly_usage": {"feature_runs": monthly_feature_runs},
+            "product_license": product_license,
             "webhook_events_retained": int(event_count),
             "billing_configured": bool(
                 _SECRET_KEY.fullmatch(os.getenv("WIFI_ANALYZER_STRIPE_SECRET_KEY", ""))
@@ -457,11 +490,18 @@ class WorkspaceBillingStore:
         }
 
     def consume_monthly_feature_run(self) -> dict[str, Any]:
-        """Atomically consume one diagnostic execution from the current UTC month."""
+        """Atomically consume one diagnostic execution from current entitlements."""
         now = float(self._clock())
         usage_month = datetime.fromtimestamp(now, timezone.utc).strftime("%Y-%m")
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "INSERT OR IGNORE INTO billing_instance(id, instance_id) VALUES (1, ?)",
+                (uuid.uuid4().hex,),
+            )
+            installation_id = connection.execute(
+                "SELECT instance_id FROM billing_instance WHERE id=1"
+            ).fetchone()["instance_id"]
             subscription = connection.execute(
                 """
                 SELECT plan_id, subscription_status, current_period_end, grace_until
@@ -473,9 +513,9 @@ class WorkspaceBillingStore:
                 (usage_month,),
             ).fetchone()
 
-            # Re-evaluate entitlements after acquiring the SQLite write lock.
-            # A concurrent Stripe cancellation/downgrade therefore wins before
-            # a new run is allowed, rather than racing a stale status() read.
+            # Re-evaluate both vendor licensing and customer-managed billing
+            # only after acquiring the SQLite write lock. A concurrent
+            # cancellation/downgrade therefore wins before a new run proceeds.
             subscription = dict(subscription) if subscription else {}
             raw_status = subscription.get("subscription_status") or "inactive"
             period_end = subscription.get("current_period_end")
@@ -494,6 +534,14 @@ class WorkspaceBillingStore:
                 and grace_until > now
             )
             plan_id = subscription.get("plan_id") if active else "free"
+
+            product_license = (
+                self.license_store.status(installation_id)
+                if self.license_store is not None else None
+            )
+            if product_license and product_license.get("installed"):
+                plan_id = product_license.get("plan_id") if product_license.get("active") else "free"
+
             limit = int(PLAN_CATALOG[plan_id]["limits"]["feature_runs_monthly"])
             used = int(row["used"]) if row else 0
             if used >= limit:
