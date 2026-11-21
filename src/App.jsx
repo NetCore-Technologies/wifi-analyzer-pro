@@ -23,6 +23,7 @@ import AccountSecurityPanel from "./components/AccountSecurityPanel.jsx";
 import WebhookDeliveryPanel from "./components/WebhookDeliveryPanel.jsx";
 import BillingPanel from "./components/BillingPanel.jsx";
 import { PhyTelemetryPanel, InterfaceTelemetryPanel } from "./components/LiveRadioPanels.jsx";
+import CommandPalette from "./components/CommandPalette.jsx";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -1030,6 +1031,7 @@ export default function App() {
   const [preferences,setPreferences]=useState(loadPreferences);
   const [settingsOpen,setSettingsOpen]=useState(false);
   const [navQuery,setNavQuery]=useState("");
+  const [commandOpen,setCommandOpen]=useState(false);
   const collapsed=preferences.compactSidebar;
   const [toasts,setToasts]=useState([]);
   const [rssiData]=useState(genRSSI);
@@ -1046,6 +1048,19 @@ export default function App() {
   const [checking,setChecking]=useState(true);
   const [liveError,setLiveError]=useState("");
   const [lastUpdated,setLastUpdated]=useState(null);
+
+  useEffect(()=>{
+    const handleKeyboardShortcuts=event=>{
+      if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="k"){
+        event.preventDefault();
+        setCommandOpen(true);
+      }else if(event.key==="Escape"){
+        setCommandOpen(false);
+      }
+    };
+    window.addEventListener("keydown",handleKeyboardShortcuts);
+    return()=>window.removeEventListener("keydown",handleKeyboardShortcuts);
+  },[]);
 
   useEffect(()=>{
     try {
@@ -1245,6 +1260,7 @@ export default function App() {
       && (!navQuery.trim() || `${item.label} ${group.g}`.toLowerCase().includes(navQuery.trim().toLowerCase()))
     ),
   })).filter(group=>group.items.length>0);
+  const commandItems=visibleNavGroups.flatMap(group=>group.items.map(item=>({...item,group:group.g})));
 
   return (
     <div className="wa-shell" style={{display:"flex",height:"100vh",background:C.bg,color:C.text,fontFamily:"system-ui,-apple-system,sans-serif",overflow:"hidden"}}>
@@ -1257,6 +1273,12 @@ export default function App() {
         }
       `:""}</style>
       <Toast toasts={toasts} dismiss={dismissToast}/>
+      <CommandPalette
+        open={commandOpen}
+        items={commandItems}
+        onClose={()=>setCommandOpen(false)}
+        onNavigate={switchTab}
+      />
       {settingsOpen&&<SettingsOverlay preferences={preferences}
         onChange={updates=>setPreferences(current=>({...current,...updates}))}
         onClose={()=>setSettingsOpen(false)}/>}
@@ -1359,6 +1381,11 @@ export default function App() {
             </div>
           </div>
           <div className="wa-topbar-actions" style={{display:"flex",alignItems:"center",gap:8}}>
+            <button type="button" className="wa-command-trigger" onClick={()=>setCommandOpen(true)} aria-label="Search all pages" title="Search all pages (Ctrl+K)">
+              <Search size={14}/>
+              <span>Jump to…</span>
+              <kbd>Ctrl K</kbd>
+            </button>
             <div className="wa-interface-chip" style={{display:"flex",alignItems:"center",gap:6,fontSize:11,color:C.textSec,
               padding:"4px 10px",background:C.card2,border:`1px solid ${C.border}`,borderRadius:6}}>
               <Signal size={11} color={C.cyan}/>
