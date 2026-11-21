@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 191 callable feature tools, local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 197 callable feature tools (F001–F168 and F172–F200), local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 190 distinct callable feature modules (F001–F168 and F172–F193), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
+- ✅ 197 distinct callable feature modules (F001–F168 and F172–F200), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
@@ -79,9 +79,9 @@ These are planned deliverables, not implemented features. IDs are reserved only 
 |---|---:|---|---|---:|---|
 | ✅ | F101–F120 | Shipped: same-SSID band visibility, roaming evidence/timelines, channel-width overlap, DFS/PSC planning, Wi-Fi 7 EHT/MLO and PMF/regulatory audits | 2026-11-20 | Implemented | F001–F100 registry; 20 module-level test payloads |
 | ✅ | F121–F140 | Shipped: client association inventory, airtime/throughput fairness, QoS/DSCP, retry/PHY checks, 802.11k/v/r, TWT, DHCP/DNS/gateway checks and association diagnostics | 2026-11-20 | Implemented | F001–F120; supplied AP/controller and client measurement records |
-| 🚧 | F141–F160 | F141–F160 shipped: site inventory snapshots/comparisons, AP topology relationships and gateway-path audits, subnet correlation/capacity, gateway redundancy, floor-plan anchors/zones, topology redundancy/diffs/history, AP freshness, channel-reuse and radio-configuration standards audits, interactive topology visualisation, persistent site discovery history, stored site-to-site change reports, and consolidated site audit reporting; all deliverables in this wave are shipped | 2027-02-26 | 20 features shipped; 0 remains | SQLite history; consented local discovery |
-| 🚧 | F161–F180 | F161–F180 shipped and verified in CI: versioned OpenWrt read-only agent and scope-gated health telemetry; authenticated Router Agent Console; credential-free UniFi/MikroTik imports; cross-vendor snapshot drift, fleet health, subnet overlap, client roaming, VLAN consistency, route-table and cross-router gateway redundancy audits | 2026-11-20 | 20 implemented and verified across Python 3.10–3.13 | Authenticated API; offline adapter contracts; bounded schema validation | Authenticated API; offline adapter contracts; bounded schema validation |
-| 🚧 | F181–F200 | F181–F194 shipped: local incident policy evaluation; hashed report bundles/comparison; timezone-aware schedule preview; signed webhook envelopes; encrypted backups; DNS/TLS egress evidence; durable SQLite report outbox; lease-verified delivery packages; bounded multi-subscription routing and per-batch signed delivery preparation; offline PCAP/PCAPNG analysis with radiotap RF metrics. F192 verifies matching recent public DNS/TLS evidence and produces independent HMAC-signed batch envelopes without sending traffic; the Webhook Delivery Center exposes preparation, blocked reasons, queueing and recovery. A durable SQLite multi-subscription outbox and opt-in pinned-TLS dispatcher provide site-scoped queue visibility, idempotent enqueue, leases, retries, dead letters and manual recovery. Saved webhook subscription directory, scoped CRUD, pinned TLS probes and short-lived evidence reuse are implemented. F193 adds metadata-only delivery reliability analytics; F194 adds an evidence-aware enterprise WLAN security posture audit for 802.1X/EAP, RADIUS, certificate validation, PMF, WPS and guest/IoT isolation. Remaining: F195–F200 | 2027-05-07 | 14 numbered feature tools shipped; 6 remain | F182 report schema; F184 occurrence IDs; F188 job queue; F185 signing; F187 egress verification |
+| ✅ | F141–F160 | F141–F160 shipped: site inventory snapshots/comparisons, AP topology and gateway-path audits, subnet correlation/capacity, gateway redundancy, floor-plan anchors/zones, topology redundancy/diffs/history, AP freshness, channel reuse and radio standards audits, topology visualisation, discovery history, site-to-site change reports and consolidated site audits | 2026-11-21 | 20 features shipped; 0 remain | SQLite history; consented local discovery |
+| ✅ | F161–F180 | F161–F180 shipped and verified in CI: versioned OpenWrt read-only agent, scope-gated health telemetry, Router Agent Console, credential-free UniFi/MikroTik imports, cross-vendor drift, fleet health, subnet overlap, client roaming, VLAN, route-table and gateway redundancy audits | 2026-11-21 | 20 features shipped; 0 remain | Authenticated API; offline adapter contracts; bounded schema validation |
+| ✅ | F181–F200 | F181–F193 router incident, report, scheduling, encrypted archive, PCAP, signed webhook and durable delivery workflows; F194–F200 enterprise WLAN, switch, firewall, DHCP/DNS, VPN, asset lifecycle and consolidated security evidence audits. Delivery is opt-in, site-scoped and lease/retry guarded; audit findings distinguish missing evidence from verified violations. | 2026-11-21 | 20 features shipped; 0 remain | Authenticated API; report schema; bounded evidence contracts |
 
 ### Longer-range direction (F201–F1100)
 
@@ -179,7 +179,7 @@ These aren't committed. Open an issue to discuss or vote.
 
 Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a public issue.
 
-*Last updated: November 20, 2026*
+*Last updated: November 21, 2026*
 
 
 - ✅ Saved, site-scoped webhook subscription directory with metadata-only persistence, a 100-subscription workspace bound, transient HMAC key entry, live pinned-TLS endpoint probing and short-lived F187 egress evidence reuse.

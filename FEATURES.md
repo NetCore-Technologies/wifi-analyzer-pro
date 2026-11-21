@@ -1,4 +1,4 @@
-# 191 WiFi Analyzer Pro feature tools (F001–F168, F172–F194)
+# 197 WiFi Analyzer Pro feature tools (F001–F168, F172–F200)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -234,3 +234,15 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F193 | Webhook delivery reliability report (`router_webhook_delivery_health_report`) | Router operations | Summarise delivery outcomes, retries, latency, safe failure codes and site/subscription health from bounded metadata without reading signed payloads or destination details. |
 
 | F194 | Enterprise WLAN security posture audit (`enterprise_wlan_security_audit`) | Security | Assess supplied office, guest, IoT and management WLAN configuration for enterprise authentication, EAP policy, RADIUS redundancy, certificate validation, PMF, WPS and segmentation. Missing evidence is reported separately from observed violations; secrets and server addresses are not returned. |
+
+| F195 | Enterprise switch management-plane audit (`enterprise_switch_management_audit`) | Security | Review supplied switch evidence for secure management transports, SNMPv3 privacy, AAA/MFA, management ACLs, default accounts, encrypted backups, TLS syslog and authenticated time; report evidence gaps separately. |
+
+| F196 | Enterprise firewall policy audit (`enterprise_firewall_policy_audit`) | Security | Review supplied firewall defaults and ordered rules for broad any/any access, exposed management ingress, duplicate policies and missing logging. |
+
+| F197 | Enterprise DHCP and DNS security audit (`enterprise_dhcp_dns_security_audit`) | Security | Review DHCP snooping, rogue-server detection, trusted servers, Option 82, overlapping scopes, DNSSEC and encrypted upstream resolvers from supplied evidence. |
+
+| F198 | Enterprise VPN and remote-access audit (`enterprise_vpn_remote_access_audit`) | Security | Assess remote-access profiles for legacy protocols, MFA, device posture, certificate authentication, split tunnelling, administrator restrictions, logging, key rotation and session timeout. |
+
+| F199 | Enterprise network asset lifecycle audit (`enterprise_network_asset_lifecycle_audit`) | Security | Assess asset support lifecycle, patch freshness, confirmed exposure and reported high/critical vulnerability counts without inventing CVEs or querying external feeds. |
+
+| F200 | Enterprise network security evidence report (`enterprise_network_security_evidence_report`) | Security | Combine F194–F199 audits into a deterministic, privacy-minimised report with evidence gaps, severity rollups and a SHA-256 integrity digest. |

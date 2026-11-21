@@ -26,6 +26,7 @@
     "build": "vite build",
     "preview": "vite preview --port 4173",
     "lint": "eslint src --ext .js,.jsx",
+    "test:frontend": "node --test src/lib/*.test.js",
     "format": "prettier --write src/**/*.{js,jsx,css}",
     "test": "python -m unittest discover -s tests -v",
     "test:backend": "python -m unittest discover -s tests -v",

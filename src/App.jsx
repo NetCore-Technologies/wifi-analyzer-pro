@@ -13,6 +13,7 @@ import {
   Moon, Sun, Menu, X, Terminal, Package, Antenna, FileSearch, CreditCard
 } from "lucide-react";
 import { apiFetch } from "./lib/api.js";
+import { getScanSource } from "./lib/observationProvenance.js";
 import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
 import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
 import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
@@ -1074,7 +1075,9 @@ export default function App() {
         if(responses.some(response=>!response.ok))throw new Error("One or more local API requests failed");
         const [scanData,deviceData,systemData,diagnosticData]=await Promise.all(responses.map(response=>response.json()));
         if(disposed)return;
-        setLiveMode(true);
+        const scanSource=getScanSource(scanData);
+        if(scanSource==="unknown")throw new Error("The scan endpoint did not identify its observation source");
+        setLiveMode(scanSource==="live");
         if(Array.isArray(scanData.networks))setLiveNets(scanData.networks);
         if(Array.isArray(deviceData.devices))setLiveDevs(deviceData.devices);
         setLiveSystem(systemData);
@@ -1116,9 +1119,11 @@ export default function App() {
       if(!response.ok)throw new Error(`HTTP ${response.status}`);
       const data=await response.json();
       if(!Array.isArray(data.networks))throw new Error("The scan endpoint returned an invalid response");
+      const scanSource=getScanSource(data);
+      if(scanSource==="unknown")throw new Error("The scan endpoint did not identify its observation source");
       setLiveNets(data.networks);
-      setLiveMode(data.source!=="demo");
-      addToast(`${data.source==="demo"?"Demo":"Live"} scan complete — ${data.networks.length} network(s) found`,data.source==="demo"?"info":"success");
+      setLiveMode(scanSource==="live");
+      addToast(`${scanSource==="demo"?"Demo":"Live"} scan complete — ${data.networks.length} network(s) found`,scanSource==="demo"?"info":"success");
     }catch(error){
       addToast(`Scan failed: ${error.message||"local backend unavailable"}`,"warning");
     }finally{
