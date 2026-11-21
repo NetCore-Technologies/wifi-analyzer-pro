@@ -29,7 +29,6 @@ export default function BillingPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -63,7 +62,6 @@ export default function BillingPanel() {
   const startCheckout = async planId => {
     setBusy(planId);
     setError("");
-    setNotice("");
     try {
       const response = await apiFetch(`${API_BASE}/api/billing/checkout`, {
         method: "POST",
@@ -124,8 +122,7 @@ export default function BillingPanel() {
           </button>
         </div>
         {error ? <div role="alert" style={{ marginTop: 13, color: "#fca5a5", fontSize: 12, display: "flex", gap: 7 }}><AlertCircle size={14}/>{error}</div> : null}
-        {notice ? <div role="status" style={{ marginTop: 13, color: "#86efac", fontSize: 12 }}>{notice}</div> : null}
-      </section>
+        </section>
 
       {loading && !billing ? <section style={panel}>Loading billing status…</section> : null}
       {billing ? (

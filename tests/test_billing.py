@@ -217,7 +217,7 @@ class StripeCheckoutTests(unittest.TestCase):
 
     def test_checkout_rejects_untrusted_price_ids_and_non_https_public_origins(self):
         for kwargs in (
-            {"price_id": "price_attacker_supplied"},
+            {"price_id": "not-a-price"},
             {"public_url": "http://0.0.0.0:199"},
             {"public_url": "https://user:pass@example.com"},
             {"public_url": "https://example.com.evil.test"},

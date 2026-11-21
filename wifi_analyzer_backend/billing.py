@@ -403,8 +403,13 @@ class WorkspaceBillingStore:
             "grace_period_ends_at": grace_text,
             "limits": dict(plan["limits"]),
             "webhook_events_retained": int(event_count),
-            "billing_configured": bool(os.getenv("WIFI_ANALYZER_STRIPE_SECRET_KEY")),
-            "webhook_configured": bool(os.getenv("WIFI_ANALYZER_STRIPE_WEBHOOK_SECRET")),
+            "billing_configured": bool(
+                _SECRET_KEY.fullmatch(os.getenv("WIFI_ANALYZER_STRIPE_SECRET_KEY", ""))
+                and os.getenv("WIFI_ANALYZER_PUBLIC_URL")
+            ),
+            "webhook_configured": bool(
+                os.getenv("WIFI_ANALYZER_STRIPE_WEBHOOK_SECRET", "").startswith("whsec_")
+            ),
         }
 
     def capacity(self, resource: str, used: int) -> dict[str, Any]:
