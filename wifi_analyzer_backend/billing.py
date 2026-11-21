@@ -369,14 +369,6 @@ class WorkspaceBillingStore:
 
     def status(self) -> dict[str, Any]:
         now = float(self._clock())
-        event_created = event.get("created", now)
-        if (
-            isinstance(event_created, bool)
-            or not isinstance(event_created, (int, float))
-            or event_created < 0
-        ):
-            raise ValueError("Stripe event creation timestamp is invalid")
-        event_created = float(event_created)
         with self._connection() as connection:
             row = connection.execute(
                 "SELECT * FROM workspace_subscription WHERE id=1"
@@ -471,6 +463,14 @@ class WorkspaceBillingStore:
             raise ValueError("Stripe price-to-plan configuration is invalid")
 
         now = float(self._clock())
+        event_created = event.get("created", now)
+        if (
+            isinstance(event_created, bool)
+            or not isinstance(event_created, (int, float))
+            or event_created < 0
+        ):
+            raise ValueError("Stripe event creation timestamp is invalid")
+        event_created = float(event_created)
         with self._connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             if connection.execute(
