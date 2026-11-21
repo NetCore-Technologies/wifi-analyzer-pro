@@ -38,6 +38,7 @@ COPY --from=frontend --chown=10001:10001 /src/dist ./dist
 RUN python -c "import billing, license, licensing_service, server"
 RUN mkdir -p /home/wifi-analyzer/.config/wifi-analyzer-pro \
              /home/wifi-analyzer/.local/state/wifi-analyzer-pro \
+             /home/wifi-analyzer/.local/state/vendor-license \
     && chown -R 10001:10001 /home/wifi-analyzer
 VOLUME ["/home/wifi-analyzer/.config", "/home/wifi-analyzer/.local/state"]
 USER 10001:10001
