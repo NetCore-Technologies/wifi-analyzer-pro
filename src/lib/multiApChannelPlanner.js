@@ -105,6 +105,9 @@ export function mapSavedSiteSnapshotToPlannerRadios(snapshot) {
   }
   const siteId = typeof snapshot.site_id === 'string' ? snapshot.site_id.trim() : '';
   if (!siteId) throw new Error('The selected snapshot has no site identifier.');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(siteId)) {
+    throw new Error('The selected snapshot site ID is not valid for the planner.');
+  }
   const radios = [];
   let skippedIncomplete = 0;
   let skippedWide = 0;
@@ -127,7 +130,12 @@ export function mapSavedSiteSnapshotToPlannerRadios(snapshot) {
       skippedWide += 1;
       return;
     }
-    const safeApId = identity.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 42);
+    let safeApId = identity.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 42);
+    if (!safeApId) {
+      skippedIncomplete += 1;
+      return;
+    }
+    if (!/^[A-Za-z0-9]/.test(safeApId)) safeApId = 'ap-' + safeApId;
     const radioId = (safeApId + '-' + ap.band.replace(/[^A-Za-z0-9]/g, '') + '-' + (index + 1)).slice(0, 64);
     radios.push({
       radio_id: radioId,

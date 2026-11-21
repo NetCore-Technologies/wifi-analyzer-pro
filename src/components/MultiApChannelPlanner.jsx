@@ -32,7 +32,7 @@ export default function MultiApChannelPlanner() {
 
   async function importSavedSnapshot(event) {
     event.preventDefault();
-    if (!/^\\d+$/.test(snapshotId.trim())) {
+    if (!/^\d+$/.test(snapshotId.trim())) {
       setImportError('Enter a saved snapshot ID.');
       return;
     }

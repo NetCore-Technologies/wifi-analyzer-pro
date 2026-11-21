@@ -77,3 +77,10 @@ test('refuses saved snapshots without a site identity or AP inventory', () => {
   assert.throws(() => mapSavedSiteSnapshotToPlannerRadios({ access_points: [] }), /no site identifier/);
   assert.throws(() => mapSavedSiteSnapshotToPlannerRadios({ site_id: 'hq' }), /does not contain an AP inventory/);
 });
+
+test('rejects saved inventory site IDs that cannot be used by the planner API', () => {
+  assert.throws(() => mapSavedSiteSnapshotToPlannerRadios({
+    site_id: 'head office',
+    access_points: [],
+  }), /site ID is not valid/);
+});
