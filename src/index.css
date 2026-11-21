@@ -334,3 +334,99 @@ select option {
   font: inherit;
   cursor: pointer;
 }
+
+/* Live radio and interface telemetry */
+.live-telemetry-panel {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid rgba(125, 161, 205, .17);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(14, 26, 45, .96), rgba(9, 17, 30, .98));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .13);
+}
+.live-panel-header { display:flex; align-items:center; gap:12px; min-width:0; }
+.live-panel-icon {
+  width:38px;height:38px;display:grid;place-items:center;flex-shrink:0;
+  border:1px solid rgba(6,214,240,.23);border-radius:11px;
+  color:#69e7f5;background:rgba(6,214,240,.09);
+}
+.live-panel-title { min-width:0; flex:1; }
+.live-panel-title h2 { color:#e3edf9;font-size:15px;font-weight:700;letter-spacing:-.015em; }
+.live-panel-title p { color:#8299b5;font-size:11px;margin-top:3px;line-height:1.5; }
+.live-panel-interface {
+  max-width:35%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding:6px 9px;border:1px solid rgba(125,161,205,.17);border-radius:7px;
+  background:rgba(4,12,23,.48);color:#9cb3cf;font:11px ui-monospace,SFMono-Regular,monospace;
+}
+.live-metric-grid {
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;
+}
+.live-metric-card {
+  display:flex;flex-direction:column;gap:8px;min-width:0;min-height:112px;
+  padding:14px;border:1px solid rgba(125,161,205,.15);border-radius:10px;
+  background:linear-gradient(150deg,rgba(21,39,63,.72),rgba(12,23,40,.88));
+}
+.live-metric-card>span {
+  display:flex;align-items:center;gap:6px;color:#8ea5c0;font-size:10px;
+  font-weight:650;letter-spacing:.045em;text-transform:uppercase;
+}
+.live-metric-card>strong {
+  color:#e3f8ff;font-size:clamp(17px,2vw,23px);font-weight:750;
+  letter-spacing:-.035em;overflow-wrap:anywhere;font-variant-numeric:tabular-nums;
+}
+.live-metric-card>small { color:#7189a7;font-size:10px;line-height:1.45; }
+.live-metric-card.throughput>strong { color:#69e7f5; }
+.live-data-grid {
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;
+  overflow:hidden;border:1px solid rgba(125,161,205,.14);border-radius:10px;
+  background:rgba(125,161,205,.12);
+}
+.live-data-field {
+  display:flex;flex-direction:column;gap:6px;min-width:0;padding:12px 14px;
+  background:rgba(9,18,32,.95);
+}
+.live-data-label { color:#7891ad;font-size:10px;font-weight:650;letter-spacing:.055em;text-transform:uppercase; }
+.live-data-value { color:#d8e6f5;font-size:12px;font-weight:650;overflow-wrap:anywhere; }
+.live-data-value.mono { font-family:ui-monospace,SFMono-Regular,monospace;font-size:11px; }
+.live-capabilities { display:grid;gap:9px; }
+.live-capability-list { display:flex;flex-wrap:wrap;gap:8px; }
+.live-capability {
+  display:inline-flex;align-items:center;gap:6px;padding:6px 9px;
+  border:1px solid rgba(125,161,205,.16);border-radius:7px;
+  color:#9ab0c9;background:rgba(15,29,48,.7);font-size:10px;
+}
+.live-capability.supported {
+  border-color:rgba(34,197,94,.24);color:#8ce0af;background:rgba(34,197,94,.07);
+}
+.live-telemetry-empty {
+  display:flex;align-items:center;gap:11px;padding:20px;
+  border:1px dashed rgba(125,161,205,.25);border-radius:10px;
+  color:#95aac3;background:rgba(6,14,26,.45);font-size:12px;line-height:1.55;
+}
+.live-telemetry-empty svg { color:#7d9cba;flex-shrink:0; }
+.live-sampling-note {
+  display:flex;align-items:center;gap:8px;padding:10px 12px;
+  border:1px solid rgba(6,214,240,.18);border-radius:8px;
+  background:rgba(6,214,240,.055);color:#99cbd8;font-size:11px;
+}
+.live-sampling-note svg { color:#69e7f5;flex-shrink:0; }
+.live-telemetry-footnote {
+  display:flex;align-items:flex-start;gap:8px;padding-top:3px;
+  color:#7189a7;font-size:10px;line-height:1.55;
+}
+.live-telemetry-footnote svg { color:#7896b5;flex-shrink:0;margin-top:1px; }
+@media(max-width:1050px) {
+  .live-metric-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:650px) {
+  .live-telemetry-panel { padding:14px;gap:13px; }
+  .live-panel-header { flex-wrap:wrap; }
+  .live-panel-interface { max-width:100%;margin-left:50px; }
+  .live-data-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .live-metric-card { min-height:100px;padding:11px; }
+}
+@media(max-width:380px) {
+  .live-metric-grid,.live-data-grid { grid-template-columns:minmax(0,1fr); }
+}
