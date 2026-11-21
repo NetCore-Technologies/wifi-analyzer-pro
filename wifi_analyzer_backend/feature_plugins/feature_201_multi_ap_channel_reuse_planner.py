@@ -61,7 +61,7 @@ def _normalise_radio(value: object, index: int) -> dict:
     ap_id = _identifier(value.get("ap_id"), f"radios[{index}].ap_id")
     site_id = _identifier(value.get("site_id"), f"radios[{index}].site_id")
     band = value.get("band")
-    if band not in VALID_BANDS:
+    if not isinstance(band, str) or band not in VALID_BANDS:
         raise ValueError(f"radios[{index}].band must be one of {sorted(VALID_BANDS)}")
     width = _integer(value.get("channel_width_mhz"), f"radios[{index}].channel_width_mhz")
     if width not in WIDTHS or (band == "2.4GHz" and width not in {20, 40}) or (band == "5GHz" and width == 320):
@@ -115,7 +115,7 @@ def _normalise_radio(value: object, index: int) -> dict:
 
 
 def _overlap_fraction(left: dict, left_option: dict, right: dict, right_option: dict) -> float:
-    if left["site_id"] != right["site_id"] or left["band"] != right["band"] or left["ap_id"] == right["ap_id"]:
+    if left["site_id"] != right["site_id"] or left["band"] != right["band"]:
         return 0.0
     left_center = left_option["center_frequency_mhz"]
     right_center = right_option["center_frequency_mhz"]
@@ -139,15 +139,10 @@ def run(payload: dict) -> dict:
     change_penalty = _number(payload.get("change_penalty", 0.05), "change_penalty", 0.0, 0.5)
 
     radios = {}
-    ap_band_keys = set()
     for index, value in enumerate(radio_values):
         radio = _normalise_radio(value, index)
         if radio["radio_id"] in radios:
             raise ValueError("radio_id values must be unique")
-        ap_band_key = (radio["site_id"], radio["ap_id"], radio["band"])
-        if ap_band_key in ap_band_keys:
-            raise ValueError("an AP may contain only one radio record per band")
-        ap_band_keys.add(ap_band_key)
         radios[radio["radio_id"]] = radio
 
     edges = []
@@ -168,15 +163,13 @@ def run(payload: dict) -> dict:
         left, right = radios[left_id], radios[right_id]
         if left["site_id"] != right["site_id"] or left["band"] != right["band"]:
             raise ValueError("interference edges must join radios in the same site and band")
-        if left["ap_id"] == right["ap_id"]:
-            raise ValueError("interference edges must join different APs")
         pair = tuple(sorted((left_id, right_id)))
         if pair in seen_pairs:
             raise ValueError("interference edge pairs must be unique")
         seen_pairs.add(pair)
         weight = _number(value.get("weight"), f"interference_edges[{index}].weight", 0.0, 1.0)
         source = value.get("evidence_source")
-        if source not in EVIDENCE_SOURCES:
+        if not isinstance(source, str) or source not in EVIDENCE_SOURCES:
             raise ValueError(f"interference_edges[{index}].evidence_source must be one of {sorted(EVIDENCE_SOURCES)}")
         edge = {"radio_ids": [pair[0], pair[1]], "weight": weight, "evidence_source": source}
         edges.append(edge)

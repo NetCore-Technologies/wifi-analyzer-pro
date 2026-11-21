@@ -1074,8 +1074,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 197)
-        self.assertEqual(len(catalog["features"]), 197)
+        self.assertEqual(catalog["count"], 198)
+        self.assertEqual(len(catalog["features"]), 198)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -1098,8 +1098,9 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("enterprise_vpn_remote_access_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("enterprise_network_asset_lifecycle_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("enterprise_network_security_evidence_report", {item["slug"] for item in catalog["features"]})
+        self.assertIn("multi_ap_channel_reuse_planner", {item["slug"] for item in catalog["features"]})
 
-    def test_f195_to_f200_security_tools_run_through_authenticated_feature_api(self):
+    def test_f195_to_f201_security_and_rf_tools_run_through_authenticated_feature_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "owner passphrase is secure"})
         token = setup["token"]
         cases = [
@@ -1154,6 +1155,15 @@ class AuthenticatedApiTests(unittest.TestCase):
                     *[{"feature":f"F{n}","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{}}, "findings":[]} for n in range(195,200)]
                 ]
             }, "F200")
+            ("multi_ap_channel_reuse_planner", {
+                "radios": [
+                    {"radio_id":"hq-ap1-24","ap_id":"hq-ap1","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+                    {"radio_id":"hq-ap2-24","ap_id":"hq-ap2","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+                ],
+                "interference_edges": [
+                    {"radio_ids":["hq-ap1-24","hq-ap2-24"],"weight":0.9,"evidence_source":"survey"}
+                ],
+            }, "F201")
         ]
         for slug, payload, expected in cases:
             with self.subTest(feature=slug):
@@ -2828,7 +2838,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 197)
+        self.assertEqual(catalog["count"], 198)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,

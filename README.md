@@ -294,7 +294,7 @@ Scheduled-report jobs are stored in the local SQLite outbox and claimed using ex
 
 The authenticated delivery-package endpoint remains available for external integrations. It verifies the active lease and prepares the signed envelope using supplied DNS/TLS evidence; it does not transmit network traffic. The built-in worker and external dispatchers must not share the same claimed lease.
 
-F190 maps normalized events into bounded, deterministic subscription batches. F192 and the Webhook Delivery Center now prepare a separate HMAC-signed delivery for each matched subscription only when its signing key and matching fresh DNS/TLS evidence are provided. It does not send network requests or store secrets; the downstream dispatcher must re-resolve and re-verify at send time. The built-in pinned-TLS report worker remains single-destination per process, so persistent multi-subscription fan-out and a dedicated dispatcher are still planned. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.
+F190 maps normalized events into bounded, deterministic subscription batches. F192 and the Webhook Delivery Center now prepare a separate HMAC-signed delivery for each matched subscription only when its signing key and matching fresh DNS/TLS evidence are provided. It does not send network requests or store secrets; the downstream dispatcher must re-resolve and re-verify at send time. Persistent multi-subscription fan-out is implemented through the durable outbox and opt-in dedicated pinned-TLS dispatcher. The F191 PCAP/PCAPNG analyzer remains an offline file analyzer, not a live interface capture service.
 
 
 ### API request limits

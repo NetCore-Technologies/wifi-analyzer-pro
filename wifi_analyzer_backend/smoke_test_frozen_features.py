@@ -13,8 +13,9 @@ REQUIRED_FEATURES = {
     "router_scheduled_report_delivery_package",
     "pcap_capture_analyzer",
     "router_webhook_delivery_orchestrator",
+    "multi_ap_channel_reuse_planner",
 }
-MINIMUM_FEATURE_COUNT = 189
+MINIMUM_FEATURE_COUNT = 198
 PCAP_FIXTURE = "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"
 
 
@@ -91,6 +92,22 @@ def main() -> None:
     )
     if webhook.get("feature") != "F192" or webhook.get("result", {}).get("status") != "prepared":
         raise SystemExit("Frozen multi-subscription webhook orchestrator did not execute successfully")
+
+    rf_plan = request(
+        "/api/features/multi_ap_channel_reuse_planner",
+        {
+            "radios": [
+                {"radio_id":"smoke-ap1-24","ap_id":"smoke-ap1","site_id":"smoke","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+                {"radio_id":"smoke-ap2-24","ap_id":"smoke-ap2","site_id":"smoke","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+            ],
+            "interference_edges": [
+                {"radio_ids":["smoke-ap1-24","smoke-ap2-24"],"weight":0.9,"evidence_source":"survey"}
+            ],
+        },
+        token=token,
+    )
+    if rf_plan.get("feature") != "F201" or rf_plan.get("result", {}).get("status") != "planned":
+        raise SystemExit("Frozen multi-AP RF channel planner did not execute successfully")
     print(f"Frozen feature smoke test passed ({catalog['count']} registered features)")
 
 
