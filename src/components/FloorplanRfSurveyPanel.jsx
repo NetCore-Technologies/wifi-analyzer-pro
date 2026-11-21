@@ -7,6 +7,7 @@ import {
   Activity, AlertCircle, Download, FileImage, FileUp, History, Info, MapPinned, Play, RefreshCw, Save, ShieldCheck,
 } from 'lucide-react';
 import { apiBase, apiFetch } from '../lib/api.js';
+import { buildMeasurementContext, measurementContextFormState } from '../lib/measurementContext.js';
 
 const SERIES_COLORS = ['#06d6f0', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#60a5fa', '#f97316'];
 const MAX_JSON_BYTES = 900 * 1024;
@@ -178,6 +179,10 @@ export default function FloorplanRfSurveyPanel() {
   const [deleteTarget, setDeleteTarget] = useState('');
   const [activeReport, setActiveReport] = useState(null);
   const [reportLabel, setReportLabel] = useState('');
+  const [measurementContext, setMeasurementContext] = useState(() => measurementContextFormState({}));
+  function syncMeasurementContext(value) {
+    setMeasurementContext(measurementContextFormState(value));
+  }
 
   useEffect(() => {
     if (!floorplanImageUrl) return undefined;
@@ -245,6 +250,7 @@ export default function FloorplanRfSurveyPanel() {
       setComparison(null);
       setActiveReport(data.report || report);
       setReportLabel(data.report?.label || report.label || '');
+      syncMeasurementContext(data.result.measurement_context);
       // The original floor-plan image remains local and is not part of a saved report.
       setFloorplanImageUrl('');
       setFloorplanImageName('');
@@ -340,6 +346,9 @@ export default function FloorplanRfSurveyPanel() {
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new Error('The survey input must be a JSON object.');
       }
+      const context = buildMeasurementContext(measurementContext);
+      if (Object.keys(context).length) payload.measurement_context = context;
+      else delete payload.measurement_context;
       if (typeof payload.site_id !== 'string' || !payload.site_id.trim()) {
         throw new Error('A valid site_id is required before analysis.');
       }
@@ -387,6 +396,7 @@ export default function FloorplanRfSurveyPanel() {
       const content = await file.text();
       const parsed = JSON.parse(content);
       if (typeof parsed?.site_id === 'string') setHistorySiteId(parsed.site_id);
+      syncMeasurementContext(parsed?.measurement_context);
       setPayloadText(content);
       setFileName(file.name);
       setSamplePayload(false);
@@ -421,6 +431,7 @@ export default function FloorplanRfSurveyPanel() {
     setPayloadText(JSON.stringify(payload, null, 2));
     setHistorySiteId(payload.site_id);
     setReportLabel('');
+    syncMeasurementContext({});
     setComparison(null);
     setFileName('');
     setSamplePayload(true);
@@ -623,6 +634,7 @@ export default function FloorplanRfSurveyPanel() {
           try {
             const parsed = JSON.parse(value);
             if (typeof parsed?.site_id === 'string') setHistorySiteId(parsed.site_id);
+            syncMeasurementContext(parsed?.measurement_context);
           } catch {
             // Keep the last valid site selection while the operator edits JSON.
           }
@@ -640,6 +652,66 @@ export default function FloorplanRfSurveyPanel() {
               className="mt-1 w-full px-3 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
           </label>
         )}
+        <div className="border-t border-border/60 pt-3 space-y-2">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Measurement context</div>
+            <p className="text-xs text-muted-foreground">Optional caller-declared collection metadata. Complete these fields consistently across repeat surveys to improve comparability; values are not independently attested.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2">
+            <label className="text-xs text-muted-foreground">Survey device / model
+              <input value={measurementContext.device_model} maxLength={128}
+                onChange={event => setMeasurementContext(current => ({ ...current, device_model: event.target.value }))}
+                placeholder="e.g. SurveyClient X"
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+            </label>
+            <label className="text-xs text-muted-foreground">Radio band
+              <select value={measurementContext.radio_band}
+                onChange={event => setMeasurementContext(current => ({ ...current, radio_band: event.target.value }))}
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground">
+                <option value="">Not supplied</option>
+                <option value="2.4GHz">2.4 GHz</option>
+                <option value="5GHz">5 GHz</option>
+                <option value="6GHz">6 GHz</option>
+              </select>
+            </label>
+            <label className="text-xs text-muted-foreground">Channel
+              <input type="number" min="1" max="233" step="1" value={measurementContext.channel}
+                onChange={event => setMeasurementContext(current => ({ ...current, channel: event.target.value }))}
+                placeholder="e.g. 36"
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+            </label>
+            <label className="text-xs text-muted-foreground">Channel width (MHz)
+              <input type="number" min="5" max="320" step="5" value={measurementContext.channel_width_mhz}
+                onChange={event => setMeasurementContext(current => ({ ...current, channel_width_mhz: event.target.value }))}
+                placeholder="e.g. 80"
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+            </label>
+            <label className="text-xs text-muted-foreground">Antenna type
+              <input value={measurementContext.antenna_type} maxLength={128}
+                onChange={event => setMeasurementContext(current => ({ ...current, antenna_type: event.target.value }))}
+                placeholder="e.g. integrated / omni"
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+            </label>
+            <label className="text-xs text-muted-foreground">Antenna orientation (°)
+              <input type="number" min="0" max="359.9" step="0.1" value={measurementContext.antenna_orientation_deg}
+                onChange={event => setMeasurementContext(current => ({ ...current, antenna_orientation_deg: event.target.value }))}
+                placeholder="0–359.9"
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+            </label>
+            <label className="text-xs text-muted-foreground">Antenna height (m)
+              <input type="number" min="0.1" max="20" step="0.1" value={measurementContext.antenna_height_m}
+                onChange={event => setMeasurementContext(current => ({ ...current, antenna_height_m: event.target.value }))}
+                placeholder="e.g. 1.2"
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+            </label>
+            <label className="text-xs text-muted-foreground">Calibration ID
+              <input value={measurementContext.calibration_id} maxLength={128}
+                onChange={event => setMeasurementContext(current => ({ ...current, calibration_id: event.target.value }))}
+                placeholder="Optional calibration reference"
+                className="mt-1 w-full px-2.5 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+            </label>
+          </div>
+        </div>
       </section>
 
       {busy && <div className="glass rounded-xl p-6 text-center text-sm text-muted-foreground">Validating scale, timestamps, coordinates and measurements…</div>}

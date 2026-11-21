@@ -106,7 +106,7 @@ operator imports the corresponding floor-plan image again.
 
 ## Repeat-survey measurement context (F204)
 
-F203 accepts an optional measurement_context object. Supported caller-declared
+The Feature Workbench exposes these as structured optional fields (device/model, band, channel and width, antenna type/orientation/height, and calibration ID), and validates them before submission. F203 accepts an optional measurement_context object. Supported caller-declared
 fields are device_model, radio_band, channel, channel_width_mhz, antenna_type,
 antenna_orientation_deg, antenna_height_m and calibration_id. These values are
 retained in the report to describe the measurement method; they are not
