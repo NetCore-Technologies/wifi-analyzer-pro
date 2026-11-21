@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
-  AlertCircle, CheckCircle2, Download, FileUp, Info, Play, Radio, ShieldAlert, ShieldCheck,
+  AlertCircle, CheckCircle2, Download, FileUp, Info, Play, Radio, RefreshCw, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { apiBase, apiFetch } from '../lib/api.js';
 
@@ -32,6 +32,56 @@ export default function RadioCapabilityRegulatoryPlannerPanel() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [registrySiteId, setRegistrySiteId] = useState("");
+  const [registryDatasets, setRegistryDatasets] = useState([]);
+  const [registryBusy, setRegistryBusy] = useState(false);
+  const [registryError, setRegistryError] = useState("");
+
+  async function loadRegistry() {
+    const siteId = registrySiteId.trim();
+    if (!siteId || siteId.length > 128) {
+      setRegistryError("Enter a valid site ID before loading retained datasets.");
+      return;
+    }
+    setRegistryBusy(true);
+    setRegistryError("");
+    try {
+      const url = apiBase() + "/api/sites/regulatory-datasets?site_id=" + encodeURIComponent(siteId)
+        + "&limit=100&include_revoked=false";
+      const response = await apiFetch(url, { signal: AbortSignal.timeout(15000) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Unable to load retained regulatory datasets.");
+      if (!Array.isArray(data.datasets)) throw new Error("The regulatory dataset registry response is invalid.");
+      setRegistryDatasets(data.datasets.filter(item => item && item.revoked !== true));
+    } catch (loadError) {
+      setRegistryDatasets([]);
+      setRegistryError(loadError.message || "Unable to load the site regulatory dataset registry.");
+    } finally {
+      setRegistryBusy(false);
+    }
+  }
+
+  function useRetainedDataset(record) {
+    if (!record?.dataset_ref || record.revoked) return;
+    try {
+      const payload = payloadText.trim() ? JSON.parse(payloadText) : {};
+      if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new Error("Planning input must be a JSON object.");
+      }
+      if (!Array.isArray(payload.radios) || payload.radios.length === 0) {
+        throw new Error("Import or enter controller radio capability records before selecting a dataset.");
+      }
+      payload.site_id = registrySiteId.trim();
+      payload.regulatory_dataset_ref = record.dataset_ref;
+      delete payload.regulatory_dataset;
+      delete payload.dataset_acknowledgement;
+      setPayloadText(JSON.stringify(payload, null, 2));
+      setError("");
+      setResult(null);
+    } catch (selectionError) {
+      setError(selectionError.message || "Unable to select the retained regulatory dataset.");
+    }
+  }
 
   async function importFile(event) {
     const file = event.target.files?.[0];
@@ -47,9 +97,15 @@ export default function RadioCapabilityRegulatoryPlannerPanel() {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new Error('JSON root must be an object.');
       }
-      if (!Array.isArray(parsed.radios) || !parsed.regulatory_dataset || !parsed.dataset_acknowledgement) {
-        throw new Error('Import must contain radios, regulatory_dataset and dataset_acknowledgement.');
+      const hasRetainedReference = typeof parsed.regulatory_dataset_ref === 'string' && parsed.regulatory_dataset_ref.trim();
+      const hasInlineDataset = parsed.regulatory_dataset && parsed.dataset_acknowledgement;
+      if (!Array.isArray(parsed.radios) || (!hasRetainedReference && !hasInlineDataset)) {
+        throw new Error('Import must contain radios and either a retained regulatory_dataset_ref or an F206 dataset plus acknowledgement.');
       }
+      if (typeof parsed.site_id !== 'string' || !parsed.site_id.trim()) {
+        throw new Error('Import must include the site_id assigned to these radios.');
+      }
+      setRegistrySiteId(parsed.site_id);
       setPayloadText(text);
       setFileName(file.name);
       setResult(null);
@@ -122,9 +178,45 @@ export default function RadioCapabilityRegulatoryPlannerPanel() {
       {fileName && <div className="text-xs text-muted-foreground">Loaded: {fileName}</div>}
       {error && <div role="alert" className="glass rounded-xl p-3 border border-red-400/30 text-xs text-red-400 flex gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0" />{error}</div>}
 
+      <section className="glass rounded-xl p-4 space-y-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex-1 min-w-[180px] text-xs text-muted-foreground">
+            Registry site ID
+            <input value={registrySiteId} onChange={event => setRegistrySiteId(event.target.value)}
+              maxLength={128} placeholder="e.g. head-office"
+              className="mt-1 w-full px-3 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+          </label>
+          <button type="button" onClick={() => void loadRegistry()} disabled={registryBusy || !registrySiteId.trim()}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${registryBusy ? 'animate-spin' : ''}`} />
+            {registryBusy ? 'Loading…' : 'Load retained datasets'}
+          </button>
+        </div>
+        {registryError && <div role="alert" className="text-xs text-amber-400">{registryError}</div>}
+        {registryDatasets.length > 0 && (
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {registryDatasets.map(item => (
+              <div key={item.dataset_ref} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-secondary/40 border border-border/60 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-foreground">{item.dataset_id} · {item.version} · {item.jurisdiction}</div>
+                  <div className="text-[11px] text-muted-foreground">Reviewed {new Date(item.reviewed_at).toLocaleString()} · {item.reviewer_id} · {item.fingerprint_sha256.slice(0, 16)}…</div>
+                </div>
+                <button type="button" onClick={() => useRetainedDataset(item)}
+                  className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs">
+                  Use version
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="text-[11px] text-muted-foreground">
+          Select a retained version to insert its immutable registry reference. Revoked versions are excluded and the server rechecks revocation at execution time.
+        </div>
+      </section>
+
       <section className="glass rounded-xl p-4 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-semibold text-foreground">Reviewed regulatory dataset and radio capability JSON</div>
+          <div className="text-sm font-semibold text-foreground">Radio capability planning JSON</div>
           <span className="text-xs text-muted-foreground">Maximum 900 KiB</span>
         </div>
         <textarea value={payloadText} onChange={event => { setPayloadText(event.target.value); setResult(null); }}
@@ -142,7 +234,7 @@ export default function RadioCapabilityRegulatoryPlannerPanel() {
           }, null, 2)}
           className="w-full min-h-[360px] px-3 py-2 rounded-lg bg-background/70 border border-border text-xs font-mono text-foreground resize-y" />
         <p className="text-xs text-muted-foreground">
-          Each radio record must include its site/jurisdiction and installation reference, supported channels and widths, hardware device class, indoor/outdoor environment, DFS/AFC capabilities, maximum EIRP, current settings and capability observation timestamp.
+          Each radio record must include its site/jurisdiction and installation reference, supported channels and widths, hardware device class, indoor/outdoor environment, DFS/AFC capabilities, maximum EIRP, current settings and capability observation timestamp. Use a retained dataset reference or include a normalized F206 dataset and matching reviewer acknowledgement.
         </p>
       </section>
 

@@ -50,7 +50,7 @@ _RAW_DATASET = {
         "source_references": [{"source_id": "acma-lipd", "clause": "Schedule 1, item 51"}],
     }],
 }
-_DATASET = validate_regulatory_dataset(_RAW_DATASET)["result"]
+_DATASET = validate_regulatory_dataset(_RAW_DATASET)
 
 
 def make_payload():
@@ -255,6 +255,7 @@ class RadioCapabilityRegulatoryPlannerTests(unittest.TestCase):
         ambiguous_rule = copy.deepcopy(payload["regulatory_dataset"]["rules"][0])
         ambiguous_rule["rule_id"] = "second-matching-rule"
         payload["regulatory_dataset"]["rules"].append(ambiguous_rule)
+        payload["regulatory_dataset"]["rule_count"] = len(payload["regulatory_dataset"]["rules"])
         canonical = {
             "authority_allowlist_version": payload["regulatory_dataset"]["authority_allowlist_version"],
             "jurisdiction": payload["regulatory_dataset"]["jurisdiction"],

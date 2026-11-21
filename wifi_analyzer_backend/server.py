@@ -42,6 +42,7 @@ if __package__:
     from .telemetry_store import WiFiTelemetryStore
     from .trusted_ap_store import TrustedAccessPointStore
     from .rf_survey_store import RfSurveyHistoryStore
+    from .regulatory_dataset_store import RegulatoryDatasetStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
     from .router_adapters.health_store import (
         AgentAuthenticationError,
@@ -82,6 +83,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from telemetry_store import WiFiTelemetryStore
     from trusted_ap_store import TrustedAccessPointStore
     from rf_survey_store import RfSurveyHistoryStore
+    from regulatory_dataset_store import RegulatoryDatasetStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
     from router_adapters.health_store import (
         AgentAuthenticationError,
@@ -110,6 +112,7 @@ HISTORY = SiteHistoryStore()
 TELEMETRY = WiFiTelemetryStore()
 TRUSTED_APS = TrustedAccessPointStore()
 RF_SURVEYS = RfSurveyHistoryStore()
+REGULATORY_DATASETS = RegulatoryDatasetStore()
 LOCAL_SITE_ID = os.getenv("WIFI_ANALYZER_LOCAL_SITE_ID", "local")
 AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
@@ -1047,6 +1050,7 @@ class Handler(BaseHTTPRequestHandler):
         site_ids = set(HISTORY.site_ids(limit=100))
         site_ids.update(TELEMETRY.site_ids(limit=100))
         site_ids.update(RF_SURVEYS.site_ids(limit=100))
+        site_ids.update(REGULATORY_DATASETS.site_ids(limit=100))
         for credential in AGENT_HEALTH.list_agent_credentials():
             site_id = credential.get("site_id")
             if isinstance(site_id, str) and site_id.strip():
@@ -1118,7 +1122,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys"} or path.startswith("/api/sites/rf-surveys/"):
+            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys", "/api/sites/regulatory-datasets"} or path.startswith("/api/sites/rf-surveys/") or path.startswith("/api/sites/regulatory-datasets/"):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -1459,6 +1463,7 @@ class Handler(BaseHTTPRequestHandler):
                 discovered.update(TELEMETRY.site_ids(limit=100))
                 discovered.update(TRUSTED_APS.site_ids(limit=100))
                 discovered.update(RF_SURVEYS.site_ids(limit=100))
+                discovered.update(REGULATORY_DATASETS.site_ids(limit=100))
                 discovered.update(scope["site_ids"])
                 if scope["all_sites"]:
                     discovered.add(LOCAL_SITE_ID)
@@ -1513,6 +1518,57 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"error": "RF survey report not found"}, 404)
                     return
                 self.send_json(saved)
+            elif path == "/api/sites/regulatory-datasets":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=4)
+                site_values = params.get("site_id", [])
+                limit_values = params.get("limit", [])
+                revoked_values = params.get("include_revoked", [])
+                if len(site_values) != 1 or not site_values[0].strip():
+                    raise ValueError("site_id must be supplied exactly once")
+                if len(limit_values) > 1 or len(revoked_values) > 1:
+                    raise ValueError("limit and include_revoked may be supplied only once")
+                try:
+                    limit = 50 if not limit_values else int(limit_values[0])
+                except ValueError as error:
+                    raise ValueError("limit must be an integer") from error
+                if revoked_values and revoked_values[0] not in {"true", "false"}:
+                    raise ValueError("include_revoked must be true or false")
+                include_revoked = not revoked_values or revoked_values[0] == "true"
+                site_id = site_values[0].strip()
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                records = REGULATORY_DATASETS.list_for_site(
+                    site_id, limit=limit, include_revoked=include_revoked,
+                )
+                self.send_json({
+                    "site_id": site_id,
+                    "datasets": records,
+                    "dataset_count": len(records),
+                    "can_manage": AUTH.has_permission(self.bearer_token(), "sites.manage"),
+                })
+            elif path.startswith("/api/sites/regulatory-datasets/"):
+                dataset_ref = unquote(path[len("/api/sites/regulatory-datasets/"):])
+                if not dataset_ref or "/" in dataset_ref:
+                    self.send_json({"error": "Regulatory dataset not found"}, 404)
+                    return
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=2)
+                site_values = params.get("site_id", [])
+                if len(site_values) != 1 or not site_values[0].strip():
+                    raise ValueError("site_id must be supplied exactly once")
+                site_id = site_values[0].strip()
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                retained = REGULATORY_DATASETS.get(site_id, dataset_ref)
+                if retained is None:
+                    self.send_json({"error": "Regulatory dataset not found"}, 404)
+                    return
+                if retained["record"]["revoked"]:
+                    self.send_json({
+                        "error": "Regulatory dataset has been revoked and cannot be used for new planning",
+                        "record": retained["record"],
+                    }, 410)
+                    return
+                self.send_json(retained)
             elif path == "/api/sites/history/report":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
                 values = params.get("site_ids", [])
@@ -1652,6 +1708,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/sites/rf-surveys":
             if not self.require_auth("diagnostics.run") or not self.require_auth("sites.manage"):
                 return
+        if path == "/api/sites/regulatory-datasets" and not self.require_auth("sites.manage"):
+            return
         if path == "/api/sites/rf-surveys/compare" and not self.require_auth("diagnostics.run"):
             return
 
@@ -1671,6 +1729,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/trusted-aps": ("api.trusted_aps.manage", False),
             "/api/sites/rf-surveys": ("api.rf_surveys.manage", False),
             "/api/sites/rf-surveys/compare": ("api.rf_surveys.compare", False),
+            "/api/sites/regulatory-datasets": ("api.regulatory_datasets.manage", False),
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
@@ -1807,6 +1866,144 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(comparison, 202)
             else:
                 self.send_json(comparison)
+            return
+
+        if path == "/api/sites/regulatory-datasets":
+            site_id = payload.get("site_id")
+            operation = payload.get("operation", "retain")
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            if operation not in {"retain", "revoke"}:
+                self.send_json({"error": "operation must be retain or revoke"}, 400)
+                return
+            if operation == "revoke":
+                dataset_ref = payload.get("dataset_ref")
+                reason = payload.get("reason")
+                if not isinstance(dataset_ref, str) or not dataset_ref:
+                    self.send_json({"error": "dataset_ref is required"}, 400)
+                    return
+                request_fingerprint = hashlib.sha256(
+                    json.dumps([site_id, dataset_ref, "revoke"], separators=(",", ":")).encode("utf-8")
+                ).hexdigest()[:24]
+                metadata = {"site_id": site_id, "dataset_fingerprint": request_fingerprint}
+                requested = self.audit_event(
+                    "regulatory_dataset.revoke_requested",
+                    target_type="regulatory_dataset",
+                    target_id=request_fingerprint,
+                    metadata=metadata,
+                )
+                if requested is None:
+                    self.send_json({
+                        "error": "The security audit ledger is unavailable; no regulatory dataset was revoked"
+                    }, 503)
+                    return
+                try:
+                    identity = AUTH.identity(self.bearer_token()) or {}
+                    actor = identity.get("username")
+                    revoked = REGULATORY_DATASETS.revoke(
+                        site_id, dataset_ref, actor=actor, reason=reason,
+                    )
+                except ValueError as error:
+                    self.audit_event(
+                        "regulatory_dataset.revoke_rejected",
+                        target_type="regulatory_dataset",
+                        target_id=request_fingerprint,
+                        outcome="failure",
+                        metadata=metadata,
+                    )
+                    self.send_json({"error": str(error)}, 400)
+                    return
+                if not revoked:
+                    self.audit_event(
+                        "regulatory_dataset.revoke_not_found",
+                        target_type="regulatory_dataset",
+                        target_id=request_fingerprint,
+                        outcome="failure",
+                        metadata=metadata,
+                    )
+                    self.send_json({"error": "Regulatory dataset not found or already revoked"}, 404)
+                    return
+                completed = self.audit_event(
+                    "regulatory_dataset.revoked",
+                    target_type="regulatory_dataset",
+                    target_id=request_fingerprint,
+                    metadata=metadata,
+                )
+                response = {"revoked": True, "dataset_ref": dataset_ref}
+                if completed is None:
+                    response["audit_status"] = "dataset revoked; outcome audit event could not be persisted"
+                    self.send_json(response, 202)
+                else:
+                    self.send_json(response)
+                return
+
+            dataset = payload.get("dataset")
+            acknowledgement = payload.get("acknowledgement")
+            if not isinstance(dataset, dict) or not isinstance(acknowledgement, dict):
+                self.send_json({"error": "dataset and acknowledgement objects are required"}, 400)
+                return
+            request_fingerprint = hashlib.sha256(
+                json.dumps(
+                    [site_id, dataset.get("dataset_id"), dataset.get("version"),
+                     dataset.get("dataset_fingerprint_sha256"), "retain"],
+                    ensure_ascii=False, separators=(",", ":"), default=str,
+                ).encode("utf-8")
+            ).hexdigest()[:24]
+            metadata = {
+                "site_id": site_id,
+                "dataset_fingerprint": request_fingerprint,
+            }
+            requested = self.audit_event(
+                "regulatory_dataset.retain_requested",
+                target_type="regulatory_dataset",
+                target_id=request_fingerprint,
+                metadata=metadata,
+            )
+            if requested is None:
+                self.send_json({
+                    "error": "The security audit ledger is unavailable; no regulatory dataset was retained"
+                }, 503)
+                return
+            try:
+                retained = REGULATORY_DATASETS.save(site_id, dataset, acknowledgement)
+            except ValueError as error:
+                self.audit_event(
+                    "regulatory_dataset.retain_rejected",
+                    target_type="regulatory_dataset",
+                    target_id=request_fingerprint,
+                    outcome="failure",
+                    metadata=metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception:
+                self.audit_event(
+                    "regulatory_dataset.retain_failed",
+                    target_type="regulatory_dataset",
+                    target_id=request_fingerprint,
+                    outcome="failure",
+                    metadata=metadata,
+                )
+                print("[REGULATORY DATASET ERROR] Could not retain site dataset")
+                self.send_json({"error": "Regulatory dataset retention failed"}, 503)
+                return
+            completed = self.audit_event(
+                "regulatory_dataset.retained",
+                target_type="regulatory_dataset",
+                target_id=retained["dataset_ref"],
+                metadata={
+                    **metadata,
+                    "jurisdiction": retained["jurisdiction"],
+                    "dataset_id": retained["dataset_id"],
+                    "version": retained["version"],
+                },
+            )
+            response = {"record": retained, "created": retained["created"]}
+            if completed is None:
+                response["audit_status"] = "dataset retained; outcome audit event could not be persisted"
+                self.send_json(response, 202)
+            else:
+                self.send_json(response, 201 if retained["created"] else 200)
             return
 
         if path == "/api/sites/rf-surveys" and payload.get("operation") == "delete":
@@ -3039,6 +3236,37 @@ class Handler(BaseHTTPRequestHandler):
             scoped_sites = _collect_site_ids(payload)
             if scoped_sites and not self.require_site_access(scoped_sites):
                 return
+            registry_dataset_ref = None
+            if slug == "radio_capability_regulatory_channel_planner":
+                site_id = payload.get("site_id")
+                registry_dataset_ref = payload.get("regulatory_dataset_ref")
+                if registry_dataset_ref is not None:
+                    if not isinstance(site_id, str) or not site_id.strip():
+                        self.send_json({"error": "site_id is required when using a retained regulatory dataset"}, 400)
+                        return
+                    if not self.require_site_access([site_id], require_explicit=True):
+                        return
+                    if "regulatory_dataset" in payload or "dataset_acknowledgement" in payload:
+                        self.send_json({
+                            "error": "When using regulatory_dataset_ref, dataset contents and acknowledgement are loaded from the protected site registry"
+                        }, 400)
+                        return
+                    retained_dataset = REGULATORY_DATASETS.get(site_id, registry_dataset_ref)
+                    if retained_dataset is None:
+                        self.send_json({"error": "Retained regulatory dataset not found in this site"}, 404)
+                        return
+                    if retained_dataset["record"]["revoked"]:
+                        self.send_json({
+                            "error": "Regulatory dataset has been revoked and cannot be used for new planning",
+                            "dataset_ref": registry_dataset_ref,
+                        }, 410)
+                        return
+                    payload = {
+                        **payload,
+                        "regulatory_dataset": retained_dataset["dataset"],
+                        "dataset_acknowledgement": retained_dataset["acknowledgement"],
+                    }
+
             if slug == "rf_survey_acceptance_auditor":
                 site_id = payload.get("site_id")
                 survey_id = payload.get("survey_id")
@@ -3093,6 +3321,9 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"[FEATURE ERROR] {slug}: {error}")
                 self.send_json({"error": "Feature execution failed"}, 500)
                 return
+            if registry_dataset_ref is not None:
+                result["result"]["regulatory_dataset_ref"] = registry_dataset_ref
+                result["result"]["regulatory_dataset_registry_status"] = "retained_and_not_revoked"
             self.send_json(result)
             return
 

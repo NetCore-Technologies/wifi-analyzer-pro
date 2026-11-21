@@ -25,6 +25,7 @@ DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "api.trusted_aps.manage": (60, 60),
     "api.rf_surveys.manage": (12, 60),
     "api.rf_surveys.compare": (20, 60),
+    "api.regulatory_datasets.manage": (12, 60),
     "api.capture.start": (4, 900),
     "api.report.enqueue": (20, 60),
     "api.webhook.enqueue": (20, 60),

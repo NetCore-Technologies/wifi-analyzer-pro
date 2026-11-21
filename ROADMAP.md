@@ -190,7 +190,9 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 - ✅ F201 multi-AP RF channel reuse planner: deterministic weighted channel assignment across up to 256 same-site radios, explicit survey/controller/operator provenance, supplied regulatory channel options, bandwidth-aware spectral overlap, change-cost optimisation and before/after cost reporting. The API reports its bounded coordinate-descent method, iteration count and convergence state, and clearly discloses that it is a heuristic rather than a globally optimal solution.
 - ✅ F201 fails closed when interference evidence is absent; it does not infer AP proximity, fabricate RF measurements, assume regulatory availability or change network configuration.
 - ✅ F202–F206 now deliver RF evidence normalisation, floor-plan-aligned measured surveys, immutable site-scoped survey history, repeat-survey comparison, customer acceptance scoring and jurisdiction-aware regulatory source provenance validation.
-- 📋 Remaining RF wave: DFS/PSC planning against actual controller radio capabilities, retained regulator-backed rule dataset management and live AP configuration preview with explicit approval. F206 does not itself establish legal compliance or fetch regulator documents.
+- ✅ F207 adds read-only DFS/PSC-aware eligibility planning against fresh controller/agent radio capabilities and fingerprint-verified, operator-reviewed F206 rule datasets. It checks band/channel/width, device class, indoor/outdoor, DFS channel state, location-scoped AFC grants and EIRP ceilings, then proposes a lowest-change preview without applying configuration.
+- ✅ The site registry retains immutable F206 dataset versions, reviewer/fingerprint metadata and audited revocation; F207 can consume a registry reference and blocks revoked versions.
+- 📋 Remaining RF wave: controller-specific change adapters with an explicit approval workflow. F206/F207 do not independently authenticate regulator documents or establish legal compliance.
 
 
 ### F202 delivered — RF observation evidence normalisation

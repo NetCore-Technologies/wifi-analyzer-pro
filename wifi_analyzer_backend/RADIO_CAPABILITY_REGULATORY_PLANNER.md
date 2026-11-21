@@ -17,21 +17,21 @@ Run through the authenticated feature endpoint:
 - POST /api/features/radio_capability_regulatory_channel_planner
 - Requires diagnostics.run and access to the supplied site_id.
 - Request JSON is limited by the backend's standard 1 MiB body limit.
-- The Feature Workbench accepts a JSON file up to 900 KiB.
+- The Feature Workbench accepts a JSON file up to 900 KiB. Alternatively, select a centrally retained F206 version from the site registry; the panel submits its registry reference rather than copying the document.
 
 ## Required input
 
 The payload contains site_id, a normalized F206 result object, an
 acknowledgement object and 1-256 radio snapshots.
 
-The F206 result must include status=validated, effective_status=in_effect,
+When using inline evidence, the F206 result must include status=validated, effective_status=in_effect,
 provenance_status=allowlisted_domains, its canonical fingerprint, source and
 rule records, retrieved_at and effective dates. F207 rebuilds the F206
 canonical JSON envelope and recomputes its SHA-256 fingerprint; a dataset
 whose records were edited after validation is rejected. The dataset must be
 effective on the assessment date and not older than 365 days.
 
-dataset_acknowledgement binds the exact dataset_fingerprint_sha256 and includes
+When using regulatory_dataset_ref, the API loads the immutable dataset and reviewer acknowledgement from the requested site and rejects revoked versions. dataset_acknowledgement binds the exact dataset_fingerprint_sha256 and includes
 reviewer_id, reviewed_at and review_reference. The acknowledgement must be no
 older than 90 days. These values are caller-supplied and are not a
 cryptographically authenticated approval.

@@ -26,6 +26,7 @@ from wifi_analyzer_backend.license import VendorLicenseStore, create_signed_lice
 from wifi_analyzer_backend.telemetry_store import WiFiTelemetryStore
 from wifi_analyzer_backend.trusted_ap_store import TrustedAccessPointStore
 from wifi_analyzer_backend.rf_survey_store import RfSurveyHistoryStore
+from wifi_analyzer_backend.regulatory_dataset_store import RegulatoryDatasetStore
 from wifi_analyzer_backend.billing import PLAN_CATALOG
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -39,6 +40,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_telemetry = server.TELEMETRY
         self.previous_trusted_aps = server.TRUSTED_APS
         self.previous_rf_surveys = server.RF_SURVEYS
+        self.previous_regulatory_datasets = server.REGULATORY_DATASETS
         self.previous_agent_health = server.AGENT_HEALTH
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
@@ -95,6 +97,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.TELEMETRY = WiFiTelemetryStore(path=Path(self.temp.name) / "telemetry.sqlite3")
         server.TRUSTED_APS = TrustedAccessPointStore(path=Path(self.temp.name) / "trusted-aps.sqlite3")
         server.RF_SURVEYS = RfSurveyHistoryStore(path=Path(self.temp.name) / "rf-surveys.sqlite3")
+        server.REGULATORY_DATASETS = RegulatoryDatasetStore(path=Path(self.temp.name) / "regulatory-datasets.sqlite3")
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
         server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
         server.AUDIT = __import__("wifi_analyzer_backend.audit_store", fromlist=["SecurityAuditStore"]).SecurityAuditStore(
@@ -115,6 +118,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.TELEMETRY = self.previous_telemetry
         server.TRUSTED_APS = self.previous_trusted_aps
         server.RF_SURVEYS = self.previous_rf_surveys
+        server.REGULATORY_DATASETS = self.previous_regulatory_datasets
         server.AGENT_HEALTH = self.previous_agent_health
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
@@ -3790,6 +3794,186 @@ class AuthenticatedApiTests(unittest.TestCase):
         )
         self.assertEqual(status, 403, denied)
         self.assertIn("outside your assigned access scope", denied["error"])
+
+    def test_regulatory_dataset_versions_are_site_scoped_immutable_and_revocable(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "regulatory dataset owner secure password",
+        })
+        owner_token = setup["token"]
+        _, created = self.request("POST", "/api/users", {
+            "username": "reg.dataset.admin",
+            "password": "regulatory dataset admin secure password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["head-office"],
+        }, token=owner_token)
+        self.assertEqual(created["user"]["username"], "reg.dataset.admin")
+        token = server.AUTH.login("regulatory dataset admin secure password", "reg.dataset.admin")
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        raw_dataset = {
+            "jurisdiction": "AU",
+            "dataset_id": "acma-site-radio-test",
+            "version": "2026.11-test",
+            "regulator": "Australian Communications and Media Authority",
+            "retrieved_at": now.isoformat(),
+            "effective_from": "2025-10-01",
+            "effective_to": None,
+            "as_of": now.date().isoformat(),
+            "sources": [{
+                "source_id": "acma-source",
+                "source_type": "licence_condition",
+                "title": "ACMA test radio instrument",
+                "authority": "ACMA",
+                "document_reference": "TEST-LIPD",
+                "revision": "2026.11-test",
+                "source_url": "https://www.acma.gov.au/licences/test",
+                "published_at": "2025-10-01",
+                "effective_from": "2025-10-01",
+                "effective_to": None,
+                "retrieved_at": now.isoformat(),
+                "content_sha256": "a" * 64,
+                "clause_references": ["Schedule 1, item 1"],
+            }],
+            "rules": [{
+                "rule_id": "au-test-6ghz-lpi",
+                "band": "6GHz",
+                "lower_frequency_mhz": 5925,
+                "upper_frequency_mhz": 6425,
+                "maximum_eirp_dbm": 24,
+                "maximum_eirp_density_dbm_per_mhz": 11,
+                "channel_widths_mhz": [20, 40, 80],
+                "channel_numbers": [5, 21, 37],
+                "device_classes": ["LPI"],
+                "indoor_only": True,
+                "outdoor_allowed": False,
+                "dfs_required": False,
+                "afc_required": False,
+                "source_references": [{"source_id": "acma-source", "clause": "Schedule 1, item 1"}],
+            }],
+        }
+        validated = server.run_feature(
+            "radio_regulatory_evidence_validator", raw_dataset,
+        )["result"]
+        acknowledgement = {
+            "dataset_fingerprint_sha256": validated["dataset_fingerprint_sha256"],
+            "reviewer_id": "netops.reviewer",
+            "reviewed_at": now.isoformat(),
+            "review_reference": "CHG-REG-2026-001",
+        }
+        request = {
+            "site_id": "head-office",
+            "dataset": validated,
+            "acknowledgement": acknowledgement,
+        }
+        status, retained = self.request(
+            "POST", "/api/sites/regulatory-datasets", request, token=token,
+        )
+        self.assertEqual(status, 201, retained)
+        self.assertTrue(retained["created"])
+        record = retained["record"]
+        self.assertEqual(record["jurisdiction"], "AU")
+        self.assertEqual(record["version"], "2026.11-test")
+        self.assertEqual(record["fingerprint_sha256"], validated["dataset_fingerprint_sha256"])
+        self.assertEqual(len(server.AUDIT.list_events(action="regulatory_dataset.retained")), 1)
+
+        status, duplicate = self.request(
+            "POST", "/api/sites/regulatory-datasets", request, token=token,
+        )
+        self.assertEqual(status, 200, duplicate)
+        self.assertFalse(duplicate["created"])
+        self.assertEqual(duplicate["record"]["dataset_ref"], record["dataset_ref"])
+
+        status, history = self.request(
+            "GET", "/api/sites/regulatory-datasets?site_id=head-office", token=token,
+        )
+        self.assertEqual(status, 200, history)
+        self.assertEqual(history["dataset_count"], 1)
+        self.assertEqual(history["datasets"][0]["dataset_ref"], record["dataset_ref"])
+
+        status, detail = self.request(
+            "GET", "/api/sites/regulatory-datasets/" + record["dataset_ref"] + "?site_id=head-office",
+            token=token,
+        )
+        self.assertEqual(status, 200, detail)
+        self.assertEqual(detail["dataset"], validated)
+        self.assertEqual(detail["acknowledgement"], acknowledgement)
+
+        radio_payload = {
+            "site_id": "head-office",
+            "regulatory_dataset_ref": record["dataset_ref"],
+            "radios": [{
+                "radio_id": "hq-ap-01-radio-6g",
+                "ap_id": "hq-ap-01",
+                "site_id": "head-office",
+                "jurisdiction": "AU",
+                "installation_reference": "hq-building-a",
+                "band": "6GHz",
+                "capability_source": "controller",
+                "capabilities_observed_at": now.isoformat(),
+                "supported_channels": [5, 21, 37],
+                "supported_channel_widths_mhz": [20, 40, 80],
+                "device_class": "LPI",
+                "environment": "indoor",
+                "dfs_supported": False,
+                "afc_supported": False,
+                "maximum_eirp_dbm": 20,
+                "maximum_eirp_density_dbm_per_mhz": 10,
+                "current_channel": 5,
+                "current_channel_width_mhz": 20,
+                "current_eirp_dbm": 18,
+            }],
+        }
+        status, planned = self.request(
+            "POST", "/api/features/radio_capability_regulatory_channel_planner",
+            radio_payload, token=token,
+        )
+        self.assertEqual(status, 200, planned)
+        self.assertEqual(
+            planned["result"]["regulatory_dataset_ref"],
+            record["dataset_ref"],
+        )
+        self.assertEqual(
+            planned["result"]["dataset"]["fingerprint_sha256"],
+            record["fingerprint_sha256"],
+        )
+
+        status, cross_site = self.request(
+            "GET", "/api/sites/regulatory-datasets/" + record["dataset_ref"] + "?site_id=branch",
+            token=token,
+        )
+        self.assertEqual(status, 403, cross_site)
+        status, cross_site_save = self.request(
+            "POST", "/api/sites/regulatory-datasets",
+            {**request, "site_id": "branch"}, token=token,
+        )
+        self.assertEqual(status, 403, cross_site_save)
+
+        status, revoked = self.request("POST", "/api/sites/regulatory-datasets", {
+            "operation": "revoke",
+            "site_id": "head-office",
+            "dataset_ref": record["dataset_ref"],
+            "reason": "Superseded by the corrected regulator publication",
+        }, token=token)
+        self.assertEqual(status, 200, revoked)
+        self.assertTrue(revoked["revoked"])
+        self.assertEqual(len(server.AUDIT.list_events(action="regulatory_dataset.revoked")), 1)
+
+        status, blocked = self.request(
+            "GET", "/api/sites/regulatory-datasets/" + record["dataset_ref"] + "?site_id=head-office",
+            token=token,
+        )
+        self.assertEqual(status, 410, blocked)
+        status, revoked_plan = self.request(
+            "POST", "/api/features/radio_capability_regulatory_channel_planner",
+            radio_payload, token=token,
+        )
+        self.assertEqual(status, 410, revoked_plan)
+        status, history = self.request(
+            "GET", "/api/sites/regulatory-datasets?site_id=head-office&include_revoked=true",
+            token=token,
+        )
+        self.assertEqual(status, 200, history)
+        self.assertTrue(history["datasets"][0]["revoked"])
 
 if __name__ == "__main__":
     unittest.main()

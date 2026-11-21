@@ -100,30 +100,6 @@ def _fingerprint_dataset(dataset: dict) -> str:
         raise ValueError(f"regulatory_dataset.rules must contain 1 to {MAX_RULES} records")
     if any(not isinstance(item, dict) for item in sources + rules):
         raise ValueError("regulatory_dataset source and rule records must be objects")
-    if dataset.get("source_count") != len(sources) or dataset.get("allowlisted_source_domain_count") != len(sources):
-        raise ValueError("regulatory_dataset source counters do not match the supplied source records")
-    if dataset.get("rule_count") != len(rules):
-        raise ValueError("regulatory_dataset rule counter does not match the supplied rule records")
-    if dataset.get("unverified_source_domains") != []:
-        raise ValueError("regulatory_dataset contains unverified source domains")
-    source_map = {}
-    for index, source in enumerate(sources):
-        source_id = _identifier(source.get("source_id"), f"regulatory_dataset.sources[{index}].source_id")
-        if source_id in source_map:
-            raise ValueError("regulatory_dataset source_id values must be unique")
-        _, actual_host = _public_https_host(source.get("source_url"), f"regulatory_dataset.sources[{index}].source_url")
-        if actual_host != source.get("source_host") or source.get("source_domain_allowlisted") is not True:
-            raise ValueError(f"regulatory_dataset source {source_id} has inconsistent authority metadata")
-        if not isinstance(source.get("content_sha256"), str) or not SHA256.fullmatch(source["content_sha256"]):
-            raise ValueError(f"regulatory_dataset source {source_id} has an invalid content digest")
-        if source.get("content_digest_status") != "provided_not_independently_verified":
-            raise ValueError(f"regulatory_dataset source {source_id} digest status is invalid")
-        if not _is_allowlisted(actual_host, jurisdiction):
-            raise ValueError(f"regulatory_dataset source {source_id} is not on the current jurisdiction allowlist")
-        clauses = source.get("clause_references")
-        if not isinstance(clauses, list) or not clauses or any(not isinstance(item, str) for item in clauses):
-            raise ValueError(f"regulatory_dataset source {source_id} has invalid clause references")
-        source_map[source_id] = source
     canonical = {
         "authority_allowlist_version": dataset["authority_allowlist_version"],
         "jurisdiction": dataset["jurisdiction"],
@@ -146,7 +122,11 @@ def _fingerprint_dataset(dataset: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _validate_dataset(dataset: object, acknowledgement: object, as_of: datetime) -> tuple[dict, str]:
+def _validate_dataset(
+    dataset: object,
+    acknowledgement: object,
+    as_of: datetime,
+) -> tuple[dict, str, dict]:
     if not isinstance(dataset, dict):
         raise ValueError("regulatory_dataset must be a normalized F206 result object")
     if dataset.get("status") != "validated":
@@ -160,16 +140,54 @@ def _validate_dataset(dataset: object, acknowledgement: object, as_of: datetime)
         raise ValueError("regulatory_dataset must be in effect for the assessment date")
     if dataset.get("provenance_status") != "allowlisted_domains":
         raise ValueError("regulatory_dataset source provenance requires review")
+
+    sources = dataset.get("sources")
+    rules = dataset.get("rules")
+    if not isinstance(sources, list) or not 1 <= len(sources) <= 100:
+        raise ValueError("regulatory_dataset.sources must contain 1 to 100 records")
+    if not isinstance(rules, list) or not 1 <= len(rules) <= MAX_RULES:
+        raise ValueError(f"regulatory_dataset.rules must contain 1 to {MAX_RULES} records")
+    if dataset.get("source_count") != len(sources) or dataset.get("allowlisted_source_domain_count") != len(sources):
+        raise ValueError("regulatory_dataset source counters do not match the supplied source records")
+    if dataset.get("rule_count") != len(rules):
+        raise ValueError("regulatory_dataset rule counter does not match the supplied rule records")
+    if dataset.get("unverified_source_domains") != []:
+        raise ValueError("regulatory_dataset contains unverified source domains")
+
+    source_map = {}
+    for index, source in enumerate(sources):
+        if not isinstance(source, dict):
+            raise ValueError(f"regulatory_dataset.sources[{index}] must be an object")
+        source_id = _identifier(source.get("source_id"), f"regulatory_dataset.sources[{index}].source_id")
+        if source_id in source_map:
+            raise ValueError("regulatory_dataset source_id values must be unique")
+        _, actual_host = _public_https_host(
+            source.get("source_url"),
+            f"regulatory_dataset.sources[{index}].source_url",
+        )
+        if actual_host != source.get("source_host") or source.get("source_domain_allowlisted") is not True:
+            raise ValueError(f"regulatory_dataset source {source_id} has inconsistent authority metadata")
+        if not isinstance(source.get("content_sha256"), str) or not SHA256.fullmatch(source["content_sha256"]):
+            raise ValueError(f"regulatory_dataset source {source_id} has an invalid content digest")
+        if source.get("content_digest_status") != "provided_not_independently_verified":
+            raise ValueError(f"regulatory_dataset source {source_id} digest status is invalid")
+        if not _is_allowlisted(actual_host, jurisdiction):
+            raise ValueError(f"regulatory_dataset source {source_id} is not on the current jurisdiction allowlist")
+        clauses = source.get("clause_references")
+        if not isinstance(clauses, list) or not clauses or any(not isinstance(item, str) for item in clauses):
+            raise ValueError(f"regulatory_dataset source {source_id} has invalid clause references")
+        source_map[source_id] = source
+
     fingerprint = dataset.get("dataset_fingerprint_sha256")
     if not isinstance(fingerprint, str) or not SHA256.fullmatch(fingerprint):
         raise ValueError("regulatory_dataset dataset fingerprint is invalid")
-    actual = _fingerprint_dataset(dataset)
-    if actual != fingerprint:
+    actual_fingerprint = _fingerprint_dataset(dataset)
+    if actual_fingerprint != fingerprint:
         raise ValueError("regulatory_dataset fingerprint does not match its normalized contents")
+
     if not isinstance(acknowledgement, dict):
         raise ValueError("dataset_acknowledgement must be an explicit operator review object")
-    acknowledged_fingerprint = acknowledgement.get("dataset_fingerprint_sha256")
-    if acknowledged_fingerprint != fingerprint:
+    if acknowledgement.get("dataset_fingerprint_sha256") != fingerprint:
         raise ValueError("dataset_acknowledgement must reference the exact regulatory dataset fingerprint")
     _identifier(acknowledgement.get("reviewer_id"), "dataset_acknowledgement.reviewer_id")
     _identifier(acknowledgement.get("review_reference"), "dataset_acknowledgement.review_reference")
