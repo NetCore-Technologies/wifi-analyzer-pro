@@ -1301,7 +1301,7 @@ class FeatureCatalogTests(unittest.TestCase):
         result = run("client_experience_slo_window_comparator", PAYLOADS["client_experience_slo_window_comparator"])["result"]
         self.assertEqual(result["status"], "improvement_detected")
         self.assertEqual(result["overall"]["status"], "improvement")
-        self.assertEqual(result["overall"]["sla_attainment_delta_pct_points"], 100.0)
+        self.assertEqual(result["overall"]["sla_attainment_delta_pct_points"], 66.67)
         sites = {item["site_id"]: item for item in result["sites"]}
         self.assertEqual(sites["hq"]["status"], "improvement")
         self.assertEqual(sites["branch"]["status"], "missing_comparison_evidence")

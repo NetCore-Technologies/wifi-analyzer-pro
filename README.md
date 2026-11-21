@@ -181,7 +181,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 201 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 202 built-in tools |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
@@ -415,3 +415,8 @@ The Feature Workbench includes a guided client roam transaction analyzer. Import
 ## Client experience SLO analysis (F292)
 
 F292 summarises timestamped, per-client measurements from a controller, local agent, client telemetry export or active probe. Supply the metrics actually collected (RSSI, SNR, retry rate, airtime utilisation, packet loss, RTT, jitter and optionally throughput), set site-specific requirements and threshold overrides, and receive per-site/client metric coverage, p95/median values and sample-weighted SLO attainment. Samples missing configured required metrics are excluded from the pass/fail denominator and reported as incomplete. Client references are replaced with report-local aliases; raw sample identifiers are not returned. F292 does not infer measurements or claim application-specific QoE.
+
+
+### Client experience SLO window comparison (F293)
+
+Use `client_experience_slo_window_comparator` to compare baseline and comparison sample windows. Both periods use the same F292 metric thresholds and required-metric rules. The comparator rejects overlapping windows, excludes stale observations, requires a configurable minimum number of eligible samples, reports per-site attainment deltas and discloses sites with missing comparison evidence. It does not treat sample-weighted attainment as duration-weighted uptime or statistical confidence.

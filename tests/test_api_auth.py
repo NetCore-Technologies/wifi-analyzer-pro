@@ -1074,8 +1074,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 201)
-        self.assertEqual(len(catalog["features"]), 201)
+        self.assertEqual(catalog["count"], 202)
+        self.assertEqual(len(catalog["features"]), 202)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -1101,6 +1101,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("multi_ap_channel_reuse_planner", {item["slug"] for item in catalog["features"]})
         self.assertIn("rf_survey_evidence_normalizer", {item["slug"] for item in catalog["features"]})
         self.assertIn("client_experience_slo_evaluator", {item["slug"] for item in catalog["features"]})
+        self.assertIn("client_experience_slo_window_comparator", {item["slug"] for item in catalog["features"]})
 
     def test_f195_to_f201_security_and_rf_tools_run_through_authenticated_feature_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "owner passphrase is secure"})
@@ -2431,6 +2432,40 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 403, denied)
         self.assertIn("outside your assigned access scope", denied["error"])
 
+    def test_f293_slo_window_comparator_runs_and_enforces_assigned_site_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {"password": "slo comparator owner secure password"})
+        owner_token = setup["token"]
+        self.request("POST", "/api/users", {"username": "slo.window.analyst", "password": "slo window analyst secure password", "role": "network_admin", "all_sites": False, "site_ids": ["home"]}, token=owner_token)
+        _, login = self.request("POST", "/api/auth/login", {"username": "slo.window.analyst", "password": "slo window analyst secure password"})
+        token = login["token"]
+        payload = {
+            "baseline": {"as_of": "2026-11-13T12:00:00Z", "samples": [{
+                "sample_id":"base-home", "site_id":"home", "client_ref":"opaque-station",
+                "observed_at":"2026-11-13T11:59:00Z", "evidence_source":"probe",
+                "metrics":{"rssi_dbm":-80,"packet_loss_pct":2.0,"rtt_ms":150},
+            }]},
+            "comparison": {"as_of": "2026-11-21T12:00:00Z", "samples": [{
+                "sample_id":"current-home", "site_id":"home", "client_ref":"opaque-station",
+                "observed_at":"2026-11-21T11:59:00Z", "evidence_source":"probe",
+                "metrics":{"rssi_dbm":-60,"packet_loss_pct":0.1,"rtt_ms":25},
+            }]},
+            "max_age_days": 7, "required_metrics": ["rssi_dbm","packet_loss_pct","rtt_ms"],
+            "minimum_eligible_samples": 1,
+        }
+        status, result = self.request("POST", "/api/features/client_experience_slo_window_comparator", payload, token=token)
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result["feature"], "F293")
+        self.assertEqual(result["result"]["status"], "improvement_detected")
+        cross_site = {**payload, "comparison": {
+            **payload["comparison"], "samples": payload["comparison"]["samples"] + [{
+                "sample_id":"branch-current", "site_id":"branch", "client_ref":"branch-station",
+                "observed_at":"2026-11-21T11:59:00Z", "evidence_source":"probe",
+                "metrics":{"rssi_dbm":-60,"packet_loss_pct":0.1,"rtt_ms":25},
+            }],
+        }}
+        status, denied = self.request("POST", "/api/features/client_experience_slo_window_comparator", cross_site, token=token)
+        self.assertEqual(status, 403, denied)
+        self.assertIn("outside your assigned access scope", denied["error"])
     def test_f291_client_roam_transaction_analyzer_enforces_site_scope(self):
         _, setup = self.request("POST", "/api/auth/setup", {
             "password": "roam analyzer owner secure password",
@@ -3029,7 +3064,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 201)
+        self.assertEqual(catalog["count"], 202)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,

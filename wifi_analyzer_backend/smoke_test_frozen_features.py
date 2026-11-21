@@ -17,8 +17,9 @@ REQUIRED_FEATURES = {
     "rf_survey_evidence_normalizer",
     "client_roam_transaction_analyzer",
     "client_experience_slo_evaluator",
+    "client_experience_slo_window_comparator",
 }
-MINIMUM_FEATURE_COUNT = 201
+MINIMUM_FEATURE_COUNT = 202
 PCAP_FIXTURE = "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"
 
 
@@ -159,6 +160,23 @@ def main() -> None:
     )
     if qoe_result.get("feature") != "F292" or qoe_result.get("result", {}).get("status") != "within_thresholds":
         raise SystemExit("Frozen client experience SLO evaluator did not execute successfully")
+    window_result = request(
+        "/api/features/client_experience_slo_window_comparator",
+        {
+            "baseline": {"as_of":"2026-11-13T10:00:00Z","samples":[{
+                "sample_id":"frozen-base-001","site_id":"smoke","client_ref":"station-smoke",
+                "observed_at":"2026-11-13T09:59:00Z","evidence_source":"controller","metrics":{"rssi_dbm":-80},
+            }]},
+            "comparison": {"as_of":now,"samples":[{
+                "sample_id":"frozen-current-001","site_id":"smoke","client_ref":"station-smoke",
+                "observed_at":"2026-11-20T09:59:00Z","evidence_source":"controller","metrics":{"rssi_dbm":-58},
+            }]},
+            "max_age_days":1,"required_metrics":["rssi_dbm"],"minimum_eligible_samples":1,
+        },
+        token=token,
+    )
+    if window_result.get("feature") != "F293" or window_result.get("result", {}).get("status") != "improvement_detected":
+        raise SystemExit("Frozen client experience SLO window comparator did not execute successfully")
     print(f"Frozen feature smoke test passed ({catalog['count']} registered features)")
 
 

@@ -134,6 +134,8 @@ class FrozenPackagingConfigTests(unittest.TestCase):
         self.assertIn('roam_result.get("feature") != "F291"', smoke_helper)
         self.assertIn("client_experience_slo_evaluator", smoke_helper)
         self.assertIn('qoe_result.get("feature") != "F292"', smoke_helper)
+        self.assertIn("client_experience_slo_window_comparator", smoke_helper)
+        self.assertIn('window_result.get("feature") != "F293"', smoke_helper)
 
 
 if __name__ == "__main__":
