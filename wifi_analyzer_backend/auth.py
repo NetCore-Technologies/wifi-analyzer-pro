@@ -26,6 +26,10 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
 ROLES = {"owner", "admin", "network_admin", "analyst", "viewer"}
 MAX_USERS = 100
+# Each local account may hold at most 16 concurrent bearer sessions. Since the
+# directory is capped at 100 users, the process-local session table is bounded
+# to at most 1,600 entries even under repeated successful logins.
+MAX_SESSIONS_PER_USER = 16
 MAX_SITE_SCOPE_IDS = 100
 MFA_SETUP_TTL_SECONDS = 900
 MFA_RECOVERY_CODE_COUNT = 10
@@ -353,10 +357,55 @@ class AuthManager:
         return next((user for user in self._users() if user["id"] == user_id), None)
 
     def _new_session(self, user_id: str) -> str:
+        now = time.time()
+
+        # Expired, malformed and legacy-invalid entries must not consume the
+        # bounded per-account allowance indefinitely. Older releases stored a
+        # numeric expiry for owner sessions, so preserve that test/migration
+        # compatibility while pruning.
+        owner_id = next((user["id"] for user in self._users() if user["role"] == "owner"), None)
+        for session_digest, record in list(self._sessions.items()):
+            if isinstance(record, dict):
+                expiry = record.get("expires_at")
+            elif isinstance(record, (int, float)) and not isinstance(record, bool):
+                expiry = record
+            else:
+                expiry = None
+            if (
+                isinstance(expiry, bool)
+                or not isinstance(expiry, (int, float))
+                or expiry <= now
+            ):
+                self._sessions.pop(session_digest, None)
+
+        user_sessions = []
+        for session_digest, record in self._sessions.items():
+            if isinstance(record, dict):
+                belongs_to_user = record.get("user_id") == user_id
+            else:
+                belongs_to_user = owner_id == user_id
+            if belongs_to_user:
+                user_sessions.append((session_digest, record))
+
+        # Revoke only this account's oldest session when its device limit is
+        # reached. Other users' active sessions are never displaced by login.
+        if len(user_sessions) >= MAX_SESSIONS_PER_USER:
+            def issued_at(item):
+                record = item[1]
+                created = record.get("created_at") if isinstance(record, dict) else None
+                if isinstance(created, bool) or not isinstance(created, (int, float)):
+                    expiry = record.get("expires_at") if isinstance(record, dict) else record
+                    created = expiry - self.session_ttl_seconds if isinstance(expiry, (int, float)) and not isinstance(expiry, bool) else 0
+                return float(created)
+
+            oldest_digest, _ = min(user_sessions, key=lambda item: (issued_at(item), item[0]))
+            self._sessions.pop(oldest_digest, None)
+
         token = secrets.token_urlsafe(32)
         digest = hashlib.sha256(token.encode()).hexdigest()
         self._sessions[digest] = {
-            "expires_at": time.time() + self.session_ttl_seconds,
+            "created_at": now,
+            "expires_at": now + self.session_ttl_seconds,
             "user_id": user_id,
         }
         return token
