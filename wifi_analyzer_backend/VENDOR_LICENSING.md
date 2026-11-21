@@ -22,6 +22,7 @@ Copy `.env.vendor.example` to `.env.vendor`, then set:
 - `WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE` to the generated key file.
 - The vendor Stripe secret and webhook signing secret.
 - The Pro recurring Price ID; optionally configure Business and Enterprise Price IDs.
+- `WIFI_ANALYZER_VENDOR_ADMIN_TOKEN`: a high-entropy bearer token for the vendor operations API. Generate with `openssl rand -hex 32`; keep it only in `.env.vendor`.
 
 Configure a Stripe webhook at `https://licenses.your-domain.example/api/webhook` for `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated` and `customer.subscription.deleted`. Copy the endpoint signing secret to `WIFI_ANALYZER_VENDOR_STRIPE_WEBHOOK_SECRET`.
 
@@ -35,6 +36,14 @@ docker compose --env-file .env.vendor -f compose.vendor-licensing.yaml up -d --b
 The service runs as UID 10001 with a read-only root filesystem, dedicated persistent SQLite volume and read-only mount of the private key. The key file must be owned by UID/GID 10001 and have no group/other permissions. The service binds to loopback by default. Put a trusted TLS reverse proxy in front of port 1999; never expose its plain HTTP listener directly. Add proxy-level request-size, connection and rate limits.
 
 Verify `/health` and `/api/public-key` through the HTTPS domain. The public-key endpoint reveals only the verification key and key ID.
+
+## Vendor operations API
+
+The operations API is disabled unless `WIFI_ANALYZER_VENDOR_ADMIN_TOKEN` is configured. Use the token in an `Authorization: Bearer` header:
+- `GET /api/admin/summary` reports active subscriptions, pending checkouts, payment grace, plan counts, webhook health and recurring list-price MRR separated by currency.
+- `GET /api/admin/licenses?limit=100` lists recent licence records for support and reconciliation, without exposing activation-secret hashes or checkout session IDs.
+
+Catalog MRR is calculated from current Stripe recurring Price list amounts. It is not cash received or profit: discounts, refunds, tax, failed collection, fees and foreign-exchange conversion are not included. Never place the admin token in browser code or customer installations.
 
 ## Configure customers
 

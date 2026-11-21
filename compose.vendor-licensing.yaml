@@ -16,6 +16,7 @@ services:
       WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL: ${WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL:?Set the public HTTPS licensing origin}
       WIFI_ANALYZER_VENDOR_LICENSE_DB: /home/wifi-analyzer/.local/state/vendor-license/vendor-licensing.sqlite3
       WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID: ${WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID:-primary}
+      WIFI_ANALYZER_VENDOR_ADMIN_TOKEN: ${WIFI_ANALYZER_VENDOR_ADMIN_TOKEN:?Set a high-entropy vendor admin token}
       WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE: /run/secrets/vendor-license-signing-key
       WIFI_ANALYZER_VENDOR_STRIPE_SECRET_KEY: ${WIFI_ANALYZER_VENDOR_STRIPE_SECRET_KEY:?Set the vendor Stripe secret key}
       WIFI_ANALYZER_VENDOR_STRIPE_WEBHOOK_SECRET: ${WIFI_ANALYZER_VENDOR_STRIPE_WEBHOOK_SECRET:?Set the vendor Stripe webhook signing secret}

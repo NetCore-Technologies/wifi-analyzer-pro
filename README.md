@@ -347,7 +347,7 @@ Create recurring Stripe Prices for Pro, Business and Enterprise in the vendor's
 Stripe account. Generate a dedicated Ed25519 signing key using:
 
 ```sh
-python scripts/generate_vendor_license_keys.py \
+python scripts/generate_vendor_license_key.py \
   --private-key-file /secure/vendor-secrets/wifi-analyzer-license.key \
   --key-id primary
 ```

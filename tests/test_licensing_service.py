@@ -93,6 +93,7 @@ class VendorLicenseServiceTests(unittest.TestCase):
                 "mode": "subscription",
                 "payment_status": "paid",
                 "customer": "cus_vendor1234",
+                "customer_details": {"email": "customer@example.com"},
                 "subscription": "sub_vendor1234",
                 "client_reference_id": INSTALLATION,
                 "metadata": {
