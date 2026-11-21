@@ -344,6 +344,59 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, denied_read = self.request("GET", "/api/webhooks/deliveries", token=viewer_token)
         self.assertEqual(status, 403)
 
+    def test_webhook_permissions_are_registered_for_owner_network_admin_and_analyst(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "owner passphrase is secure",
+        })
+        owner_token = setup["token"]
+        self.assertTrue(server.AUTH.has_permission(owner_token, "webhooks.manage"))
+        self.assertTrue(server.AUTH.has_permission(owner_token, "webhooks.read"))
+
+        status, _ = self.request("POST", "/api/users", {
+            "username": "webhook.network",
+            "password": "webhook network admin password",
+            "role": "network_admin",
+            "all_sites": True,
+            "site_ids": [],
+        }, token=owner_token)
+        self.assertEqual(status, 201)
+        network_token = self.request("POST", "/api/auth/login", {
+            "username": "webhook.network",
+            "password": "webhook network admin password",
+        })[1]["token"]
+        self.assertTrue(server.AUTH.has_permission(network_token, "webhooks.manage"))
+        self.assertTrue(server.AUTH.has_permission(network_token, "webhooks.read"))
+
+        status, _ = self.request("POST", "/api/users", {
+            "username": "webhook.analyst",
+            "password": "webhook analyst user password",
+            "role": "analyst",
+            "all_sites": True,
+            "site_ids": [],
+        }, token=owner_token)
+        self.assertEqual(status, 201)
+        analyst_token = self.request("POST", "/api/auth/login", {
+            "username": "webhook.analyst",
+            "password": "webhook analyst user password",
+        })[1]["token"]
+        self.assertFalse(server.AUTH.has_permission(analyst_token, "webhooks.manage"))
+        self.assertTrue(server.AUTH.has_permission(analyst_token, "webhooks.read"))
+
+        status, _ = self.request("POST", "/api/users", {
+            "username": "webhook.viewer",
+            "password": "webhook viewer password",
+            "role": "viewer",
+            "all_sites": True,
+            "site_ids": [],
+        }, token=owner_token)
+        self.assertEqual(status, 201)
+        viewer_token = self.request("POST", "/api/auth/login", {
+            "username": "webhook.viewer",
+            "password": "webhook viewer password",
+        })[1]["token"]
+        self.assertFalse(server.AUTH.has_permission(viewer_token, "webhooks.read"))
+        self.assertFalse(server.AUTH.has_permission(viewer_token, "webhooks.manage"))
+
     def test_auth_status_is_available_before_first_run_setup(self):
         status, payload = self.request("GET", "/api/auth/status")
         self.assertEqual(status, 200)

@@ -682,7 +682,8 @@ class AuthManager:
     def has_permission(self, token: str | None, permission: str) -> bool:
         if permission not in {
             "users.manage", "agents.manage", "agents.read",
-            "reports.manage", "reports.read", "sites.manage", "sites.read",
+            "reports.manage", "reports.read", "webhooks.manage", "webhooks.read",
+            "sites.manage", "sites.read",
             "diagnostics.run", "diagnostics.read",
         }:
             return False

@@ -82,6 +82,12 @@ def _endpoint(value: Any, allowed_hosts: Any) -> tuple[str, str, list[str]]:
             raise ValueError(f"allowed_hosts[{index}] is not a valid IDNA hostname") from error
         if not host or "." not in host or any(not HOST_LABEL.fullmatch(label) for label in host.split(".")):
             raise ValueError(f"allowed_hosts[{index}] must be a fully-qualified DNS hostname")
+        try:
+            ipaddress.ip_address(host)
+        except ValueError:
+            pass
+        else:
+            raise ValueError(f"allowed_hosts[{index}] must be a DNS hostname, not an IP address")
         hosts.append(host)
     if len(hosts) != len(set(hosts)):
         raise ValueError("allowed_hosts entries must be unique")

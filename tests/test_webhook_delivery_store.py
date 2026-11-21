@@ -83,7 +83,7 @@ class WebhookDeliveryStoreTests(unittest.TestCase):
     def test_enqueue_rejects_private_hosts_malformed_envelopes_and_unbounded_input(self):
         private = prepared()
         private["endpoint"] = "https://127.0.0.1/router/events"
-        private["allowed_hosts"] = ["hooks.example.net"]
+        private["allowed_hosts"] = ["127.0.0.1"]
         with self.assertRaisesRegex(ValueError, "DNS hostname"):
             self.store.enqueue_many([private], now=NOW)
 
