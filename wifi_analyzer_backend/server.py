@@ -41,6 +41,7 @@ if __package__:
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .telemetry_store import WiFiTelemetryStore
     from .trusted_ap_store import TrustedAccessPointStore
+    from .rf_survey_store import RfSurveyHistoryStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
     from .router_adapters.health_store import (
         AgentAuthenticationError,
@@ -80,6 +81,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from telemetry_store import WiFiTelemetryStore
     from trusted_ap_store import TrustedAccessPointStore
+    from rf_survey_store import RfSurveyHistoryStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
     from router_adapters.health_store import (
         AgentAuthenticationError,
@@ -107,6 +109,7 @@ AUTH = AuthManager()
 HISTORY = SiteHistoryStore()
 TELEMETRY = WiFiTelemetryStore()
 TRUSTED_APS = TrustedAccessPointStore()
+RF_SURVEYS = RfSurveyHistoryStore()
 LOCAL_SITE_ID = os.getenv("WIFI_ANALYZER_LOCAL_SITE_ID", "local")
 AGENT_HEALTH = RouterAgentHealthStore()
 REPORT_JOBS = RouterReportJobStore()
@@ -1043,6 +1046,7 @@ class Handler(BaseHTTPRequestHandler):
     def managed_site_ids(self):
         site_ids = set(HISTORY.site_ids(limit=100))
         site_ids.update(TELEMETRY.site_ids(limit=100))
+        site_ids.update(RF_SURVEYS.site_ids(limit=100))
         for credential in AGENT_HEALTH.list_agent_credentials():
             site_id = credential.get("site_id")
             if isinstance(site_id, str) and site_id.strip():
@@ -1114,7 +1118,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps"}:
+            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys"} or path.startswith("/api/sites/rf-surveys/"):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -1454,6 +1458,7 @@ class Handler(BaseHTTPRequestHandler):
                 discovered = set(HISTORY.site_ids(limit=100))
                 discovered.update(TELEMETRY.site_ids(limit=100))
                 discovered.update(TRUSTED_APS.site_ids(limit=100))
+                discovered.update(RF_SURVEYS.site_ids(limit=100))
                 discovered.update(scope["site_ids"])
                 if scope["all_sites"]:
                     discovered.add(LOCAL_SITE_ID)
@@ -1467,6 +1472,45 @@ class Handler(BaseHTTPRequestHandler):
                     site_id for site_id in ordered_sites if site_id in scope["site_ids"]
                 ]
                 self.send_json({"site_ids": site_ids, "all_sites": scope["all_sites"]})
+            elif path == "/api/sites/rf-surveys":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=3)
+                site_values = params.get("site_id", [])
+                limit_values = params.get("limit", [])
+                if len(site_values) != 1 or not site_values[0].strip():
+                    raise ValueError("site_id must be supplied exactly once")
+                if len(limit_values) > 1:
+                    raise ValueError("limit may be supplied only once")
+                try:
+                    limit = 50 if not limit_values else int(limit_values[0])
+                except ValueError as error:
+                    raise ValueError("limit must be an integer") from error
+                site_id = site_values[0].strip()
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                reports = RF_SURVEYS.list_for_site(site_id, limit=limit)
+                self.send_json({
+                    "site_id": site_id,
+                    "reports": reports,
+                    "report_count": len(reports),
+                    "retention_days": RF_SURVEYS.retention_days,
+                })
+            elif path.startswith("/api/sites/rf-surveys/"):
+                survey_id = unquote(path[len("/api/sites/rf-surveys/"):])
+                if not survey_id or "/" in survey_id:
+                    self.send_json({"error": "RF survey report not found"}, 404)
+                    return
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=2)
+                site_values = params.get("site_id", [])
+                if len(site_values) != 1 or not site_values[0].strip():
+                    raise ValueError("site_id must be supplied exactly once")
+                site_id = site_values[0].strip()
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                saved = RF_SURVEYS.get(site_id, survey_id)
+                if saved is None:
+                    self.send_json({"error": "RF survey report not found"}, 404)
+                    return
+                self.send_json(saved)
             elif path == "/api/sites/history/report":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=10)
                 values = params.get("site_ids", [])
@@ -1603,6 +1647,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/trusted-aps" and not self.require_auth("sites.manage"):
             return
+        if path == "/api/sites/rf-surveys":
+            if not self.require_auth("diagnostics.run") or not self.require_auth("sites.manage"):
+                return
 
         # Authenticate diagnostic controls before rate limiting them, but rate
         # limit login/setup before parsing or deriving expensive credentials.
@@ -1618,6 +1665,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/auth/mfa/disable": ("auth.mfa", False),
             "/api/sites/audit": ("api.site.audit", False),
             "/api/trusted-aps": ("api.trusted_aps.manage", False),
+            "/api/sites/rf-surveys": ("api.rf_surveys.manage", False),
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
@@ -1651,6 +1699,113 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/sites/rf-surveys":
+            site_id = payload.get("site_id")
+            survey_payload = payload.get("survey")
+            label = payload.get("label")
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            if not isinstance(survey_payload, dict) or survey_payload.get("site_id") != site_id:
+                self.send_json({"error": "survey.site_id must match the requested site_id"}, 400)
+                return
+
+            request_fingerprint = hashlib.sha256(
+                (str(site_id) + ":" + str(time.time_ns())).encode("utf-8")
+            ).hexdigest()[:24]
+            audit_metadata = {
+                "site_id": site_id,
+                "request_fingerprint": request_fingerprint,
+            }
+            requested = self.audit_event(
+                "rf_survey.save_requested",
+                target_type="rf_survey_report",
+                target_id=request_fingerprint,
+                metadata=audit_metadata,
+            )
+            if requested is None:
+                self.send_json({
+                    "error": "The security audit ledger is unavailable; no report was saved"
+                }, 503)
+                return
+
+            meter = None
+            charged = False
+            try:
+                with BILLING_QUOTA_LOCK:
+                    known_sites = self.managed_site_ids()
+                    if site_id not in known_sites and not self.enforce_subscription_capacity(
+                        "sites", len(known_sites)
+                    ):
+                        return
+                    meter = BILLING.consume_monthly_feature_run()
+                    if not meter["allowed"]:
+                        self.audit_event(
+                            "rf_survey.save_rejected",
+                            target_type="rf_survey_report",
+                            target_id=request_fingerprint,
+                            outcome="failure",
+                            metadata=audit_metadata,
+                        )
+                        self.send_json({
+                            "error": "The monthly diagnostic allowance has been reached",
+                            "code": "plan_limit_reached",
+                            **meter,
+                            "upgrade_required": True,
+                        }, 402)
+                        return
+                    charged = True
+                    analysis = run_feature("floorplan_rf_survey_analyzer", survey_payload)
+                    saved = RF_SURVEYS.save(site_id, analysis["result"], label=label)
+            except ValueError as error:
+                if charged and meter:
+                    BILLING.refund_monthly_feature_run(meter["period"])
+                self.audit_event(
+                    "rf_survey.save_failed",
+                    target_type="rf_survey_report",
+                    target_id=request_fingerprint,
+                    outcome="failure",
+                    metadata=audit_metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+                return
+            except Exception:
+                if charged and meter:
+                    BILLING.refund_monthly_feature_run(meter["period"])
+                self.audit_event(
+                    "rf_survey.save_failed",
+                    target_type="rf_survey_report",
+                    target_id=request_fingerprint,
+                    outcome="failure",
+                    metadata=audit_metadata,
+                )
+                print("[RF SURVEY ERROR] Could not validate or persist survey report")
+                self.send_json({"error": "RF survey report storage failed"}, 503)
+                return
+
+            completed = self.audit_event(
+                "rf_survey.saved",
+                target_type="rf_survey_report",
+                target_id=saved["survey_id"],
+                metadata={
+                    **audit_metadata,
+                    "floorplan_id": saved["floorplan_id"],
+                    "measurement_count": saved["measurement_count"],
+                },
+            )
+            response = {
+                "feature": "F203",
+                "report": saved,
+                "result": analysis["result"],
+            }
+            if completed is None:
+                response["audit_status"] = (
+                    "report saved; outcome audit event could not be persisted"
+                )
+                self.send_json(response, 202)
+            else:
+                self.send_json(response, 201)
             return
 
         if path == "/api/trusted-aps":

@@ -71,3 +71,33 @@ height, band/channel, AP radio identity, calibration context and collection
 method in the operator's source data. Do not use a synthetic sample payload as
 site evidence. The UI explicitly labels its built-in sample values as
 illustrative only.
+
+## Saved report history
+
+Validated F203 results can be retained in the site's local SQLite survey-history
+database. The authenticated API provides:
+
+- POST /api/sites/rf-surveys to run F203 once and save the resulting report.
+  The request supplies site_id, survey and an optional label.
+- GET /api/sites/rf-surveys?site_id=SITE to list up to 100 reports.
+- GET /api/sites/rf-surveys/REPORT_UUID?site_id=SITE to retrieve a report.
+
+Saving requires both diagnostics.run and sites.manage plus explicit access to
+the requested site. Reads require sites.read and explicit site access. Writes
+are audited before and after persistence; if the request audit cannot be
+recorded, no report is saved. The save endpoint consumes one normal F203
+feature-run allowance; it does not run the feature twice.
+
+The database is stored outside the repository. Set
+WIFI_ANALYZER_RF_SURVEY_DB to override its path. POSIX state directories and
+database files are restricted to owner-only permissions. The application
+retains up to 250 reports per site for 365 days by default, rejects report
+documents larger than 8 MiB, and verifies a SHA-256 content digest when a
+saved report is reopened. These limits are configurable through the store
+constructor for deployments and tests.
+
+Report metadata and measured result JSON are retained; the original uploaded
+floor-plan image is not. The browser preview uses a temporary object URL and
+does not upload that image to the API. A reopened report therefore displays
+its saved AP and measurement coordinates over the coordinate grid until the
+operator imports the corresponding floor-plan image again.

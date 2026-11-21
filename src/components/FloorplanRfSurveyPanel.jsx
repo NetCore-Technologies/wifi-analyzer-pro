@@ -4,7 +4,7 @@ import {
   CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import {
-  AlertCircle, Download, FileImage, FileUp, Info, MapPinned, Play, RefreshCw, ShieldCheck,
+  AlertCircle, Download, FileImage, FileUp, History, Info, MapPinned, Play, RefreshCw, Save, ShieldCheck,
 } from 'lucide-react';
 import { apiBase, apiFetch } from '../lib/api.js';
 
@@ -165,6 +165,12 @@ export default function FloorplanRfSurveyPanel() {
   const [samplePayload, setSamplePayload] = useState(true);
   const [floorplanImageUrl, setFloorplanImageUrl] = useState('');
   const [floorplanImageName, setFloorplanImageName] = useState('');
+  const [historySiteId, setHistorySiteId] = useState('head-office');
+  const [historyReports, setHistoryReports] = useState([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [activeReport, setActiveReport] = useState(null);
+  const [reportLabel, setReportLabel] = useState('');
 
   useEffect(() => {
     if (!floorplanImageUrl) return undefined;
@@ -183,20 +189,80 @@ export default function FloorplanRfSurveyPanel() {
     return [...groups.entries()].sort((first, second) => first[0].localeCompare(second[0]));
   }, [measurements]);
 
+  const loadHistory = useCallback(async () => {
+    if (!historySiteId || historySiteId.length > 128) {
+      setHistoryReports([]);
+      return;
+    }
+    setHistoryBusy(true);
+    setHistoryError('');
+    try {
+      const url = apiBase() + '/api/sites/rf-surveys?site_id=' + encodeURIComponent(historySiteId) + '&limit=50';
+      const response = await apiFetch(url, { signal: AbortSignal.timeout(12000) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to load saved RF surveys for this site.');
+      if (!Array.isArray(data.reports)) throw new Error('The RF survey history response is invalid.');
+      setHistoryReports(data.reports);
+    } catch (loadError) {
+      setHistoryReports([]);
+      setHistoryError(loadError.message || 'Unable to load RF survey history.');
+    } finally {
+      setHistoryBusy(false);
+    }
+  }, [historySiteId]);
+
+  useEffect(() => { void loadHistory(); }, [loadHistory]);
+
+  async function openSavedReport(report) {
+    if (!report?.survey_id || !historySiteId) return;
+    setHistoryBusy(true);
+    setHistoryError('');
+    try {
+      const url = apiBase() + '/api/sites/rf-surveys/' + encodeURIComponent(report.survey_id)
+        + '?site_id=' + encodeURIComponent(historySiteId);
+      const response = await apiFetch(url, { signal: AbortSignal.timeout(15000) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to retrieve the saved RF survey.');
+      if (!data.result || !Array.isArray(data.result.measurements) || !Array.isArray(data.result.access_points)) {
+        throw new Error('The saved RF survey report is incomplete.');
+      }
+      setResult(data.result);
+      setActiveReport(data.report || report);
+      setReportLabel(data.report?.label || report.label || '');
+      // The original floor-plan image remains local and is not part of a saved report.
+      setFloorplanImageUrl('');
+      setFloorplanImageName('');
+      setError('');
+    } catch (loadError) {
+      setHistoryError(loadError.message || 'Unable to retrieve the saved RF survey.');
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
   const execute = useCallback(async () => {
     setBusy(true);
     setError('');
     setResult(null);
+    setActiveReport(null);
     try {
       const payload = JSON.parse(payloadText);
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         throw new Error('The survey input must be a JSON object.');
       }
-      const response = await apiFetch(apiBase() + '/api/features/floorplan_rf_survey_analyzer', {
+      if (typeof payload.site_id !== 'string' || !payload.site_id.trim()) {
+        throw new Error('A valid site_id is required before analysis.');
+      }
+      const saving = !samplePayload;
+      const endpoint = saving ? '/api/sites/rf-surveys' : '/api/features/floorplan_rf_survey_analyzer';
+      const requestBody = saving
+        ? { site_id: payload.site_id, survey: payload, ...(reportLabel.trim() ? { label: reportLabel.trim() } : {}) }
+        : payload;
+      const response = await apiFetch(apiBase() + endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(30000),
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(45000),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'The floor-plan RF survey analyzer failed.');
@@ -205,12 +271,19 @@ export default function FloorplanRfSurveyPanel() {
         throw new Error('The analyzer returned an invalid result.');
       }
       setResult(analysis);
+      if (saving) {
+        setActiveReport(data.report || null);
+        setReportLabel(data.report?.label || reportLabel);
+        setHistorySiteId(payload.site_id);
+        await loadHistory();
+        if (data.audit_status) setHistoryError(data.audit_status);
+      }
     } catch (runError) {
       setError(runError.message || 'Unable to analyse the supplied floor-plan RF survey.');
     } finally {
       setBusy(false);
     }
-  }, [payloadText]);
+  }, [payloadText, samplePayload, reportLabel, loadHistory]);
 
   async function importJson(event) {
     const file = event.target.files?.[0];
@@ -222,12 +295,14 @@ export default function FloorplanRfSurveyPanel() {
     }
     try {
       const content = await file.text();
-      JSON.parse(content);
+      const parsed = JSON.parse(content);
+      if (typeof parsed?.site_id === 'string') setHistorySiteId(parsed.site_id);
       setPayloadText(content);
       setFileName(file.name);
       setSamplePayload(false);
       setError('');
       setResult(null);
+      setActiveReport(null);
     } catch {
       setError('The selected survey file is not valid JSON.');
     }
@@ -251,11 +326,15 @@ export default function FloorplanRfSurveyPanel() {
   }
 
   function loadSample() {
-    setPayloadText(JSON.stringify(defaultSurveyPayload(), null, 2));
+    const payload = defaultSurveyPayload();
+    setPayloadText(JSON.stringify(payload, null, 2));
+    setHistorySiteId(payload.site_id);
+    setReportLabel('');
     setFileName('');
     setSamplePayload(true);
     setError('');
     setResult(null);
+    setActiveReport(null);
   }
 
   return (
@@ -282,9 +361,10 @@ export default function FloorplanRfSurveyPanel() {
           <button type="button" onClick={loadSample} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground">
             <RefreshCw className="w-3.5 h-3.5" /> Load sample
           </button>
-          <button type="button" onClick={execute} disabled={busy}
+          <button type="button" onClick={execute} disabled={busy || Boolean(activeReport)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs font-semibold disabled:opacity-50">
-            <Play className={`w-3.5 h-3.5 ${busy ? 'animate-pulse' : ''}`} /> {busy ? 'Analysing…' : 'Analyse survey'}
+            <Play className={`w-3.5 h-3.5 ${busy ? 'animate-pulse' : ''}`} />
+            {busy ? 'Analysing…' : activeReport ? 'Saved report open' : samplePayload ? 'Analyse sample' : 'Analyse & save report'}
           </button>
         </div>
       </div>
@@ -296,17 +376,70 @@ export default function FloorplanRfSurveyPanel() {
       {floorplanImageName && <div className="text-xs text-muted-foreground">Floor-plan image: {floorplanImageName} · kept locally in this browser tab and not uploaded</div>}
       {error && <div role="alert" className="glass rounded-xl p-3 border border-red-400/30 text-xs text-red-400 flex gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0" />{error}</div>}
 
+      <section className="glass rounded-xl p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" /> Saved site surveys</div>
+            <div className="text-xs text-muted-foreground mt-0.5">Site: {historySiteId || 'not selected'} · site-scoped access</div>
+          </div>
+          <button type="button" onClick={() => void loadHistory()} disabled={historyBusy || !historySiteId}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground disabled:opacity-50">
+            <RefreshCw className={`w-3.5 h-3.5 ${historyBusy ? 'animate-spin' : ''}`} /> Refresh
+          </button>
+        </div>
+        {historyError && <div role="alert" className="text-xs text-amber-400">{historyError}</div>}
+        {historyBusy && <div className="text-xs text-muted-foreground">Loading site reports…</div>}
+        {!historyBusy && historyReports.length === 0 && !historyError && <div className="text-xs text-muted-foreground">No saved reports for this site yet.</div>}
+        {historyReports.length > 0 && (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {historyReports.map(report => (
+              <div key={report.survey_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-secondary/40 border border-border/60 px-3 py-2">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-foreground truncate">{report.label}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {report.floorplan_id} · {report.measurement_count} measurements · {new Date(report.created_at).toLocaleString()}
+                  </div>
+                </div>
+                <button type="button" onClick={() => void openSavedReport(report)} disabled={historyBusy}
+                  className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/30 text-primary text-xs disabled:opacity-50">
+                  Open report
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       <section className="glass rounded-xl p-4 space-y-2">
         <div className="flex justify-between items-center gap-2">
           <div className="text-sm font-semibold text-foreground">Survey evidence JSON</div>
           <div className="text-xs text-muted-foreground">Maximum 900 KiB</div>
         </div>
-        <textarea value={payloadText} onChange={event => { setPayloadText(event.target.value); setSamplePayload(false); }}
+        <textarea value={payloadText} onChange={event => {
+          const value = event.target.value;
+          setPayloadText(value);
+          setSamplePayload(false);
+          setActiveReport(null);
+          try {
+            const parsed = JSON.parse(value);
+            if (typeof parsed?.site_id === 'string') setHistorySiteId(parsed.site_id);
+          } catch {
+            // Keep the last valid site selection while the operator edits JSON.
+          }
+        }}
           spellCheck="false" rows={18} aria-label="Floor-plan RF survey JSON payload"
           className="w-full min-h-[320px] px-3 py-2 rounded-lg bg-background/70 border border-border text-xs font-mono text-foreground resize-y focus:outline-none focus:border-primary/50" />
         <p className="text-xs text-muted-foreground">
           Required evidence: floor-plan dimensions and known-distance scale references, same-floor AP and survey-point coordinates, UTC timestamps and measured per-AP RSSI. Noise is optional; SNR is calculated only when both RSSI and noise are supplied.
         </p>
+        {!samplePayload && (
+          <label className="block text-xs text-muted-foreground">
+            Report name
+            <input value={reportLabel} onChange={event => setReportLabel(event.target.value.slice(0, 128))}
+              maxLength={128} placeholder="e.g. HQ Level 1 — November survey"
+              className="mt-1 w-full px-3 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
+          </label>
+        )}
       </section>
 
       {busy && <div className="glass rounded-xl p-6 text-center text-sm text-muted-foreground">Validating scale, timestamps, coordinates and measurements…</div>}
@@ -316,7 +449,9 @@ export default function FloorplanRfSurveyPanel() {
           <div className="flex items-center gap-2 text-xs">
             <ShieldCheck className="w-4 h-4 text-green-400" />
             <span className="text-foreground">{result.status === 'analysed' ? 'Measured RF observations aligned' : 'No fresh measurements available'}</span>
-            <span className="text-muted-foreground">· supplied evidence · read-only analysis</span>
+            {activeReport
+              ? <span className="text-muted-foreground">· saved report · {activeReport.label}</span>
+              : <span className="text-muted-foreground">· {samplePayload ? 'illustrative sample' : 'saved to site history'}</span>}
           </div>
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
             <MetricCard label="Access points" value={result.access_point_count} detail="On the selected floor" />
@@ -368,10 +503,13 @@ export default function FloorplanRfSurveyPanel() {
                 </tbody>
               </table>
             </div>
-            <button type="button" onClick={() => downloadJson('floorplan-rf-survey-analysis.json', result)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground hover:bg-secondary/70">
-              <Download className="w-3.5 h-3.5" /> Export analysis JSON
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => downloadJson('floorplan-rf-survey-analysis.json', result)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground hover:bg-secondary/70">
+                <Download className="w-3.5 h-3.5" /> Export analysis JSON
+              </button>
+              {activeReport && <span className="text-xs text-muted-foreground flex items-center gap-1"><Save className="w-3.5 h-3.5" /> Retained in site history</span>}
+            </div>
           </section>
 
           <div className="glass rounded-xl p-3 flex items-start gap-2">

@@ -25,6 +25,7 @@ from wifi_analyzer_backend.billing import WorkspaceBillingStore, verify_stripe_s
 from wifi_analyzer_backend.license import VendorLicenseStore, create_signed_license
 from wifi_analyzer_backend.telemetry_store import WiFiTelemetryStore
 from wifi_analyzer_backend.trusted_ap_store import TrustedAccessPointStore
+from wifi_analyzer_backend.rf_survey_store import RfSurveyHistoryStore
 from wifi_analyzer_backend.billing import PLAN_CATALOG
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -37,6 +38,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_history = server.HISTORY
         self.previous_telemetry = server.TELEMETRY
         self.previous_trusted_aps = server.TRUSTED_APS
+        self.previous_rf_surveys = server.RF_SURVEYS
         self.previous_agent_health = server.AGENT_HEALTH
         self.previous_report_jobs = server.REPORT_JOBS
         self.previous_audit = server.AUDIT
@@ -92,6 +94,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.HISTORY = __import__("wifi_analyzer_backend.site_history", fromlist=["SiteHistoryStore"]).SiteHistoryStore(path=str(Path(self.temp.name) / "history.sqlite3"))
         server.TELEMETRY = WiFiTelemetryStore(path=Path(self.temp.name) / "telemetry.sqlite3")
         server.TRUSTED_APS = TrustedAccessPointStore(path=Path(self.temp.name) / "trusted-aps.sqlite3")
+        server.RF_SURVEYS = RfSurveyHistoryStore(path=Path(self.temp.name) / "rf-surveys.sqlite3")
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
         server.REPORT_JOBS = RouterReportJobStore(path=str(Path(self.temp.name) / "report-jobs.sqlite3"))
         server.AUDIT = __import__("wifi_analyzer_backend.audit_store", fromlist=["SecurityAuditStore"]).SecurityAuditStore(
@@ -111,6 +114,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.HISTORY = self.previous_history
         server.TELEMETRY = self.previous_telemetry
         server.TRUSTED_APS = self.previous_trusted_aps
+        server.RF_SURVEYS = self.previous_rf_surveys
         server.AGENT_HEALTH = self.previous_agent_health
         server.REPORT_JOBS = self.previous_report_jobs
         server.AUDIT = self.previous_audit
@@ -1084,7 +1088,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
         self.assertEqual(catalog["count"], 203)
-        self.assertEqual(len(catalog["features"]), 202)
+        self.assertEqual(len(catalog["features"]), 203)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -3603,6 +3607,77 @@ class AuthenticatedApiTests(unittest.TestCase):
         )
         self.assertEqual(status, 403, denied)
         self.assertIn("outside your assigned access scope", denied["error"])
+
+    def test_rf_survey_history_save_read_and_site_isolation(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "rf survey history owner secure password",
+        })
+        owner_token = setup["token"]
+        _, created = self.request("POST", "/api/users", {
+            "username": "rf.history.admin",
+            "password": "rf survey history admin password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["head-office"],
+        }, token=owner_token)
+        self.assertEqual(created["user"]["username"], "rf.history.admin")
+        token = server.AUTH.login("rf survey history admin password", "rf.history.admin")
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        survey = {
+            "site_id": "head-office",
+            "as_of": now.isoformat(),
+            "floorplan": {
+                "floorplan_id": "hq-floor-1",
+                "floor_id": "floor-1",
+                "width_px": 1000,
+                "height_px": 800,
+                "scale_references": [
+                    {"x1_px": 0, "y1_px": 0, "x2_px": 1000, "y2_px": 0, "distance_m": 20},
+                ],
+            },
+            "access_points": [{"ap_id": "ap-01", "x_px": 100, "y_px": 100}],
+            "survey_samples": [{
+                "sample_id": "survey-001",
+                "x_px": 200,
+                "y_px": 100,
+                "observed_at": (now - timedelta(minutes=5)).isoformat(),
+                "evidence_source": "survey",
+                "measurements": [{"ap_id": "ap-01", "rssi_dbm": -55}],
+            }],
+        }
+        status, saved = self.request("POST", "/api/sites/rf-surveys", {
+            "site_id": "head-office",
+            "label": "HQ floor one validation",
+            "survey": survey,
+        }, token=token)
+        self.assertEqual(status, 201, saved)
+        self.assertEqual(saved["feature"], "F203")
+        self.assertEqual(saved["report"]["label"], "HQ floor one validation")
+        self.assertEqual(saved["result"]["accepted_measurement_count"], 1)
+        self.assertEqual(len(server.AUDIT.list_events(action="rf_survey.saved")), 1)
+
+        status, history = self.request("GET", "/api/sites/rf-surveys?site_id=head-office", token=token)
+        self.assertEqual(status, 200, history)
+        self.assertEqual(history["report_count"], 1)
+        report_id = saved["report"]["survey_id"]
+        self.assertEqual(history["reports"][0]["survey_id"], report_id)
+
+        status, detail = self.request(
+            "GET", "/api/sites/rf-surveys/" + report_id + "?site_id=head-office", token=token,
+        )
+        self.assertEqual(status, 200, detail)
+        self.assertEqual(detail["result"], saved["result"])
+
+        status, forbidden = self.request(
+            "GET", "/api/sites/rf-surveys/" + report_id + "?site_id=branch", token=token,
+        )
+        self.assertEqual(status, 403, forbidden)
+
+        status, forbidden = self.request("POST", "/api/sites/rf-surveys", {
+            "site_id": "branch",
+            "survey": {**survey, "site_id": "branch"},
+        }, token=token)
+        self.assertEqual(status, 403, forbidden)
 
 if __name__ == "__main__":
     unittest.main()
