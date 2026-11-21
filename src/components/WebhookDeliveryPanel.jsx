@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api.js";
 
 const API_BASE = window.location.protocol + "//" + window.location.hostname + ":199";
@@ -62,6 +62,79 @@ export default function WebhookDeliveryPanel() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [queue, setQueue] = useState([]);
+  const [queueSummary, setQueueSummary] = useState(null);
+  const [queueBusy, setQueueBusy] = useState(false);
+  const [enqueueBusy, setEnqueueBusy] = useState(false);
+  const [queueError, setQueueError] = useState("");
+  const [queueNotice, setQueueNotice] = useState("");
+
+  const loadQueue = useCallback(async () => {
+    setQueueBusy(true);
+    setQueueError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/webhooks/deliveries", {
+        signal: AbortSignal.timeout(10000),
+      });
+      const data = await readResponse(response);
+      setQueue(Array.isArray(data.deliveries) ? data.deliveries : []);
+      setQueueSummary(data.summary || null);
+    } catch (requestError) {
+      setQueueError(requestError instanceof Error ? requestError.message : "Could not load the webhook delivery queue.");
+    } finally {
+      setQueueBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadQueue();
+  }, [loadQueue]);
+
+  const enqueuePrepared = async () => {
+    if (!prepared.length || enqueueBusy) return;
+    setEnqueueBusy(true);
+    setQueueError("");
+    setQueueNotice("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/webhooks/deliveries/enqueue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveries: prepared }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const data = await readResponse(response);
+      setQueueNotice(
+        (data.created_count || 0) + " delivery batch(es) queued; " +
+        (data.duplicate_count || 0) + " idempotent duplicate(s) already existed."
+      );
+      await loadQueue();
+    } catch (requestError) {
+      setQueueError(requestError instanceof Error ? requestError.message : "Could not enqueue prepared deliveries.");
+    } finally {
+      setEnqueueBusy(false);
+    }
+  };
+
+  const updateDelivery = async (deliveryId, action) => {
+    setQueueError("");
+    setQueueNotice("");
+    try {
+      const response = await apiFetch(
+        API_BASE + "/api/webhooks/deliveries/" + encodeURIComponent(deliveryId) + "/" + action,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      const data = await readResponse(response);
+      setQueueNotice("Delivery #" + deliveryId + " is now " + data.delivery.status + ".");
+      await loadQueue();
+    } catch (requestError) {
+      setQueueError(requestError instanceof Error ? requestError.message : "Could not update the selected delivery.");
+    }
+  };
 
   const prepare = async event => {
     event.preventDefault();
@@ -128,8 +201,8 @@ export default function WebhookDeliveryPanel() {
         <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
           <span style={{ color: "#fbbf24", fontSize: 15, fontWeight: 900 }}>!</span>
           <div style={muted}>
-            <strong style={{ color: "#fbbf24" }}>Preparation only — this screen does not send webhooks.</strong>
-            Signing keys are submitted to the local API for this request and cleared from the editor after a successful run. They are not stored in browser storage, audit events or the result. The sample uses placeholder DNS proof, not real connectivity. A dispatcher must re-resolve DNS, pin the actual peer IP, validate TLS and re-run the egress policy immediately before every attempt.
+            <strong style={{ color: "#fbbf24" }}>Preparation and queue management — network sends run in a separate worker.</strong>
+            Signing keys are submitted only for this preparation request, cleared from the editor after success and never stored in the outbox. The sample uses placeholder DNS proof, not real connectivity. The worker independently resolves DNS, pins the actual peer IP, verifies TLS and re-runs the egress policy immediately before every attempt.
           </div>
         </div>
       </section>
@@ -158,7 +231,12 @@ export default function WebhookDeliveryPanel() {
       {result ? <>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <div style={{ fontSize: 13, fontWeight: 750 }}>Result · {result.status}</div>
-          <button type="button" style={button} onClick={copyPrepared} disabled={!prepared.length}>Copy prepared envelopes</button>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            <button type="button" style={{ ...button, background: "transparent", borderColor: "#475569", color: "#cbd5e1" }} onClick={copyPrepared} disabled={!prepared.length}>Copy envelopes</button>
+            <button type="button" style={button} onClick={enqueuePrepared} disabled={!prepared.length || enqueueBusy}>
+              {enqueueBusy ? "Queueing…" : "Queue prepared deliveries"}
+            </button>
+          </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 9 }}>
           {metric("Subscriptions", result.summary.subscription_count, "configured")}
@@ -202,6 +280,64 @@ export default function WebhookDeliveryPanel() {
           <p style={muted}>{result.note}</p>
         </section>
       </> : null}
+
+      <section style={panel}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 750 }}>Durable delivery queue</div>
+            <div style={muted}>Site-scoped outbox · safe state metadata only · no signing secrets</div>
+          </div>
+          <button type="button" style={{ ...button, background: "transparent", borderColor: "#475569", color: "#cbd5e1" }}
+            onClick={loadQueue} disabled={queueBusy}>{queueBusy ? "Refreshing…" : "Refresh queue"}</button>
+        </div>
+        {queueError ? <div role="alert" style={{ color: "#fca5a5", fontSize: 11, marginTop: 9 }}>{queueError}</div> : null}
+        {queueNotice ? <div role="status" style={{ color: "#86efac", fontSize: 11, marginTop: 9 }}>{queueNotice}</div> : null}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 8, marginTop: 12 }}>
+          {metric("Pending", queueSummary?.counts_by_status?.pending ?? 0, "awaiting worker")}
+          {metric("Sending", queueSummary?.counts_by_status?.sending ?? 0, "leased")}
+          {metric("Retry wait", queueSummary?.counts_by_status?.retry_wait ?? 0, "backoff scheduled", "#fbbf24")}
+          {metric("Delivered", queueSummary?.counts_by_status?.delivered ?? 0, "2xx confirmed", "#4ade80")}
+          {metric("Dead letter", queueSummary?.counts_by_status?.dead_letter ?? 0, "manual recovery", queueSummary?.counts_by_status?.dead_letter ? "#f87171" : "#e2e8f0")}
+        </div>
+        {!queue.length ? (
+          <div style={{ ...muted, marginTop: 12 }}>{queueBusy ? "Loading delivery state…" : "No visible webhook deliveries are queued."}</div>
+        ) : (
+          <div style={{ overflowX: "auto", marginTop: 12 }}>
+            <table className="webhook-table">
+              <thead><tr><th>Delivery</th><th>Subscription</th><th>Sites</th><th>Events</th><th>State</th><th>Attempts</th><th>Last error</th><th>Action</th></tr></thead>
+              <tbody>
+                {queue.map(item => (
+                  <tr key={item.id}>
+                    <td style={{ fontFamily: "monospace" }}>#{item.id}<div style={{ color: "#64748b", marginTop: 3 }}>{item.batch_id.slice(0, 12)}…</div></td>
+                    <td>{item.subscription_id}<div style={{ color: "#64748b", marginTop: 3 }}>{item.endpoint}</div></td>
+                    <td>{item.has_unscoped_events ? "Unscoped" : (item.site_ids || []).join(", ") || "—"}</td>
+                    <td>{item.event_count}</td>
+                    <td style={{
+                      color: item.status === "delivered" ? "#4ade80" :
+                        item.status === "dead_letter" ? "#f87171" :
+                        item.status === "retry_wait" ? "#fbbf24" :
+                        item.status === "sending" ? "#06d6f0" : "#cbd5e1",
+                      fontWeight: 750,
+                    }}>{item.status.replace("_", " ")}</td>
+                    <td>{item.attempts}/{item.max_attempts}</td>
+                    <td style={{ color: item.last_error_code ? "#fbbf24" : "#64748b" }}>{item.last_error_code || "—"}</td>
+                    <td>
+                      {item.status === "dead_letter" || item.status === "cancelled" ? (
+                        <button type="button" style={button} disabled={queueBusy} onClick={() => updateDelivery(item.id, "retry")}>Retry</button>
+                      ) : item.status === "pending" || item.status === "retry_wait" ? (
+                        <button type="button" style={{ ...button, background: "transparent", borderColor: "#475569", color: "#cbd5e1" }} disabled={queueBusy} onClick={() => updateDelivery(item.id, "cancel")}>Cancel</button>
+                      ) : <span style={muted}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p style={{ ...muted, marginBottom: 0, marginTop: 12 }}>
+          Enqueue stores signed envelopes but does not transmit them. Start the separate webhook_dispatch_worker.py process to send pending items. A delivery is marked successful only after a verified 2xx response; exhausted retries move to dead letter.
+        </p>
+      </section>
     </div>
   );
 }
