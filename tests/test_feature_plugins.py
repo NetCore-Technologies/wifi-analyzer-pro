@@ -964,7 +964,6 @@ PAYLOADS = {
         "reports": [{"feature":"F194","status":"audited","summary":{"profile_count":1,"violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F195","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F196","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F197","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F198","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F199","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]}]
     }
 }
-}
 
 
 class FeatureCatalogTests(unittest.TestCase):
