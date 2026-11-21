@@ -892,6 +892,14 @@ class Handler(BaseHTTPRequestHandler):
             in scope["site_ids"]
         ]
 
+    def managed_site_ids(self):
+        site_ids = set(HISTORY.site_ids(limit=100))
+        for credential in AGENT_HEALTH.list_agent_credentials():
+            site_id = credential.get("site_id")
+            if isinstance(site_id, str) and site_id.strip():
+                site_ids.add(site_id.strip())
+        return sorted(site_ids)
+
     def read_raw_body(self, maximum_bytes):
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -972,12 +980,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/billing/status":
             try:
+                billing_status = BILLING.status()
                 usage = {
                     "users": len(AUTH.list_users(self.bearer_token())),
                     "agents": sum(1 for item in AGENT_HEALTH.list_agent_credentials() if item["status"] == "active"),
                     "webhook_subscriptions": len(WEBHOOK_SUBSCRIPTIONS.list_subscriptions()),
+                    "sites": len(self.managed_site_ids()),
+                    "feature_runs_monthly": billing_status["monthly_usage"]["feature_runs"],
                 }
-                billing_status = BILLING.status()
                 billing_status["usage"] = usage
                 billing_status["portal_available"] = bool(BILLING.stripe_customer_id())
                 available_plans = [
@@ -2050,6 +2060,10 @@ class Handler(BaseHTTPRequestHandler):
                     )
                     if not self.enforce_subscription_capacity("agents", active_agents):
                         return
+                    if requested_site is not None:
+                        known_sites = self.managed_site_ids()
+                        if requested_site not in known_sites and not self.enforce_subscription_capacity("sites", len(known_sites)):
+                            return
                     scope = run_feature("router_agent_credential_scope", payload)["result"]
                     negotiation = run_feature("router_agent_negotiation_audit", scope)["result"]
                     credential = AGENT_HEALTH.enroll_agent(
@@ -2262,7 +2276,12 @@ class Handler(BaseHTTPRequestHandler):
                 prepared = run_feature("site_discovery_history_snapshot", payload)["result"]
                 if not self.require_site_access(_collect_site_ids(prepared), require_explicit=True):
                     return
-                saved = HISTORY.record(prepared)
+                with BILLING_QUOTA_LOCK:
+                    known_sites = self.managed_site_ids()
+                    prepared_site = prepared.get("site_id")
+                    if prepared_site not in known_sites and not self.enforce_subscription_capacity("sites", len(known_sites)):
+                        return
+                    saved = HISTORY.record(prepared)
             except DuplicateSnapshotError as error:
                 self.send_json({"error": str(error)}, 409)
                 return
@@ -2277,7 +2296,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path.startswith("/api/features/"):
-            if not self.require_auth("diagnostics.run"): 
+            if not self.require_auth("diagnostics.run"):
                 return
             slug = unquote(path[len("/api/features/"):]).strip("/")
             scoped_sites = _collect_site_ids(payload)
@@ -2286,11 +2305,25 @@ class Handler(BaseHTTPRequestHandler):
             if not slug or "/" in slug:
                 self.send_json({"error": "Unknown feature"}, 404)
                 return
-            try:
-                result = run_feature(slug, payload)
-            except KeyError:
+            if slug not in {item["slug"] for item in feature_catalog()}:
                 self.send_json({"error": "Unknown feature"}, 404)
                 return
+            try:
+                with BILLING_QUOTA_LOCK:
+                    meter = BILLING.consume_monthly_feature_run()
+                    if not meter["allowed"]:
+                        self.send_json({
+                            "error": "The monthly diagnostic allowance has been reached",
+                            "code": "plan_limit_reached",
+                            **meter,
+                            "upgrade_required": True,
+                        }, 402)
+                        return
+                    try:
+                        result = run_feature(slug, payload)
+                    except Exception:
+                        BILLING.refund_monthly_feature_run(meter["period"])
+                        raise
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return

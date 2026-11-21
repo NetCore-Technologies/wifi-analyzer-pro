@@ -505,6 +505,35 @@ class WorkspaceBillingStore:
                 "period": usage_month,
             }
 
+    def refund_monthly_feature_run(self, usage_period: str) -> bool:
+        """Undo a reserved diagnostic run when the feature rejects or fails."""
+        if not isinstance(usage_period, str) or not re.fullmatch(r"\d{4}-\d{2}", usage_period):
+            raise ValueError("usage_period must use YYYY-MM format")
+        now = float(self._clock())
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT used FROM workspace_monthly_usage WHERE usage_month=? AND resource='feature_runs'",
+                (usage_period,),
+            ).fetchone()
+            if row is None or int(row["used"]) <= 0:
+                return False
+            if int(row["used"]) == 1:
+                connection.execute(
+                    "DELETE FROM workspace_monthly_usage WHERE usage_month=? AND resource='feature_runs'",
+                    (usage_period,),
+                )
+            else:
+                connection.execute(
+                    """
+                    UPDATE workspace_monthly_usage
+                    SET used=used-1, updated_at=?
+                    WHERE usage_month=? AND resource='feature_runs'
+                    """,
+                    (now, usage_period),
+                )
+        return True
+
     def process_stripe_event(
         self,
         event: dict[str, Any],

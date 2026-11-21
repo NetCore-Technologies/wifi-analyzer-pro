@@ -171,6 +171,34 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 402, response)
         self.assertEqual(response["resource"], "agents")
 
+    def test_free_plan_blocks_monthly_feature_runs_at_quota(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "monthly runs owner secure password",
+        })
+        token = setup["token"]
+        self.use_free_billing()
+        for _ in range(100):
+            self.assertTrue(server.BILLING.consume_monthly_feature_run()["allowed"])
+
+        status, result = self.request(
+            "POST", "/api/features/normalise_ssid", {"ssid": "office"}, token=token,
+        )
+        self.assertEqual(status, 402, result)
+        self.assertEqual(result["resource"], "feature_runs_monthly")
+        self.assertEqual(result["used"], 100)
+
+    def test_feature_validation_errors_do_not_consume_monthly_allowance(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "feature metering owner secure password",
+        })
+        token = setup["token"]
+        self.use_free_billing()
+        status, result = self.request(
+            "POST", "/api/features/not-a-real-feature", {}, token=token,
+        )
+        self.assertEqual(status, 404, result)
+        self.assertEqual(server.BILLING.status()["monthly_usage"]["feature_runs"], 0)
+
     def test_billing_checkout_uses_only_configured_server_price_and_stripe_host(self):
         _, setup = self.request("POST", "/api/auth/setup", {
             "password": "checkout owner secure password",
@@ -1124,6 +1152,29 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, missing = self.request("GET", "/api/sites/history/999999", token=token)
         self.assertEqual(status, 404)
         self.assertIn("not found", missing["error"].lower())
+
+    def test_free_plan_enforces_managed_site_limit(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "site quota owner secure password",
+        })
+        token = setup["token"]
+        self.use_free_billing()
+        first = {
+            "site_id": "home",
+            "captured_at": "2026-11-21T10:00:00Z",
+            "access_points": [],
+            "links": [],
+        }
+        second = {
+            "site_id": "branch",
+            "captured_at": "2026-11-21T10:01:00Z",
+            "access_points": [],
+            "links": [],
+        }
+        self.assertEqual(self.request("POST", "/api/sites/history", first, token=token)[0], 201)
+        status, response = self.request("POST", "/api/sites/history", second, token=token)
+        self.assertEqual(status, 402, response)
+        self.assertEqual(response["resource"], "sites")
 
     def test_site_history_rejects_duplicate_snapshots_and_invalid_payloads(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "correct horse battery staple"})

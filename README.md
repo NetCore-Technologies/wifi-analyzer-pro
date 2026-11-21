@@ -129,7 +129,9 @@ screenshots or Git.
 The backend creates hosted Checkout and Billing Portal sessions; it does not
 collect card details. The subscription screen shows plan quotas and usage.
 Free, Pro, Business and Enterprise quotas are enforced for local users,
-managed router agents and webhook subscriptions. Payment events are verified
+managed router agents, managed sites, webhook subscriptions and monthly
+diagnostic executions. Diagnostic runs are metered per UTC calendar month and
+failed feature validations do not consume an allowance. Payment events are verified
 and replay-protected. One application deployment represents one paying
 workspace in this integration; pooled multi-tenant hosting still requires a
 separate tenant-isolated control plane and is not claimed as shipped.

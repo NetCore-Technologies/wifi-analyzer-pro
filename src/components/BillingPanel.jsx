@@ -153,12 +153,15 @@ export default function BillingPanel() {
           </section>
 
           <section style={panel}>
-            <div style={{ fontSize: 13, fontWeight: 750, marginBottom: 10 }}>Plan usage</div>
+            <div style={{ fontSize: 13, fontWeight: 750, marginBottom: 4 }}>Plan usage</div>
+            <div style={{ color: "#64748b", fontSize: 10, marginBottom: 10 }}>Diagnostic allowance resets monthly in UTC · {billing.usage_period || "current period"}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
               {[
                 ["Users", "users"],
                 ["Managed router agents", "agents"],
+                ["Managed sites", "sites"],
                 ["Webhook subscriptions", "webhook_subscriptions"],
+                ["Diagnostic runs this month", "feature_runs_monthly"],
               ].map(([label, key]) => {
                 const used = Number(usage[key] || 0);
                 const limit = Number(limits[key] || 0);
