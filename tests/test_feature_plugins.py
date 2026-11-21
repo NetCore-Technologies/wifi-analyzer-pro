@@ -962,6 +962,18 @@ PAYLOADS = {
     "enterprise_network_security_evidence_report": {
         "report_id": "feature-test-report",
         "reports": [{"feature":"F194","status":"audited","summary":{"profile_count":1,"violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F195","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F196","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F197","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F198","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]},{"feature":"F199","status":"audited","summary":{"record_count":1,"confirmed_violation_count":0,"evidence_gap_count":0,"findings_by_severity":{"critical":0,"high":0,"medium":0,"low":0,"info":0}},"findings":[]}]
+    },
+    "multi_ap_channel_reuse_planner": {
+        "radios": [
+            {"radio_id":"hq-ap1-24","ap_id":"hq-ap1","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+            {"radio_id":"hq-ap2-24","ap_id":"hq-ap2","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":6,"channel_options":[1,6,11]},
+            {"radio_id":"hq-ap3-24","ap_id":"hq-ap3","site_id":"hq","band":"2.4GHz","channel_width_mhz":20,"current_channel":11,"channel_options":[1,6,11]}
+        ],
+        "interference_edges": [
+            {"radio_ids":["hq-ap1-24","hq-ap2-24"],"weight":0.9,"evidence_source":"survey"},
+            {"radio_ids":["hq-ap1-24","hq-ap3-24"],"weight":0.5,"evidence_source":"controller"},
+            {"radio_ids":["hq-ap2-24","hq-ap3-24"],"weight":0.4,"evidence_source":"survey"}
+        ]
     }
 }
 
@@ -969,15 +981,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 197)
-        self.assertEqual(len(set(FEATURE_MODULES)), 197)
-        self.assertEqual(count(), 197)
-        self.assertEqual(len(entries), 197)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 197)
+        self.assertEqual(len(FEATURE_MODULES), 198)
+        self.assertEqual(len(set(FEATURE_MODULES)), 198)
+        self.assertEqual(count(), 198)
+        self.assertEqual(len(entries), 198)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 198)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1095,6 +1107,57 @@ class FeatureCatalogTests(unittest.TestCase):
         duplicate = {**payload, "reports": payload["reports"][:-1] + [payload["reports"][0]]}
         with self.assertRaisesRegex(ValueError, "duplicate report"):
             run("enterprise_network_security_evidence_report", duplicate)
+
+    def test_f201_planner_reduces_same_channel_interference_deterministically(self):
+        payload = PAYLOADS["multi_ap_channel_reuse_planner"]
+        first = run("multi_ap_channel_reuse_planner", payload)["result"]
+        second = run("multi_ap_channel_reuse_planner", payload)["result"]
+        self.assertEqual(first, second)
+        self.assertEqual(first["status"], "planned")
+        self.assertEqual(first["conflict_count"], 0)
+        self.assertLess(first["planned_interference_cost"], first["baseline_interference_cost"])
+        self.assertEqual(first["channel_change_count"], 1)
+
+    def test_f201_planner_fails_closed_without_explicit_interference_evidence(self):
+        payload = PAYLOADS["multi_ap_channel_reuse_planner"]
+        result = run("multi_ap_channel_reuse_planner", {"radios": payload["radios"]})["result"]
+        self.assertEqual(result["status"], "insufficient_interference_evidence")
+        self.assertTrue(all(item["recommended_channel"] is None for item in result["assignments"]))
+
+    def test_f201_planner_rejects_cross_site_evidence(self):
+        payload = PAYLOADS["multi_ap_channel_reuse_planner"]
+        radios = [dict(item) for item in payload["radios"]]
+        radios[1] = {**radios[1], "site_id": "branch"}
+        with self.assertRaisesRegex(ValueError, "same site and band"):
+            run("multi_ap_channel_reuse_planner", {
+                "radios": radios, "interference_edges": payload["interference_edges"][:1],
+            })
+
+    def test_f201_planner_requires_explicit_wide_channel_centres_and_evidence_sources(self):
+        with self.assertRaisesRegex(ValueError, "required for widths above 20 MHz"):
+            run("multi_ap_channel_reuse_planner", {"radios": [{
+                "radio_id":"ap1-5", "ap_id":"ap1", "site_id":"hq", "band":"5GHz",
+                "channel_width_mhz":80, "channel_options":[36],
+            }]})
+        payload = PAYLOADS["multi_ap_channel_reuse_planner"]
+        with self.assertRaisesRegex(ValueError, "evidence_source"):
+            run("multi_ap_channel_reuse_planner", {
+                "radios":payload["radios"],
+                "interference_edges":[{**payload["interference_edges"][0],"evidence_source":"guess"}],
+            })
+
+    def test_f201_planner_accounts_for_wide_channel_frequency_overlap(self):
+        result = run("multi_ap_channel_reuse_planner", {
+            "radios": [
+                {"radio_id":"ap1-5","ap_id":"ap1","site_id":"hq","band":"5GHz","channel_width_mhz":40,
+                 "current_channel":36,"channel_options":[{"channel":36,"center_frequency_mhz":5190}]},
+                {"radio_id":"ap2-5","ap_id":"ap2","site_id":"hq","band":"5GHz","channel_width_mhz":20,
+                 "current_channel":40,"channel_options":[40,44]},
+            ],
+            "interference_edges":[{"radio_ids":["ap1-5","ap2-5"],"weight":1.0,"evidence_source":"survey"}],
+        })["result"]
+        self.assertEqual(result["conflict_count"], 0)
+        self.assertGreater(result["baseline_interference_cost"], result["planned_interference_cost"])
 
     def test_wpa3_and_six_ghz_parsing(self):
         result = run("parse_iw_scan", PAYLOADS["parse_iw_scan"])["result"]["networks"][0]

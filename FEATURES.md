@@ -1,4 +1,4 @@
-# 197 WiFi Analyzer Pro feature tools (F001–F168, F172–F200)
+# 198 WiFi Analyzer Pro feature tools (F001–F168, F172–F201)
 
 The tool API is exposed at `GET /api/features` and `POST /api/features/{slug}`. Each module has a stable F-number; each feature is independently committed and callable. Tools are read-only; network-changing actions are deliberately excluded.
 
@@ -246,3 +246,5 @@ The app now has first-run local password setup, login, logout, expiring in-memor
 | F199 | Enterprise network asset lifecycle audit (`enterprise_network_asset_lifecycle_audit`) | Security | Assess asset support lifecycle, patch freshness, confirmed exposure and reported high/critical vulnerability counts without inventing CVEs or querying external feeds. |
 
 | F200 | Enterprise network security evidence report (`enterprise_network_security_evidence_report`) | Security | Combine F194–F199 audits into a deterministic, privacy-minimised report with evidence gaps, severity rollups and a SHA-256 integrity digest. |
+
+| F201 | Multi-AP RF channel reuse planner (`multi_ap_channel_reuse_planner`) | RF planning | Optimise same-site AP radio channels using operator-supplied regulatory-approved options and explicit weighted interference evidence from surveys/controllers; quantify baseline improvement and channel changes without applying configuration. |

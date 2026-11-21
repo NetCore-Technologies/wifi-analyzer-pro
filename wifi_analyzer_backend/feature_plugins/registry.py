@@ -201,6 +201,7 @@ FEATURE_MODULES = (
     "feature_198_enterprise_vpn_remote_access_audit",
     "feature_199_enterprise_network_asset_lifecycle_audit",
     "feature_200_enterprise_network_security_evidence_report",
+    "feature_201_multi_ap_channel_reuse_planner",
 )
 
 @lru_cache(maxsize=1)

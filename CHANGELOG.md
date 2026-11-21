@@ -89,3 +89,8 @@ All notable changes to WiFi Analyzer Pro are documented here.
 - Add F189: a lease-guarded scheduled-report delivery package builder. It verifies the F188 job lease and normalized F182 report hashes, requires F187 approved public DNS/TLS evidence, and produces F185 HMAC-signed summary/finding events without making network requests.
 
 - Add F190: a site/severity/event-type-scoped webhook subscription router that deduplicates normalized events, creates deterministic bounded batches and enforces exact HTTPS hostname allowlists; signing secrets and network transmission remain outside the routing feature.
+
+
+## Unreleased
+
+- Add F201, a deterministic multi-AP RF channel reuse planner using operator-supplied regulatory channel options and explicit weighted survey/controller interference evidence. It evaluates channel-width spectral overlap, balances interference cost against configuration churn, reports before/after scores, and never applies changes or invents RF measurements.

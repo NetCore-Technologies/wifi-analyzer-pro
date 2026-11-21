@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 197 distinct callable feature modules (F001–F168 and F172–F200), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
+- ✅ 198 distinct callable feature modules (F001–F168 and F172–F201), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
@@ -183,3 +183,10 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 
 
 - ✅ Saved, site-scoped webhook subscription directory with metadata-only persistence, a 100-subscription workspace bound, transient HMAC key entry, live pinned-TLS endpoint probing and short-lived F187 egress evidence reuse.
+
+
+### F201 delivered — multi-AP RF channel planning
+
+- ✅ F201 multi-AP RF channel reuse planner: deterministic weighted channel assignment across up to 256 same-site radios, explicit survey/controller/operator provenance, supplied regulatory channel options, bandwidth-aware spectral overlap, change-cost optimisation and before/after cost reporting.
+- ✅ F201 fails closed when interference evidence is absent; it does not infer AP proximity, fabricate RF measurements, assume regulatory availability or change network configuration.
+- 📋 Remaining F201+ wave: RF survey import/normalisation, floor-plan-aware measured propagation, per-country regulatory data provenance, DFS/PSC planning against actual controller capabilities and live AP configuration preview with explicit approval.

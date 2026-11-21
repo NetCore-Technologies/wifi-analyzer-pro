@@ -181,7 +181,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 189 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 198 built-in tools |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
@@ -395,3 +395,8 @@ This is the first vendor billing control plane, not yet a multi-region
 high-availability payment platform. A live launch still needs real DNS/TLS,
 Stripe live-mode activation, backups, monitoring, refund/dispute operations
 and full customer onboarding.
+
+
+## Multi-AP RF channel planning (F201)
+
+The Feature Workbench includes an evidence-weighted multi-AP channel reuse planner. It accepts per-radio channel options already validated for the deployment's regulatory domain and explicit relative interference relationships imported from an RF survey, controller or operator assessment. It compares a proposed plan with the supplied current-channel baseline, accounts for spectral overlap and channel-change cost, and returns a deterministic recommendation. It does not scan spectrum, infer propagation from AP names, certify regulatory compliance or push configuration to access points. A result is withheld when no explicit interference relationships are supplied.
