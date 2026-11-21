@@ -43,7 +43,7 @@ def main() -> int:
         format=serialization.PrivateFormat.Raw,
         encryption_algorithm=serialization.NoEncryption(),
     )
-    encoded_private = base64.b64encode(private_bytes) + b"\\n"
+    encoded_private = base64.b64encode(private_bytes) + b"\n"
     public_bytes = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.Raw,
         format=serialization.PublicFormat.Raw,
