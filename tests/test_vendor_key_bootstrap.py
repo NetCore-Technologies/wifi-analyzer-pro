@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "generate_vendor_license_keys.py"
+SCRIPT = ROOT / "scripts" / "generate_vendor_license_key.py"
 
 
 class VendorKeyBootstrapTests(unittest.TestCase):
@@ -24,7 +24,7 @@ class VendorKeyBootstrapTests(unittest.TestCase):
                 [
                     sys.executable,
                     str(SCRIPT),
-                    "--private-key-file", str(target),
+                    "--output", str(target),
                     "--key-id", "production-2026",
                 ],
                 capture_output=True,
@@ -42,8 +42,8 @@ class VendorKeyBootstrapTests(unittest.TestCase):
                 format=serialization.PublicFormat.Raw,
             )
             expected = base64.b64encode(public).decode("ascii")
-            self.assertIn(f"WIFI_ANALYZER_VENDOR_LICENSE_PUBLIC_KEY={expected}", result.stdout)
-            self.assertIn("WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID=production-2026", result.stdout)
+            self.assertIn(expected, result.stdout)
+            self.assertIn("Key ID: production-2026", result.stdout)
             self.assertNotIn(base64.b64encode(raw).decode("ascii"), result.stdout)
             self.assertNotIn("activation_secret", result.stdout)
             if os.name != "nt":
@@ -55,7 +55,7 @@ class VendorKeyBootstrapTests(unittest.TestCase):
             target = Path(directory) / "signing.key"
             target.write_bytes(b"do-not-overwrite")
             result = subprocess.run(
-                [sys.executable, str(SCRIPT), "--private-key-file", str(target)],
+                [sys.executable, str(SCRIPT), "--output", str(target)],
                 capture_output=True,
                 text=True,
                 check=False,
