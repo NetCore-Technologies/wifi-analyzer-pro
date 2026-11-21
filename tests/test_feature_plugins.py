@@ -990,6 +990,89 @@ PAYLOADS = {
             {"sample_id":"survey-sample-003","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":_SURVEY_NOW.isoformat(),"evidence_source":"survey","radio_rssi_dbm":[-55,-64],"channel_utilization_pct":60,"retry_rate_pct":7}
         ]
     },
+    "client_experience_slo_evaluator": {
+            "as_of": "2026-11-21T12:00:00Z",
+            "max_age_days": 7,
+            "required_metrics": [
+                    "rssi_dbm",
+                    "packet_loss_pct",
+                    "rtt_ms"
+            ],
+            "thresholds": {
+                    "throughput_mbps": 25
+            },
+            "samples": [
+                    {
+                            "sample_id": "qoe-001",
+                            "site_id": "hq",
+                            "client_ref": "station-private-alpha",
+                            "ap_id": "ap-01",
+                            "observed_at": "2026-11-21T11:55:00Z",
+                            "evidence_source": "controller",
+                            "metrics": {
+                                    "rssi_dbm": -60,
+                                    "snr_db": 32,
+                                    "retry_rate_pct": 5,
+                                    "airtime_utilization_pct": 35,
+                                    "packet_loss_pct": 0.1,
+                                    "rtt_ms": 22,
+                                    "jitter_ms": 4,
+                                    "throughput_mbps": 250
+                            }
+                    },
+                    {
+                            "sample_id": "qoe-002",
+                            "site_id": "hq",
+                            "client_ref": "station-private-alpha",
+                            "ap_id": "ap-01",
+                            "observed_at": "2026-11-21T11:56:00Z",
+                            "evidence_source": "controller",
+                            "metrics": {
+                                    "rssi_dbm": -78,
+                                    "snr_db": 14,
+                                    "retry_rate_pct": 26,
+                                    "airtime_utilization_pct": 91,
+                                    "packet_loss_pct": 2.5,
+                                    "rtt_ms": 160,
+                                    "jitter_ms": 42,
+                                    "throughput_mbps": 12
+                            }
+                    },
+                    {
+                            "sample_id": "qoe-003",
+                            "site_id": "hq",
+                            "client_ref": "station-private-alpha",
+                            "ap_id": "ap-01",
+                            "observed_at": "2026-11-21T11:57:00Z",
+                            "evidence_source": "probe",
+                            "metrics": {
+                                    "throughput_mbps": 100
+                            }
+                    },
+                    {
+                            "sample_id": "qoe-004",
+                            "site_id": "hq",
+                            "client_ref": "station-private-beta",
+                            "ap_id": "ap-02",
+                            "observed_at": "2026-11-21T11:58:00Z",
+                            "evidence_source": "agent",
+                            "metrics": {}
+                    },
+                    {
+                            "sample_id": "qoe-stale",
+                            "site_id": "hq",
+                            "client_ref": "station-private-alpha",
+                            "ap_id": "ap-01",
+                            "observed_at": "2026-10-01T11:00:00Z",
+                            "evidence_source": "controller",
+                            "metrics": {
+                                    "rssi_dbm": -90,
+                                    "packet_loss_pct": 8,
+                                    "rtt_ms": 500
+                            }
+                    }
+            ]
+    },
     "client_roam_transaction_analyzer": {
         "events": [
             {"event_id":"evt-a1","site_id":"office","client_ref":"station-alpha","event_type":"roam_start","roam_id":"roam-a","from_ap_id":"ap-01","to_ap_id":"ap-02","occurred_at":_ROAM_NOW.isoformat(),"evidence_source":"controller"},
@@ -1008,15 +1091,15 @@ PAYLOADS = {
 class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
-        self.assertEqual(len(FEATURE_MODULES), 200)
-        self.assertEqual(len(set(FEATURE_MODULES)), 200)
-        self.assertEqual(count(), 200)
-        self.assertEqual(len(entries), 200)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 200)
+        self.assertEqual(len(FEATURE_MODULES), 201)
+        self.assertEqual(len(set(FEATURE_MODULES)), 201)
+        self.assertEqual(count(), 201)
+        self.assertEqual(len(entries), 201)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 201)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F291"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F291", "F292"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1134,6 +1217,81 @@ class FeatureCatalogTests(unittest.TestCase):
         duplicate = {**payload, "reports": payload["reports"][:-1] + [payload["reports"][0]]}
         with self.assertRaisesRegex(ValueError, "duplicate report"):
             run("enterprise_network_security_evidence_report", duplicate)
+
+    def test_f292_client_experience_slo_excludes_incomplete_samples_and_reports_coverage(self):
+        result = run("client_experience_slo_evaluator", PAYLOADS["client_experience_slo_evaluator"])["result"]
+        summary = result["summary"]
+        self.assertEqual(result["status"], "threshold_breaches")
+        self.assertEqual(result["fresh_sample_count"], 4)
+        self.assertEqual(result["stale_sample_count"], 1)
+        self.assertEqual(summary["eligible_slo_sample_count"], 2)
+        self.assertEqual(summary["passing_slo_sample_count"], 1)
+        self.assertEqual(summary["breached_slo_sample_count"], 1)
+        self.assertEqual(summary["incomplete_required_sample_count"], 2)
+        self.assertEqual(summary["sla_attainment_pct"], 50.0)
+        self.assertEqual(summary["metric_summary"]["rssi_dbm"]["coverage_pct"], 50.0)
+        self.assertEqual(summary["metric_summary"]["throughput_mbps"]["breach_count"], 1)
+        serialized = json.dumps(result)
+        self.assertNotIn("station-private-alpha", serialized)
+        self.assertNotIn("qoe-001", serialized)
+
+    def test_f292_client_experience_report_isolated_per_site_and_client(self):
+        result = run("client_experience_slo_evaluator", PAYLOADS["client_experience_slo_evaluator"])["result"]
+        self.assertEqual(result["reported_site_count"], 1)
+        self.assertEqual(result["reported_client_count"], 2)
+        self.assertEqual(result["sites"][0]["client_count"], 2)
+        self.assertTrue(all(item["client_ref"].startswith("client-") for item in result["clients"]))
+        self.assertEqual({item["site_id"] for item in result["clients"]}, {"hq"})
+
+    def test_f292_client_experience_without_required_metrics_does_not_invent_slo_passes(self):
+        payload = {
+            "as_of": "2026-11-21T12:00:00Z",
+            "samples": [{
+                "sample_id": "qoe-unknown",
+                "site_id": "hq",
+                "client_ref": "client-unknown",
+                "observed_at": "2026-11-21T11:59:00Z",
+                "evidence_source": "agent",
+                "metrics": {"throughput_mbps": 400},
+            }],
+        }
+        result = run("client_experience_slo_evaluator", payload)["result"]
+        self.assertEqual(result["status"], "insufficient_evidence")
+        self.assertIsNone(result["summary"]["sla_attainment_pct"])
+        self.assertEqual(result["summary"]["eligible_slo_sample_count"], 0)
+        self.assertEqual(result["summary"]["sample_status_counts"]["insufficient_metrics"], 1)
+
+    def test_f292_client_experience_validates_thresholds_timestamps_and_metric_ranges(self):
+        payload = PAYLOADS["client_experience_slo_evaluator"]
+        with self.assertRaisesRegex(ValueError, "include a timezone offset"):
+            run("client_experience_slo_evaluator", {"samples":[{
+                **payload["samples"][0], "observed_at":"2026-11-21T11:00:00"
+            }]})
+        with self.assertRaisesRegex(ValueError, "unknown threshold"):
+            run("client_experience_slo_evaluator", {
+                "samples":payload["samples"], "thresholds":{"magical_rssi": -60}
+            })
+        bad = {**payload["samples"][0], "metrics":{**payload["samples"][0]["metrics"],"packet_loss_pct":101}}
+        with self.assertRaisesRegex(ValueError, "packet_loss_pct"):
+            run("client_experience_slo_evaluator", {"samples":[bad]})
+        with self.assertRaisesRegex(ValueError, "active threshold"):
+            run("client_experience_slo_evaluator", {
+                "samples":payload["samples"], "thresholds":{"rssi_dbm":None},
+                "required_metrics":["rssi_dbm"],
+            })
+
+    def test_f292_client_experience_rejects_duplicates_future_samples_and_unknown_sources(self):
+        sample = PAYLOADS["client_experience_slo_evaluator"]["samples"][0]
+        with self.assertRaisesRegex(ValueError, "unique"):
+            run("client_experience_slo_evaluator", {"samples":[sample,sample]})
+        future = {**sample,"observed_at":"2026-11-21T12:10:00Z"}
+        with self.assertRaisesRegex(ValueError, "future"):
+            run("client_experience_slo_evaluator", {
+                "as_of":"2026-11-21T12:00:00Z","samples":[future]
+            })
+        unknown = {**sample,"evidence_source":"guessed"}
+        with self.assertRaisesRegex(ValueError, "evidence_source"):
+            run("client_experience_slo_evaluator", {"samples":[unknown]})
 
     def test_f291_correlates_completed_failed_and_incomplete_roam_transactions(self):
         result = run("client_roam_transaction_analyzer", PAYLOADS["client_roam_transaction_analyzer"])["result"]

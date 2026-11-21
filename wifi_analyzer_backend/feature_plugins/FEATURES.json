@@ -1649,5 +1649,18 @@
       "events": "1-10000 timestamped association, disassociation and roam transaction events, scoped by site and pseudonymous client reference",
       "slow_roam_threshold_ms": "Optional 50-30000 ms threshold for completed roam transactions; defaults to 1000 ms"
     }
+  },
+  {
+    "slug": "client_experience_slo_evaluator",
+    "name": "Client experience SLO evaluator",
+    "category": "Client QoS",
+    "description": "Aggregate fresh timestamped per-client Wi-Fi measurements against configurable signal, SNR, retry, airtime, loss, latency, jitter and optional throughput thresholds; report coverage and SLO attainment without counting missing required telemetry as a pass.",
+    "parameters": {
+      "samples": "1-10000 timestamped sample records with site ID, pseudonymous client reference, evidence source and supplied metric values",
+      "required_metrics": "Optional metric names that must be present before a sample enters the SLO denominator",
+      "thresholds": "Optional metric thresholds; defaults are documented in the result and throughput is unscored unless min throughput is supplied",
+      "as_of": "Optional timezone-aware assessment timestamp for deterministic reports; defaults to server UTC time",
+      "max_age_days": "Optional freshness window from 1 to 30 days; defaults to 7"
+    }
   }
 ]

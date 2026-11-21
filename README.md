@@ -181,7 +181,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 200 built-in tools |
+| `GET /api/features` | Authenticated catalogue of the 201 built-in tools |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/security/audit` | Owner/administrator paginated security events and outcome filters |
@@ -410,3 +410,8 @@ F202 normalises fresh, timestamped pairwise survey/controller observations into 
 ## Client roaming transaction diagnostics (F291)
 
 The Feature Workbench includes a guided client roam transaction analyzer. Import controller, agent or client event exports containing explicit `roam_start`, `roam_complete` and `roam_failure` records with timezone-aware timestamps, site ID, an opaque client reference and a transaction ID. The analyzer reports successful roam latency percentiles, failure rate based only on matched start/terminal pairs, slow-roam counts and disassociation reason codes. Unpaired records are surfaced as incomplete telemetry and excluded from timing metrics. Returned client references are report-local aliases; raw event and roam IDs are not returned. This is offline event analysis, not a live 802.11 protocol decoder or a source of inferred timing.
+
+
+## Client experience SLO analysis (F292)
+
+F292 summarises timestamped, per-client measurements from a controller, local agent, client telemetry export or active probe. Supply the metrics actually collected (RSSI, SNR, retry rate, airtime utilisation, packet loss, RTT, jitter and optionally throughput), set site-specific requirements and threshold overrides, and receive per-site/client metric coverage, p95/median values and sample-weighted SLO attainment. Samples missing configured required metrics are excluded from the pass/fail denominator and reported as incomplete. Client references are replaced with report-local aliases; raw sample identifiers are not returned. F292 does not infer measurements or claim application-specific QoE.

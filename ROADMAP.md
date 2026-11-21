@@ -17,7 +17,7 @@ This is the plan for WiFi Analyzer Pro. Dates are targets, not promises. Priorit
 | ✅ v1.0.4 | Rogue AP detection, channel recommendations |
 | ✅ v1.0.5 | Wireless analytics, dashboard visualisation and device discovery |
 | ✅ v1.0.6 | Live data API integration for scans, system data, PHY, diagnostics, devices and speed tests |
-| 🚧 v1.0.7 (unreleased) | 200 callable feature tools (F001–F168, F172–F202 and F291), local account gate, authenticated feature API, searchable workbench and packaging integration |
+| 🚧 v1.0.7 (unreleased) | 201 callable feature tools (F001–F168, F172–F202 and F291–F292), local account gate, authenticated feature API, searchable workbench and packaging integration |
 
 ---
 
@@ -39,7 +39,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ## v1.1.0: Extensibility and capture
 
 ### Shipped in the current main branch
-- ✅ 200 distinct callable feature modules (F001–F168, F172–F202 and F291), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
+- ✅ 201 distinct callable feature modules (F001–F168, F172–F202 and F291–F292), each in its own module with a stable slug and metadata; F169–F171 are OpenWrt agent, negotiated system-health and Router Agent Console deliverables.
 - ✅ Central feature registry and searchable Feature Workbench.
 - ✅ Local first-run workspace owner, version-1 credential migration, named human accounts, salted scrypt verifiers, independent short-lived sessions, failed-login lockout and session revocation for disabled/password-reset accounts.
 - ✅ Server-enforced role permissions for owner, administrator, network administrator, analyst and read-only viewer across user, agent, report, site and diagnostic endpoints.
@@ -206,3 +206,11 @@ Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a publ
 - ✅ Unpaired starts and terminals remain incomplete telemetry and are excluded from latency and failure-rate denominators; the analyzer never estimates missing timestamps from snapshot intervals.
 - ✅ Client references, event IDs and controller transaction IDs are replaced or omitted from returned details; AP IDs and site IDs remain available for operational investigation.
 - ⚠️ F291 analyses caller-supplied event exports; evidence-source labels are caller-declared, not cryptographically attested. It is not a live packet capture, 802.11k/v/r protocol decoder or autonomous client intervention.
+
+
+### F292 delivered — client experience SLO evaluation
+
+- ✅ F292 evaluates fresh, timestamped per-client controller/agent/client/probe measurements against configurable RSSI, SNR, retry, airtime, packet-loss, RTT and jitter thresholds; throughput remains unscored unless an operator supplies a minimum throughput target.
+- ✅ Reports per-client and per-site sample-weighted SLA attainment, p95/median metric summaries, metric coverage and breach counts. The operator can specify required metrics; samples missing required telemetry are excluded from the SLA denominator rather than being counted as healthy.
+- ✅ Enforces bounded input, timestamp freshness, metric ranges and evidence-source labels; client references and raw sample IDs are not returned. Reports are analysis-only and are not persisted.
+- ⚠️ F292 does not make app-specific QoE claims, infer missing measurements or attest caller-declared evidence sources. SLO results describe only the supplied sample window and metric contract.

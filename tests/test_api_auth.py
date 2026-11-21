@@ -1074,8 +1074,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 200)
-        self.assertEqual(len(catalog["features"]), 200)
+        self.assertEqual(catalog["count"], 201)
+        self.assertEqual(len(catalog["features"]), 201)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -1100,6 +1100,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("enterprise_network_security_evidence_report", {item["slug"] for item in catalog["features"]})
         self.assertIn("multi_ap_channel_reuse_planner", {item["slug"] for item in catalog["features"]})
         self.assertIn("rf_survey_evidence_normalizer", {item["slug"] for item in catalog["features"]})
+        self.assertIn("client_experience_slo_evaluator", {item["slug"] for item in catalog["features"]})
 
     def test_f195_to_f201_security_and_rf_tools_run_through_authenticated_feature_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "owner passphrase is secure"})
@@ -1173,7 +1174,16 @@ class AuthenticatedApiTests(unittest.TestCase):
                 "observations": [
                     {"sample_id":"api-survey-001","radio_ids":["hq-ap1-24","hq-ap2-24"],"observed_at":"2026-11-21T04:00:00Z","evidence_source":"survey","radio_rssi_dbm":[-54,-63],"channel_utilization_pct":65},
                 ],
-            }, "F202")
+            }, "F202"),
+            ("client_experience_slo_evaluator", {
+                "as_of":"2026-11-21T12:00:00Z",
+                "required_metrics":["rssi_dbm","packet_loss_pct","rtt_ms"],
+                "samples":[{
+                    "sample_id":"api-qoe-001","site_id":"hq","client_ref":"client-opaque-001",
+                    "observed_at":"2026-11-21T11:59:00Z","evidence_source":"controller",
+                    "metrics":{"rssi_dbm":-58,"packet_loss_pct":0.1,"rtt_ms":24}
+                }]
+            }, "F292"),
         ]
         for slug, payload, expected in cases:
             with self.subTest(feature=slug):
@@ -2375,6 +2385,52 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(result["result"]["summary"]["client_count"], 1)
         self.assertEqual(result["result"]["summary"]["observation_count"], 1)
 
+    def test_f292_client_experience_evaluator_enforces_assigned_site_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "client experience scope owner password",
+        })
+        owner_token = setup["token"]
+        self.request("POST", "/api/users", {
+            "username": "qoe.analyst",
+            "password": "qoe analyst secure password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["home"],
+        }, token=owner_token)
+        _, login = self.request("POST", "/api/auth/login", {
+            "username": "qoe.analyst",
+            "password": "qoe analyst secure password",
+        })
+        token = login["token"]
+        payload = {
+            "as_of": "2026-11-21T12:00:00Z",
+            "samples": [{
+                "sample_id": "qoe-home-001", "site_id": "home", "client_ref": "station-home",
+                "observed_at": "2026-11-21T11:59:00Z", "evidence_source": "probe",
+                "metrics": {"rssi_dbm": -60, "packet_loss_pct": 0.2, "rtt_ms": 25},
+            }],
+        }
+        status, allowed = self.request(
+            "POST", "/api/features/client_experience_slo_evaluator", payload, token=token,
+        )
+        self.assertEqual(status, 200, allowed)
+        self.assertEqual(allowed["feature"], "F292")
+        self.assertEqual(allowed["result"]["status"], "within_thresholds")
+
+        cross_site = {
+            **payload,
+            "samples": payload["samples"] + [{
+                "sample_id": "qoe-branch-001", "site_id": "branch", "client_ref": "station-branch",
+                "observed_at": "2026-11-21T11:59:00Z", "evidence_source": "probe",
+                "metrics": {"rssi_dbm": -60, "packet_loss_pct": 0.2, "rtt_ms": 25},
+            }],
+        }
+        status, denied = self.request(
+            "POST", "/api/features/client_experience_slo_evaluator", cross_site, token=token,
+        )
+        self.assertEqual(status, 403, denied)
+        self.assertIn("outside your assigned access scope", denied["error"])
+
     def test_f291_client_roam_transaction_analyzer_enforces_site_scope(self):
         _, setup = self.request("POST", "/api/auth/setup", {
             "password": "roam analyzer owner secure password",
@@ -2973,7 +3029,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 200)
+        self.assertEqual(catalog["count"], 201)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,

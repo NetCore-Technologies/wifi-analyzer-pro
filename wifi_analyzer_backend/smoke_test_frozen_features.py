@@ -16,8 +16,9 @@ REQUIRED_FEATURES = {
     "multi_ap_channel_reuse_planner",
     "rf_survey_evidence_normalizer",
     "client_roam_transaction_analyzer",
+    "client_experience_slo_evaluator",
 }
-MINIMUM_FEATURE_COUNT = 200
+MINIMUM_FEATURE_COUNT = 201
 PCAP_FIXTURE = "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"
 
 
@@ -143,6 +144,21 @@ def main() -> None:
     )
     if roam_result.get("feature") != "F291" or roam_result.get("result", {}).get("summary", {}).get("median_roam_latency_ms") != 250.0:
         raise SystemExit("Frozen client roam transaction analyzer did not execute successfully")
+    qoe_result = request(
+        "/api/features/client_experience_slo_evaluator",
+        {
+            "as_of": now,
+            "required_metrics": ["rssi_dbm", "packet_loss_pct", "rtt_ms"],
+            "samples": [{
+                "sample_id": "frozen-qoe-001", "site_id": "smoke", "client_ref": "station-smoke",
+                "observed_at": now, "evidence_source": "controller",
+                "metrics": {"rssi_dbm": -58, "packet_loss_pct": 0.1, "rtt_ms": 20},
+            }],
+        },
+        token=token,
+    )
+    if qoe_result.get("feature") != "F292" or qoe_result.get("result", {}).get("status") != "within_thresholds":
+        raise SystemExit("Frozen client experience SLO evaluator did not execute successfully")
     print(f"Frozen feature smoke test passed ({catalog['count']} registered features)")
 
 

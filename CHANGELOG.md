@@ -100,3 +100,5 @@ All notable changes to WiFi Analyzer Pro are documented here.
 
 
 - Add F291, a bounded client roam transaction analyzer for explicit controller/agent/client events. Correlate matched starts and completions/failures, calculate latency percentiles and matched failure rates, surface incomplete telemetry and disassociation reasons, and replace input client references with report-local aliases.
+
+- Add F292 client experience SLO evaluation for fresh timestamped per-client measurements, configurable Wi-Fi quality thresholds, per-site/client coverage and sample-weighted SLA attainment. Missing required telemetry is excluded from the pass denominator, identities are report-local aliases, and caller-declared provenance remains explicit.

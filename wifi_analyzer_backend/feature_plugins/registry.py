@@ -204,6 +204,7 @@ FEATURE_MODULES = (
     "feature_201_multi_ap_channel_reuse_planner",
     "feature_202_rf_survey_evidence_normalizer",
     "feature_291_client_roam_transaction_analyzer",
+    "feature_292_client_experience_slo_evaluator",
 )
 
 @lru_cache(maxsize=1)
