@@ -520,3 +520,7 @@ select option {
   .wa-command-meta { align-items:flex-start;flex-direction:column; }
   .wa-command-footer { padding:9px 12px; }
 }
+
+@media(max-width:760px) {
+  .wa-topbar-actions>.wa-command-trigger { display:flex!important; }
+}
