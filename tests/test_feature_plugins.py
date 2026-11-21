@@ -974,11 +974,11 @@ class FeatureCatalogTests(unittest.TestCase):
         self.assertEqual(len(set(FEATURE_MODULES)), 197)
         self.assertEqual(count(), 197)
         self.assertEqual(len(entries), 197)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 191)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 197)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "173", "174", "175", "176", "177", "178", "179", "180", "181", "182", "183", "184", "185", "186", "187", "188", "189", "190", "191", "192", "193", "194", "195", "196", "197", "198", "199", "200"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
