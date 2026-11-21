@@ -200,10 +200,10 @@ export default function BillingPanel() {
                         <span>{{ users: "Users", agents: "Router agents", webhook_subscriptions: "Webhook subscriptions" }[key]}</span><strong style={{ color: "#e2e8f0" }}>{value}</strong>
                       </div>
                     ))}
-                    <button type="button" disabled={!!busy || current || !plan.available_for_checkout || !billing.billing_configured}
+                    <button type="button" disabled={!!busy || active || !plan.available_for_checkout || !billing.billing_configured || !billing.webhook_configured}
                       onClick={() => startCheckout(plan.plan_id)}
-                      style={{ ...button, width: "100%", marginTop: 12, opacity: current || !plan.available_for_checkout || !billing.billing_configured ? .45 : 1, cursor: current || !plan.available_for_checkout || !billing.billing_configured ? "not-allowed" : "pointer" }}>
-                      {current ? "Current plan" : busy === plan.plan_id ? "Opening checkout…" : plan.available_for_checkout ? `Choose ${plan.label}` : "Price not configured"}
+                      style={{ ...button, width: "100%", marginTop: 12, opacity: active || !plan.available_for_checkout || !billing.billing_configured || !billing.webhook_configured ? .45 : 1, cursor: active || !plan.available_for_checkout || !billing.billing_configured || !billing.webhook_configured ? "not-allowed" : "pointer" }}>
+                      {current ? "Current plan" : active ? "Use billing portal" : busy === plan.plan_id ? "Opening checkout…" : plan.available_for_checkout ? `Choose ${plan.label}` : "Price not configured"}
                     </button>
                   </div>
                 );

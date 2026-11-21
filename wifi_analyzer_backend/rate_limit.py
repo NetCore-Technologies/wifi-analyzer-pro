@@ -28,6 +28,8 @@ DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "api.webhook.manage": (30, 60),
     "api.webhook.probe": (10, 300),
     "api.billing.webhook": (120, 60),
+    "api.billing.checkout": (5, 60),
+    "api.billing.portal": (10, 60),
 }
 
 

@@ -1047,6 +1047,14 @@ export default function App() {
   },[preferences]);
 
   useEffect(()=>{
+    const billingState = new URLSearchParams(window.location.search).get("billing");
+    if (["success", "cancel", "return"].includes(billingState)) {
+      setTab("billing");
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+  }, []);
+
+  useEffect(()=>{
     let disposed=false;
     const refreshLiveData=async()=>{
       try{

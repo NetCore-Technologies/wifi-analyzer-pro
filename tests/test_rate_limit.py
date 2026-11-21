@@ -9,6 +9,11 @@ from wifi_analyzer_backend.rate_limit import TokenBucketRateLimiter
 
 
 class TokenBucketRateLimiterTests(unittest.TestCase):
+    def test_billing_sensitive_routes_have_bounded_burst_policies(self):
+        self.assertEqual(DEFAULT_POLICIES["api.billing.checkout"], (5, 60))
+        self.assertEqual(DEFAULT_POLICIES["api.billing.portal"], (10, 60))
+        self.assertEqual(DEFAULT_POLICIES["api.billing.webhook"], (120, 60))
+
     def test_burst_is_limited_and_tokens_refill_over_time(self):
         limiter = TokenBucketRateLimiter()
         self.assertTrue(limiter.consume("user-1", capacity=2, period_seconds=60, now=100)["allowed"])
