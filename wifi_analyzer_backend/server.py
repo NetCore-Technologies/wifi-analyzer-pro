@@ -221,9 +221,9 @@ def enrich(net):
     elif net.get("snr") is not None:
         snr = net["snr"]
         if not isinstance(snr, (int, float)) or isinstance(snr, bool) or not math.isfinite(snr) or not -20 <= snr <= 150:
-            net["snr"] = None
+            net.pop("snr", None)
     else:
-        net["snr"] = None
+        net.pop("snr", None)
     return net
 
 # ── Scan ──────────────────────────────────────────────────────────────────────
@@ -428,14 +428,15 @@ def parse_system_profiler(out):
 
 def parse_netsh(out):
     nets = []
-    for block in re.split(r"SSID \d+ :", out)[1:]:
+    for block in re.split(r"(?im)^[ \t]*SSID \d+ :", out)[1:]:
         network = {}
         match = re.search(r"^\s*(.+)", block)
         network["ssid"] = match.group(1).strip() if match else ""
         match = re.search(r"BSSID \d+\s*:\s*([0-9a-f:]{17})", block, re.I)
         network["bssid"] = match.group(1).upper() if match else None
-        match = re.search(r"Signal\s*:\s*(\d+)%", block)
-        network["signal_pct"] = int(match.group(1)) if match else None
+        match = re.search(r"(?im)^[ \t]*Signal[ \t]*:[ \t]*(\d{1,3})[ \t]*%", block)
+        signal_pct = int(match.group(1)) if match else None
+        network["signal_pct"] = signal_pct if signal_pct is not None and 0 <= signal_pct <= 100 else None
         # netsh reports a percentage, not dBm. Do not turn it into a fabricated RSSI value.
         network["rssi"] = None
         match = re.search(r"Channel\s*:\s*(\d+)", block)

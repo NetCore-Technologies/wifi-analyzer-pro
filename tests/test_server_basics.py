@@ -112,6 +112,30 @@ class ScanParserTests(unittest.TestCase):
         self.assertIsNone(network["rssi"])
         self.assertIsNone(network["quality"])
 
+    def test_netsh_multiple_bssids_do_not_split_ssid_blocks(self):
+        output = """SSID 1 : Corporate
+            BSSID 1 : AA:BB:CC:DD:EE:10
+            Signal : 75%
+            Channel : 36
+            Authentication : WPA2-Personal
+            BSSID 2 : AA:BB:CC:DD:EE:11
+            Signal : 65%
+            Channel : 40
+            Authentication : WPA2-Personal
+        SSID 2 : Guest
+            BSSID 1 : AA:BB:CC:DD:EE:20
+            Signal : 30%
+            Channel : 11
+            Authentication : Open
+        """
+        networks = server.parse_netsh(output)
+        self.assertEqual([network["ssid"] for network in networks], ["Corporate", "Guest"])
+        self.assertEqual([network["bssid"] for network in networks], [
+            "AA:BB:CC:DD:EE:10", "AA:BB:CC:DD:EE:20",
+        ])
+        self.assertEqual([network["signal_pct"] for network in networks], [75, 30])
+        self.assertTrue(all(network["rssi"] is None for network in networks))
+
     def test_netsh_signal_percentage_is_not_relabelled_as_measured_rssi(self):
         output = """SSID 1 : Windows-Network
             BSSID 1 : aa:bb:cc:dd:ee:06
