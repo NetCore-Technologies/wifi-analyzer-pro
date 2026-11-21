@@ -324,10 +324,19 @@ signing private key never belong in customer deployments.
 ### Configure the vendor service
 
 Create recurring Stripe Prices for Pro, Business and Enterprise in the vendor's
-Stripe account. Generate an Ed25519 signing key and store its raw 32-byte
-private key as base64 in a file outside the repository, owned by the service
-account with mode 0600. Configure the matching public key in customer
-installations. Back up the vendor licensing SQLite database.
+Stripe account. Generate a dedicated Ed25519 signing key using:
+
+```sh
+python scripts/generate_vendor_license_keys.py \
+  --private-key-file /secure/vendor-secrets/wifi-analyzer-license.key \
+  --key-id primary
+```
+
+The utility writes a base64 raw 32-byte private key with mode 0600 and prints
+only the corresponding public key and key ID for customer installations. It
+refuses to overwrite an existing key. Store the private key outside the
+repository and mount it only into the vendor service. Back up the vendor
+licensing SQLite database and the signing key separately.
 
 Set `WIFI_ANALYZER_LICENSE_SERVICE_PUBLIC_URL`, the vendor Stripe secret and
 webhook signing secret, the recurring Price IDs, and

@@ -11,3 +11,8 @@ wifi_analyzer_backend/.venv/
 .venv/
 *.spec
 .DS_Store
+
+# Vendor-only payment and signing material
+vendor-secrets/
+vendor-license-signing-key*
+*.license-private-key
