@@ -22,8 +22,8 @@ function Metric({ label, value, detail }) {
 }
 
 export default function ClientExperienceSloWindowComparator() {
-  const [baselineAsOf, setBaselineAsOf] = useState('2026-11-13T12:00:00Z');
-  const [comparisonAsOf, setComparisonAsOf] = useState('2026-11-21T12:00:00Z');
+  const [baselineAsOf, setBaselineAsOf] = useState('');
+  const [comparisonAsOf, setComparisonAsOf] = useState('');
   const [baselineText, setBaselineText] = useState('[\n]\n');
   const [comparisonText, setComparisonText] = useState('[\n]\n');
   const [requiredMetrics, setRequiredMetrics] = useState(DEFAULT_REQUIRED);
@@ -64,6 +64,13 @@ export default function ClientExperienceSloWindowComparator() {
     setResult(null);
     try {
       const baselineSamples = JSON.parse(baselineText);
+      const timezoneAware = value => /(?:Z|[+-]\\d{2}:\\d{2})$/i.test(value) && Number.isFinite(Date.parse(value));
+      if (!baselineAsOf.trim() || !timezoneAware(baselineAsOf.trim())) {
+        throw new Error('Enter a valid timezone-aware baseline window end timestamp.');
+      }
+      if (!comparisonAsOf.trim() || !timezoneAware(comparisonAsOf.trim())) {
+        throw new Error('Enter a valid timezone-aware comparison window end timestamp.');
+      }
       const comparisonSamples = JSON.parse(comparisonText);
       if (!Array.isArray(baselineSamples) || !baselineSamples.length) throw new Error('Provide baseline observation records.');
       if (!Array.isArray(comparisonSamples) || !comparisonSamples.length) throw new Error('Provide comparison observation records.');
@@ -73,6 +80,9 @@ export default function ClientExperienceSloWindowComparator() {
       if (!Number.isInteger(age) || age < 1 || age > 30) throw new Error('Freshness window must be a whole number from 1 to 30 days.');
       if (!Number.isInteger(minimum) || minimum < 1 || minimum > 10000) throw new Error('Minimum eligible samples must be a whole number from 1 to 10000.');
       if (!Number.isFinite(regression) || regression < 0.1 || regression > 100) throw new Error('Regression threshold must be from 0.1 to 100 percentage points.');
+      if (Date.parse(comparisonAsOf) <= Date.parse(baselineAsOf) + age * 86400000) {
+        throw new Error('Baseline and comparison window ends must be more than the freshness window apart.');
+      }
       if (!requiredMetrics.length) throw new Error('Select at least one required metric so incomplete samples cannot be treated as healthy.');
       if (requiredMetrics.includes('throughput_mbps') && !thresholdOverrides.throughput_mbps?.trim()) {
         throw new Error('Set a minimum throughput threshold before making throughput a required metric.');
