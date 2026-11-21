@@ -104,11 +104,22 @@ For systemd deployments, including the API and both optional workers, see deploy
 
 ## Optional subscription billing
 
-WiFi Analyzer Pro can use Stripe-hosted subscriptions. This feature is disabled
-by default; local installations continue to work on the Free plan until the
-operator configures Stripe. Create recurring Stripe Prices for the Pro,
-Business and/or Enterprise plans, then configure their IDs as server-side
-environment variables. Amounts, billing intervals and currency remain defined
+WiFi Analyzer Pro supports two separate billing concepts:
+
+- **Vendor product licensing:** the NetCore product licence is a signed Ed25519
+  token bound to one installation. Customer installations contain only the
+  vendor public verification key. The vendor signing private key belongs on a
+  separate licensing control plane and must never be copied to customer hosts.
+  Owners activate a signed token in Plans & Licensing. This local verifier is
+  implemented; the vendor-hosted checkout/issuance service is a separate
+  deployment milestone and is not claimed as live yet.
+- **Optional workspace billing:** an installation operator can configure its
+  own Stripe account to charge its own organisation or customers. This is not
+  payment to NetCore and is not the vendor subscription flow.
+
+Workspace Stripe billing is disabled by default. Create recurring Stripe
+Prices for Pro, Business and/or Enterprise and configure their IDs as
+server-side environment variables. Amounts, intervals and currency are defined
 by those Stripe Prices rather than hard-coded in the application.
 
 For Docker Compose, copy `.env.example` to `.env` and set:
@@ -117,6 +128,7 @@ For Docker Compose, copy `.env.example` to `.env` and set:
 - `WIFI_ANALYZER_STRIPE_SECRET_KEY`: a restricted or standard Stripe secret key.
 - `WIFI_ANALYZER_STRIPE_WEBHOOK_SECRET`: the signing secret for the webhook endpoint.
 - `WIFI_ANALYZER_STRIPE_PRICE_PRO`, `WIFI_ANALYZER_STRIPE_PRICE_BUSINESS`, and `WIFI_ANALYZER_STRIPE_PRICE_ENTERPRISE`: optional Stripe recurring Price IDs.
+- `WIFI_ANALYZER_VENDOR_LICENSE_PUBLIC_KEY` and `WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID`: public verification key and key ID for vendor-issued product licences. These are not secret values.
 
 Configure a Stripe webhook at `{WIFI_ANALYZER_PUBLIC_URL}/api/billing/webhook`
 for `checkout.session.completed`, `customer.subscription.created`,

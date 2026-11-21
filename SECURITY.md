@@ -168,3 +168,20 @@ by a process lock and are designed for the single-process local API server.
 Do not use these local quotas as a shared multi-process SaaS billing boundary;
 pooled hosting needs central tenant isolation and transactional quota
 coordination.
+
+
+## Vendor product licence boundary
+
+Customer installations verify vendor-issued Ed25519 product licences using
+public keys configured through `WIFI_ANALYZER_VENDOR_LICENSE_PUBLIC_KEY`.
+The licence token is bound to the installation's generated identifier and
+contains a plan whose quota limits must exactly match the server's plan
+catalogue. Tokens are stored with owner-only file permissions and have a
+bounded 72-hour offline grace period. An installed invalid or expired licence
+fails closed to Free entitlements.
+
+The matching Ed25519 private signing key must remain on the vendor-controlled
+licensing service. Do not configure that private key, Stripe vendor credentials
+or vendor control-plane database on customer installations. The local
+`WIFI_ANALYZER_STRIPE_SECRET_KEY` feature is optional customer-managed
+workspace billing and does not collect subscription revenue for NetCore.

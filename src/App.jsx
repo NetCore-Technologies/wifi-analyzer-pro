@@ -881,7 +881,7 @@ const NAV=[
     {id:"router",label:"Router Support",   Icon:Server},
     {id:"agents",label:"Router Agents",    Icon:Shield},
     {id:"webhookDelivery",label:"Webhook Delivery",Icon:Network},
-    {id:"billing",label:"Subscription & Billing",Icon:CreditCard},
+    {id:"billing",label:"Plans & Licensing",Icon:CreditCard},
     {id:"teamAccess",label:"Team Access",   Icon:Users},
     {id:"accountSecurity",label:"Account Security",Icon:Lock},
     {id:"securityAudit",label:"Security Audit",Icon:ClipboardList},

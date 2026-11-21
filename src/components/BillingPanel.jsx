@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api.js";
-import { CreditCard, RefreshCw, ExternalLink, ShieldCheck, AlertCircle } from "lucide-react";
+import { CreditCard, RefreshCw, ExternalLink, ShieldCheck, AlertCircle, KeyRound } from "lucide-react";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
 const panel = {
@@ -29,6 +29,8 @@ export default function BillingPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [licenseToken, setLicenseToken] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -99,10 +101,34 @@ export default function BillingPanel() {
     }
   };
 
+  const activateVendorLicense = async () => {
+    setBusy("license");
+    setError("");
+    setNotice("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/license/activate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ license_token: licenseToken.trim() }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Licence activation returned HTTP ${response.status}`);
+      setLicenseToken("");
+      setNotice(`Product licence activated: ${data.license?.plan_label || data.license?.plan_id}.`);
+      await load();
+    } catch (err) {
+      setError(err.message || "Could not activate the product licence.");
+    } finally {
+      setBusy("");
+    }
+  };
+
   const limits = billing?.limits || {};
   const usage = billing?.usage || {};
   const activePlan = billing?.plan_id || "free";
   const active = billing?.active === true;
+  const productLicense = billing?.product_license || {};
 
   return (
     <div style={{ display: "grid", gap: 14, maxWidth: 1100 }}>
@@ -113,8 +139,8 @@ export default function BillingPanel() {
               <CreditCard size={18} color="#06d6f0"/>
             </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 750 }}>Subscription & billing</div>
-              <div style={{ color: "#64748b", fontSize: 11 }}>Workspace plan, service limits and payment management</div>
+              <div style={{ fontSize: 16, fontWeight: 750 }}>Plans & licensing</div>
+              <div style={{ color: "#64748b", fontSize: 11 }}>Vendor product licence and optional workspace billing</div>
             </div>
           </div>
           <button type="button" onClick={load} disabled={loading || !!busy} style={quietButton}>
@@ -122,17 +148,62 @@ export default function BillingPanel() {
           </button>
         </div>
         {error ? <div role="alert" style={{ marginTop: 13, color: "#fca5a5", fontSize: 12, display: "flex", gap: 7 }}><AlertCircle size={14}/>{error}</div> : null}
+        {notice ? <div role="status" style={{ marginTop: 9, color: "#86efac", fontSize: 12 }}>{notice}</div> : null}
         </section>
 
       {loading && !billing ? <section style={panel}>Loading billing status…</section> : null}
       {billing ? (
         <>
+          <section style={panel}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
+              <KeyRound size={16} color="#06d6f0"/>
+              <div style={{ fontSize: 13, fontWeight: 750 }}>NetCore product licence</div>
+              <span style={{ marginLeft: "auto", color: productLicense.active ? "#86efac" : "#fbbf24", fontSize: 10, fontWeight: 700 }}>
+                {productLicense.active ? (productLicense.grace_period ? "OFFLINE GRACE" : "ACTIVE") : productLicense.installed ? "INVALID / EXPIRED" : "NOT ACTIVATED"}
+              </span>
+            </div>
+            {productLicense.active ? (
+              <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 10 }}>
+                {productLicense.plan_label} licence · expires {formatDate(new Date(productLicense.expires_at * 1000).toISOString())}
+                {productLicense.grace_period ? " · reconnect to renew" : ""}
+              </div>
+            ) : (
+              <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 10 }}>
+                {productLicense.error || "Paste the signed product licence supplied by NetCore to unlock your purchased plan."}
+              </div>
+            )}
+            <textarea
+              value={licenseToken}
+              onChange={event => setLicenseToken(event.target.value)}
+              placeholder="Paste vendor-signed product licence token"
+              aria-label="Vendor product licence token"
+              rows={3}
+              spellCheck={false}
+              style={{ width: "100%", boxSizing: "border-box", resize: "vertical", background: "#080d18", border: "1px solid #263956", borderRadius: 7, padding: 10, color: "#e2e8f0", fontSize: 11, fontFamily: "monospace" }}
+            />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 9 }}>
+              <span style={{ color: "#64748b", fontSize: 10 }}>
+                The installation stores the signed token locally; the vendor private signing key never leaves the licensing service.
+              </span>
+              <button type="button" disabled={!productLicense.configured || !licenseToken.trim() || !!busy}
+                onClick={activateVendorLicense}
+                style={{ ...button, opacity: !productLicense.configured || !licenseToken.trim() || !!busy ? .45 : 1 }}>
+                <KeyRound size={13}/>{busy === "license" ? "Activating…" : "Activate product licence"}
+              </button>
+            </div>
+            {!productLicense.configured ? (
+              <p style={{ color: "#fbbf24", fontSize: 10, margin: "9px 0 0" }}>
+                The vendor public verification key has not been configured on this installation. Contact the product administrator.
+              </p>
+            ) : null}
+          </section>
+
           <section style={{ ...panel, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
             <div>
               <div style={{ color: "#64748b", fontSize: 10, letterSpacing: 1 }}>CURRENT PLAN</div>
               <div style={{ fontSize: 22, fontWeight: 800, marginTop: 5 }}>{billing.plan_label}</div>
               <div style={{ color: active ? "#86efac" : "#fbbf24", fontSize: 11, marginTop: 4 }}>
-                {active ? (billing.grace_period ? "Payment grace period" : billing.subscription_status) : "Free plan"}
+                {productLicense.active ? (productLicense.grace_period ? "Vendor licence offline grace" : "Vendor product licence") : active ? (billing.grace_period ? "Payment grace period" : billing.subscription_status) : "Free plan"}
               </div>
             </div>
             <div>
@@ -182,8 +253,8 @@ export default function BillingPanel() {
           <section style={panel}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 750 }}>Choose a plan</div>
-                <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>Prices, billing intervals and currency are configured in your Stripe account.</div>
+                <div style={{ fontSize: 13, fontWeight: 750 }}>Optional workspace billing</div>
+                <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>This uses the installation operator’s Stripe account. It is separate from paying NetCore for the product licence.</div>
               </div>
               {billing.portal_available ? (
                 <button type="button" disabled={!!busy} onClick={openPortal} style={quietButton}>
@@ -200,7 +271,7 @@ export default function BillingPanel() {
                     <div style={{ color: "#64748b", fontSize: 10, margin: "5px 0 10px" }}>Workspace subscription</div>
                     {Object.entries(plan.limits).map(([key, value]) => (
                       <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e2d47" }}>
-                        <span>{{ users: "Users", agents: "Router agents", webhook_subscriptions: "Webhook subscriptions" }[key]}</span><strong style={{ color: "#e2e8f0" }}>{value}</strong>
+                        <span>{{ users: "Users", agents: "Router agents", sites: "Managed sites", webhook_subscriptions: "Webhook subscriptions", feature_runs_monthly: "Diagnostic runs / month" }[key]}</span><strong style={{ color: "#e2e8f0" }}>{value}</strong>
                       </div>
                     ))}
                     <button type="button" disabled={!!busy || active || !plan.available_for_checkout || !billing.billing_configured || !billing.webhook_configured}
