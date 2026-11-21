@@ -61,6 +61,7 @@ class VendorLicenseServiceTests(unittest.TestCase):
             price_plans=self.price_plans,
             signing_private_key=self.private_key,
             key_id="test-key",
+            admin_token="vendor-admin-token-for-tests-0123456789",
             clock=lambda: self.now[0],
             stripe_opener=opener,
         )
@@ -117,7 +118,14 @@ class VendorLicenseServiceTests(unittest.TestCase):
                     "installation_id": INSTALLATION,
                     "plan_id": "business",
                 },
-                "items": {"data": [{"price": {"id": price}}]},
+                "items": {"data": [{
+                    "price": {
+                        "id": price,
+                        "unit_amount": 3000,
+                        "currency": "aud",
+                        "recurring": {"interval": "month", "interval_count": 1},
+                    }
+                }]},
             },
             created=created,
         )
@@ -362,6 +370,30 @@ class VendorLicenseServiceTests(unittest.TestCase):
                 "WIFI_ANALYZER_VENDOR_STRIPE_PRICE_BUSINESS": "price_vendorpro1234",
             })
 
+    def test_admin_summary_reports_currency_mrr_and_plan_counts(self):
+        checkout = self.checkout("business")
+        self.service.process_event(self.checkout_completed(checkout))
+        self.service.process_event(self.subscription_event(checkout, "evt_adminactive1234"))
+        summary = self.service.admin_summary()
+        self.assertEqual(summary["active_subscriptions"], 1)
+        self.assertEqual(summary["active_plan_counts"], {"business": 1})
+        self.assertEqual(
+            summary["catalog_mrr_by_currency"],
+            [{"currency": "aud", "active_subscriptions": 1, "catalog_mrr_minor_units": 3000}],
+        )
+        licenses = self.service.admin_list_licenses()
+        self.assertEqual(len(licenses["licenses"]), 1)
+        self.assertEqual(licenses["licenses"][0]["customer_email"], "customer@example.com")
+        self.assertNotIn("activation_secret_hash", licenses["licenses"][0])
+        self.assertNotIn("checkout_session_id", licenses["licenses"][0])
+
+    def test_admin_authentication_requires_the_vendor_bearer_token(self):
+        self.assertTrue(self.service.authenticate_admin("Bearer vendor-admin-token-for-tests-0123456789"))
+        self.assertFalse(self.service.authenticate_admin(None))
+        self.assertFalse(self.service.authenticate_admin("Basic vendor-admin-token-for-tests-0123456789"))
+        self.assertFalse(self.service.authenticate_admin("Bearer wrong-token-with-enough-characters"))
+        self.assertFalse(self.service.authenticate_admin("Bearer short"))
+
     def test_public_http_api_serves_health_public_key_and_vendor_checkout(self):
         LicensingHandler.service = self.service
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), LicensingHandler)
@@ -376,6 +408,15 @@ class VendorLicenseServiceTests(unittest.TestCase):
                 public = json.loads(response.read())
                 self.assertEqual(public["key_id"], "test-key")
                 self.assertNotIn("private", json.dumps(public))
+            with self.assertRaises(__import__("urllib.error").error.HTTPError) as denied:
+                urlopen(f"{base}/api/admin/summary", timeout=3)
+            self.assertEqual(denied.exception.code, 401)
+            admin_request = Request(
+                f"{base}/api/admin/summary",
+                headers={"Authorization": "Bearer vendor-admin-token-for-tests-0123456789"},
+            )
+            with urlopen(admin_request, timeout=3) as response:
+                self.assertEqual(json.loads(response.read())["summary"]["total_licenses"], 0)
 
             request = Request(
                 f"{base}/api/checkout",

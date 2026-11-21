@@ -143,6 +143,7 @@ class VendorLicenseService:
         price_plans: dict[str, str],
         signing_private_key: Ed25519PrivateKey,
         key_id: str = "primary",
+        admin_token: str | None = None,
         clock=time.time,
         stripe_opener=None,
     ):
@@ -169,6 +170,14 @@ class VendorLicenseService:
         self.price_plans = dict(price_plans)
         self.signing_private_key = signing_private_key
         self.key_id = key_id
+        if admin_token is not None and (
+            not isinstance(admin_token, str) or len(admin_token) < 32 or len(admin_token) > 512
+        ):
+            raise ValueError("Vendor admin token must contain 32 to 512 characters")
+        self._admin_token_hash = (
+            hashlib.sha256(admin_token.encode("utf-8")).digest()
+            if isinstance(admin_token, str) else None
+        )
         self._clock = clock
         self._stripe_opener = stripe_opener
         self._lock = threading.RLock()
@@ -204,6 +213,19 @@ class VendorLicenseService:
             )
             """
         )
+        license_columns = {
+            row["name"] for row in connection.execute("PRAGMA table_info(vendor_licenses)")
+        }
+        migrations = {
+            "customer_email": "TEXT",
+            "unit_amount": "INTEGER",
+            "currency": "TEXT",
+            "billing_interval": "TEXT",
+            "interval_count": "INTEGER NOT NULL DEFAULT 1",
+        }
+        for column, declaration in migrations.items():
+            if column not in license_columns:
+                connection.execute(f"ALTER TABLE vendor_licenses ADD COLUMN {column} {declaration}")
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_vendor_licenses_installation ON vendor_licenses(installation_id, created_at DESC)"
         )
@@ -452,10 +474,19 @@ class VendorLicenseService:
                                     checkout_session_id=?,
                                     stripe_customer_id=COALESCE(?, stripe_customer_id),
                                     stripe_subscription_id=COALESCE(?, stripe_subscription_id),
+                                    customer_email=COALESCE(?, customer_email),
                                     updated_at=?
                                 WHERE license_id=?
                                 """,
-                                (checkout_id, customer_id, subscription_id, now, license_id),
+                                (
+                                    checkout_id, customer_id, subscription_id,
+                                    (
+                                        (obj.get("customer_details") or {}).get("email")
+                                        if isinstance(obj.get("customer_details"), dict)
+                                        else obj.get("customer_email")
+                                    ),
+                                    now, license_id,
+                                ),
                             )
                 elif event_type in {
                     "customer.subscription.created",
@@ -475,14 +506,35 @@ class VendorLicenseService:
                     if not stale:
                         item_list = obj.get("items") if isinstance(obj.get("items"), dict) else {}
                         items = item_list.get("data") if isinstance(item_list.get("data"), list) else []
-                        price_ids = []
+                        recognised_items = []
                         for item in items[:20]:
                             if isinstance(item, dict) and isinstance(item.get("price"), dict):
                                 candidate = item["price"].get("id")
-                                if isinstance(candidate, str) and _PRICE_ID.fullmatch(candidate):
-                                    price_ids.append(candidate)
-                        matched_price = next((price for price in price_ids if price in self.price_plans), None)
+                                if isinstance(candidate, str) and candidate in self.price_plans:
+                                    recognised_items.append(item["price"])
+                        price_object = recognised_items[0] if recognised_items else {}
+                        matched_price = price_object.get("id") if isinstance(price_object.get("id"), str) else None
                         plan_id = self.price_plans.get(matched_price, "free")
+                        amount = price_object.get("unit_amount")
+                        unit_amount = (
+                            amount if isinstance(amount, int) and not isinstance(amount, bool) and amount >= 0
+                            else None
+                        )
+                        currency = price_object.get("currency")
+                        if not isinstance(currency, str) or not re.fullmatch(r"[A-Za-z]{3}", currency):
+                            currency = None
+                        else:
+                            currency = currency.lower()
+                        recurring = price_object.get("recurring") if isinstance(price_object.get("recurring"), dict) else {}
+                        billing_interval = recurring.get("interval")
+                        if billing_interval not in {"day", "week", "month", "year"}:
+                            billing_interval = None
+                        interval_count = recurring.get("interval_count", 1)
+                        if (
+                            isinstance(interval_count, bool) or not isinstance(interval_count, int)
+                            or not 1 <= interval_count <= 12
+                        ):
+                            interval_count = 1
                         status = "canceled" if event_type == "customer.subscription.deleted" else obj.get("status", "inactive")
                         if status not in {"active", "trialing", "past_due", "unpaid", "canceled", "incomplete", "incomplete_expired", "paused"}:
                             status = "inactive"
@@ -510,6 +562,10 @@ class VendorLicenseService:
                                 subscription_status=?,
                                 plan_id=?,
                                 price_id=?,
+                                unit_amount=?,
+                                currency=?,
+                                billing_interval=?,
+                                interval_count=?,
                                 current_period_end=?,
                                 grace_until=?,
                                 cancel_at_period_end=?,
@@ -520,6 +576,7 @@ class VendorLicenseService:
                             (
                                 customer_id if isinstance(customer_id, str) else None,
                                 subscription_id, status, plan_id, matched_price,
+                                unit_amount, currency, billing_interval, interval_count,
                                 period_end, grace_until, int(cancel_at_period_end),
                                 float(created), now, license_id,
                             ),
@@ -656,6 +713,108 @@ class VendorLicenseService:
         if not hmac.compare_digest(digest, row["activation_secret_hash"]):
             raise LicenseVerificationError("Vendor licence activation credential is invalid")
 
+    def authenticate_admin(self, authorization: str | None) -> bool:
+        if self._admin_token_hash is None or not isinstance(authorization, str):
+            return False
+        scheme, separator, token = authorization.partition(" ")
+        if not separator or scheme.lower() != "bearer" or not 32 <= len(token) <= 512:
+            return False
+        candidate = hashlib.sha256(token.encode("utf-8")).digest()
+        return hmac.compare_digest(candidate, self._admin_token_hash)
+
+    @staticmethod
+    def _is_access_active(row, now: float) -> bool:
+        return (
+            row["subscription_status"] in {"active", "trialing"}
+            and isinstance(row["current_period_end"], (int, float))
+            and row["current_period_end"] > now
+        )
+
+    def admin_summary(self) -> dict[str, Any]:
+        now = float(self._clock())
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT plan_id, subscription_status, current_period_end, grace_until,
+                       unit_amount, currency, billing_interval, interval_count,
+                       cancel_at_period_end
+                FROM vendor_licenses
+                """
+            ).fetchall()
+            event_row = connection.execute(
+                "SELECT COUNT(*) AS count, MAX(processed_at) AS last_processed FROM vendor_stripe_events"
+            ).fetchone()
+        active = []
+        pending = grace = expired = canceling = 0
+        plan_counts: dict[str, int] = {}
+        currency_totals: dict[str, dict[str, int]] = {}
+        for row in rows:
+            if row["subscription_status"] == "pending":
+                pending += 1
+            elif (
+                row["subscription_status"] == "past_due"
+                and isinstance(row["grace_until"], (int, float))
+                and row["grace_until"] > now
+            ):
+                grace += 1
+            elif self._is_access_active(row, now):
+                active.append(row)
+            else:
+                expired += 1
+            if row["cancel_at_period_end"]:
+                canceling += 1
+        for row in active:
+            plan = row["plan_id"]
+            plan_counts[plan] = plan_counts.get(plan, 0) + 1
+            currency, amount = row["currency"], row["unit_amount"]
+            interval, count = row["billing_interval"], row["interval_count"]
+            if (
+                not isinstance(currency, str) or not re.fullmatch(r"[a-z]{3}", currency)
+                or isinstance(amount, bool) or not isinstance(amount, int) or amount < 0
+                or interval not in {"day", "week", "month", "year"}
+                or isinstance(count, bool) or not isinstance(count, int) or count < 1
+            ):
+                continue
+            factor = {"day": 365, "week": 52, "month": 12, "year": 1}[interval] / (12 * count)
+            totals = currency_totals.setdefault(
+                currency, {"active_subscriptions": 0, "catalog_mrr_minor_units": 0},
+            )
+            totals["active_subscriptions"] += 1
+            totals["catalog_mrr_minor_units"] += int(round(amount * factor))
+        return {
+            "total_licenses": len(rows),
+            "active_subscriptions": len(active),
+            "pending_checkouts": pending,
+            "payment_grace_subscriptions": grace,
+            "expired_or_cancelled": expired,
+            "scheduled_cancellations": canceling,
+            "active_plan_counts": dict(sorted(plan_counts.items())),
+            "catalog_mrr_by_currency": [
+                {"currency": currency, **totals}
+                for currency, totals in sorted(currency_totals.items())
+            ],
+            "stripe_events_processed": int(event_row["count"]),
+            "last_stripe_event_at": event_row["last_processed"],
+            "calculated_at": now,
+        }
+
+    def admin_list_licenses(self, limit: int = 100) -> dict[str, Any]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 200:
+            raise ValueError("limit must be an integer from 1 to 200")
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT license_id, installation_id, plan_id, price_id,
+                       customer_email, stripe_customer_id, stripe_subscription_id,
+                       subscription_status, current_period_end, grace_until,
+                       cancel_at_period_end, unit_amount, currency,
+                       billing_interval, interval_count, created_at, updated_at
+                FROM vendor_licenses ORDER BY updated_at DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        return {"licenses": [dict(row) for row in rows], "limit": limit}
+
     def public_key(self) -> dict[str, str]:
         public = self.signing_private_key.public_key().public_bytes(
             encoding=serialization.Encoding.Raw,
@@ -678,6 +837,8 @@ class LicensingHandler(BaseHTTPRequestHandler):
         "/api/refresh": (30, 60),
         "/api/portal": (10, 60),
         "/api/webhook": (120, 60),
+        "/api/admin/summary": (30, 60),
+        "/api/admin/licenses": (30, 60),
     }
 
     def log_message(self, fmt, *args):
@@ -753,6 +914,24 @@ class LicensingHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/public-key":
             self.send_json(self.service.public_key())
+            return
+        if path in {"/api/admin/summary", "/api/admin/licenses"}:
+            if not self.service.authenticate_admin(self.headers.get("Authorization")):
+                self.send_json({"error": "Vendor administrator authentication is required"}, 401)
+                return
+            if not self._limited(path):
+                return
+            if path == "/api/admin/summary":
+                self.send_json({"summary": self.service.admin_summary()})
+                return
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                raw_limit = query.get("limit", ["100"])
+                if len(raw_limit) != 1 or not raw_limit[0].isdigit():
+                    raise ValueError("limit must be an integer from 1 to 200")
+                self.send_json(self.service.admin_list_licenses(int(raw_limit[0])))
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
             return
         if path == "/checkout/success":
             self.send_html("""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Payment received</title><body style="font:16px system-ui;max-width:620px;margin:12vh auto;padding:24px;color:#e5e7eb;background:#0b1220"><h1>Payment received</h1><p>Stripe is confirming your subscription. Return to WiFi Analyzer Pro, open <b>Plans &amp; Licensing</b>, and select <b>Sync licence</b> to activate the signed product licence.</p><p>You can safely close this page after returning to the app.</p></body></html>""")
@@ -849,6 +1028,7 @@ def build_service_from_environment() -> VendorLicenseService:
         price_plans=configured_vendor_price_plans(),
         signing_private_key=load_vendor_signing_key(),
         key_id=os.getenv("WIFI_ANALYZER_VENDOR_LICENSE_KEY_ID", "primary"),
+        admin_token=os.getenv("WIFI_ANALYZER_VENDOR_ADMIN_TOKEN", ""),
     )
 
 
