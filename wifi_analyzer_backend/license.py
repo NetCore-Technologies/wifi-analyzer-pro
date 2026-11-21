@@ -24,8 +24,12 @@ from typing import Any
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
-from .billing import PLAN_CATALOG
-from .site_history import default_history_path
+try:
+    from .billing import PLAN_CATALOG
+    from .site_history import default_history_path
+except ImportError:  # Direct module execution in the production container.
+    from billing import PLAN_CATALOG
+    from site_history import default_history_path
 
 
 LICENSE_SCHEMA = "wifi-analyzer-pro.vendor-license.v1"

@@ -25,6 +25,9 @@ COPY --chown=10001:10001 wifi_analyzer_backend/audit_checkpoint.py ./audit_check
 COPY --chown=10001:10001 wifi_analyzer_backend/live_capture.py ./live_capture.py
 COPY --chown=10001:10001 wifi_analyzer_backend/rate_limit.py ./rate_limit.py
 COPY --chown=10001:10001 wifi_analyzer_backend/site_history.py ./site_history.py
+COPY --chown=10001:10001 wifi_analyzer_backend/billing.py ./billing.py
+COPY --chown=10001:10001 wifi_analyzer_backend/license.py ./license.py
+COPY --chown=10001:10001 wifi_analyzer_backend/licensing_service.py ./licensing_service.py
 COPY --chown=10001:10001 wifi_analyzer_backend/report_worker.py ./report_worker.py
 COPY --chown=10001:10001 wifi_analyzer_backend/webhook_delivery_store.py ./webhook_delivery_store.py
 COPY --chown=10001:10001 wifi_analyzer_backend/webhook_subscription_store.py ./webhook_subscription_store.py
@@ -32,6 +35,7 @@ COPY --chown=10001:10001 wifi_analyzer_backend/webhook_dispatch_worker.py ./webh
 COPY --chown=10001:10001 wifi_analyzer_backend/router_adapters ./router_adapters
 COPY --chown=10001:10001 wifi_analyzer_backend/feature_plugins ./feature_plugins
 COPY --from=frontend --chown=10001:10001 /src/dist ./dist
+RUN python -c "import billing, license, licensing_service, server"
 RUN mkdir -p /home/wifi-analyzer/.config/wifi-analyzer-pro \
              /home/wifi-analyzer/.local/state/wifi-analyzer-pro \
     && chown -R 10001:10001 /home/wifi-analyzer

@@ -79,6 +79,13 @@ def load_vendor_signing_key(environ: dict[str, str] | None = None) -> Ed25519Pri
     source = os.environ if environ is None else environ
     encoded = source.get("WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY", "").strip()
     if not encoded:
+        key_file = source.get("WIFI_ANALYZER_VENDOR_LICENSE_SIGNING_PRIVATE_KEY_FILE", "").strip()
+        if key_file:
+            try:
+                encoded = Path(key_file).read_text(encoding="ascii").strip()
+            except (OSError, UnicodeDecodeError) as error:
+                raise ValueError("Vendor licence signing key file cannot be read") from error
+    if not encoded:
         raise ValueError("Vendor licence signing private key is not configured")
     try:
         raw = base64.b64decode(encoded, validate=True)
@@ -273,6 +280,16 @@ class VendorLicenseService:
             connection.execute("BEGIN IMMEDIATE")
             if self._active_row(connection, installation_id, now):
                 raise LicenseServiceConflict("This installation already has an active vendor subscription")
+            pending = connection.execute(
+                """
+                SELECT license_id FROM vendor_licenses
+                WHERE installation_id=? AND subscription_status='pending' AND created_at>?
+                LIMIT 1
+                """,
+                (installation_id, now - 30 * 60),
+            ).fetchone()
+            if pending:
+                raise LicenseServiceConflict("A checkout is already pending for this installation; finish it or try again later")
             connection.execute(
                 """
                 INSERT INTO vendor_licenses(

@@ -22,7 +22,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .site_history import default_history_path
+try:
+    from .site_history import default_history_path
+except ImportError:  # Direct module execution in the production container.
+    from site_history import default_history_path
 
 
 MAX_WEBHOOK_BYTES = 256 * 1024
