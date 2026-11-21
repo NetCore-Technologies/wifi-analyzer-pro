@@ -40,7 +40,7 @@ def _timestamp(value: object, field: str) -> datetime:
     except ValueError as error:
         raise ValueError(f"{field} must be a timezone-aware ISO-8601 timestamp") from error
     if parsed.tzinfo is None or parsed.utcoffset() is None:
-        raise ValueError(f"{field} must include a timezone offset")
+        raise ValueError(f"{field} must be timezone-aware and include a timezone offset")
     return parsed.astimezone(timezone.utc)
 
 
