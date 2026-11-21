@@ -472,6 +472,7 @@ class VendorLicenseServiceTests(unittest.TestCase):
                 self.assertIn("connect-src 'self'", csp)
                 self.assertIn("/api/admin/summary", html)
                 self.assertIn("/api/admin/licenses?limit=100", html)
+                self.assertIn("unmapped_price_subscriptions", html)
                 self.assertIn("NETCORE / LICENSING OPERATIONS", html)
                 self.assertNotIn("vendor-admin-token-for-tests", html)
                 self.assertNotIn("localStorage", html)

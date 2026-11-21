@@ -864,11 +864,11 @@ h1{font-size:20px;margin:0;letter-spacing:.02em}header p{margin:5px 0 0;color:va
 label{display:block;color:var(--muted);font-size:11px;margin:15px 0 7px}input{width:100%;padding:12px;border:1px solid #2c4458;border-radius:8px;background:#07121e;color:var(--text);font:13px ui-monospace,monospace}
 button{border:1px solid #50e3d2aa;background:#14323a;color:var(--accent);border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.secondary{border-color:var(--line);background:#102031;color:var(--text)}
 .toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:18px}.status{min-height:18px;margin-top:10px;color:var(--muted);font-size:12px}.status.error{color:var(--bad)}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:14px 0 18px}.metric{min-height:105px}.metric .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}.metric .value{font:26px ui-monospace,monospace;margin-top:12px}.metric .hint{font-size:10px;color:var(--muted);margin-top:5px}
+.grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:14px 0 18px}.metric{min-height:105px}.metric .label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}.metric .value{font:26px ui-monospace,monospace;margin-top:12px}.metric .hint{font-size:10px;color:var(--muted);margin-top:5px}
 .section{margin-top:18px}.section h2{font-size:15px;margin:0 0 12px}.section p{font-size:11px;color:var(--muted);margin:-4px 0 13px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:9px}
 table{width:100%;border-collapse:collapse;min-width:720px;font-size:11px}th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #223548;white-space:nowrap}th{background:#102031;color:var(--muted);font-weight:600;position:sticky;top:0}tr:last-child td{border-bottom:0}
 .pill{display:inline-block;border:1px solid #294356;border-radius:99px;padding:3px 7px;color:var(--accent);font-size:9px;text-transform:uppercase}.muted{color:var(--muted)}.warning{color:var(--warn)}.foot{margin-top:20px;color:var(--muted);font-size:10px;line-height:1.6}
-@media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:520px){.grid{grid-template-columns:1fr}header{align-items:flex-start}.toolbar{align-items:flex-start}}
+@media(max-width:1100px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:520px){.grid{grid-template-columns:1fr}header{align-items:flex-start}.toolbar{align-items:flex-start}}
 </style></head>
 <body>
 <header><div><h1>NETCORE / LICENSING OPERATIONS</h1><p>Vendor subscriptions · licence fleet · catalogue MRR</p></div><span class="pill">Vendor-only</span></header>
@@ -886,6 +886,7 @@ table{width:100%;border-collapse:collapse;min-width:720px;font-size:11px}th,td{p
 <article class="card metric"><div class="label">Pending checkouts</div><div class="value" id="pending">—</div><div class="hint">Awaiting Stripe confirmation</div></article>
 <article class="card metric"><div class="label">Payment grace</div><div class="value" id="grace">—</div><div class="hint">Past due inside grace window</div></article>
 <article class="card metric"><div class="label">Expired / cancelled</div><div class="value" id="expired">—</div><div class="hint" id="canceling">Scheduled cancellations: —</div></article>
+<article class="card metric"><div class="label">Unmapped prices</div><div class="value warning" id="unmapped">—</div><div class="hint">Active Stripe price not assigned to a paid plan</div></article>
 </div>
 <section class="card section"><h2>Catalogue MRR by currency</h2><p>Stripe recurring list-price value normalised monthly. This is not collected cash, net revenue or profit.</p><div class="table-wrap"><table><thead><tr><th>Currency</th><th>Active subscriptions</th><th>Catalogue MRR</th></tr></thead><tbody id="mrr-body"><tr><td colspan="3" class="muted">Connect to load data.</td></tr></tbody></table></div></section>
 <section class="card section"><h2>Recent customer licences</h2><p>Support and reconciliation view. Activation secrets, secret hashes and Checkout session IDs are never returned by this API.</p><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Plan</th><th>Status</th><th>Currency</th><th>Recurring price</th><th>Period end</th><th>Cancel at period end</th></tr></thead><tbody id="license-body"><tr><td colspan="7" class="muted">Connect to load licences.</td></tr></tbody></table></div></section>
@@ -913,6 +914,7 @@ const request=async path=>{
 const renderSummary=summary=>{
  $("active").textContent=number(summary.active_subscriptions);$("pending").textContent=number(summary.pending_checkouts);$("grace").textContent=number(summary.payment_grace_subscriptions);$("expired").textContent=number(summary.expired_or_cancelled);
  $("canceling").textContent="Scheduled cancellations: "+number(summary.scheduled_cancellations);
+ $("unmapped").textContent=number(summary.unmapped_price_subscriptions);
  const plans=Object.entries(summary.active_plan_counts||{}).map(([key,value])=>key+": "+number(value));$("plans").textContent=plans.join(" · ")||"No active paid plans";
  $("last-event").textContent=date(summary.last_stripe_event_at);$("calculated").textContent=date(summary.calculated_at);
  const body=$("mrr-body");body.replaceChildren();const totals=summary.catalog_mrr_by_currency||[];

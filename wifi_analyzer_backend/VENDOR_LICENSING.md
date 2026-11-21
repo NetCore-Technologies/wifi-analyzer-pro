@@ -40,7 +40,7 @@ Verify `/health` and `/api/public-key` through the HTTPS domain. The public-key 
 ## Vendor operations API
 
 The operations API is disabled unless `WIFI_ANALYZER_VENDOR_ADMIN_TOKEN` is configured. Use the token in an `Authorization: Bearer` header:
-- `GET /api/admin/summary` reports active subscriptions, pending checkouts, payment grace, plan counts, webhook health and recurring list-price MRR separated by currency.
+- `GET /api/admin/summary` reports paid active subscriptions, pending checkouts, payment grace, unmapped Stripe Prices, plan counts, webhook health and recurring list-price MRR separated by currency. Active Stripe subscriptions whose Price ID is not mapped to a paid plan are flagged as unmapped and are excluded from product entitlements and MRR.
 - `GET /api/admin/licenses?limit=100` lists recent licence records for support and reconciliation, without exposing activation-secret hashes or checkout session IDs.
 
 Catalog MRR is calculated from current Stripe recurring Price list amounts. It is not cash received or profit: discounts, refunds, tax, failed collection, fees and foreign-exchange conversion are not included. Never place the admin token in browser code or customer installations.
