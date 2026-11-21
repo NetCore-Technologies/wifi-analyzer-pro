@@ -121,7 +121,7 @@ export default function ClientExperienceSloWindowComparator() {
 
   const summary = result?.summary;
   const status = result?.status || '';
-  const statusColor = status === 'regression_detected' ? '#fbbf24'
+  const statusColor = status === 'regression_detected' || status === 'partial_evidence' ? '#fbbf24'
     : status === 'improvement_detected' ? '#34d399'
       : status === 'stable' ? '#38bdf8' : '#94a3b8';
 
@@ -199,6 +199,8 @@ export default function ClientExperienceSloWindowComparator() {
         <Metric label="Regressing sites" value={summary.regressing_site_count}/>
         <Metric label="Improving sites" value={summary.improving_site_count}/>
         <Metric label="Comparable sites" value={summary.comparable_site_count}/>
+        <Metric label="Site coverage" value={summary.site_coverage_pct == null ? "n/a" : summary.site_coverage_pct + "%"}/>
+        <Metric label="Incomplete sites" value={summary.incomplete_site_count}/>
         <Metric label="Eligible baseline samples" value={summary.baseline_eligible_sample_count}/>
         <Metric label="Eligible comparison samples" value={summary.comparison_eligible_sample_count}/>
       </div>
@@ -231,6 +233,7 @@ export default function ClientExperienceSloWindowComparator() {
           ].map((value,index) => <td key={index} style={{ padding: 7, color: '#cbd5e1', borderBottom: '1px solid #1e2d47', whiteSpace: 'nowrap' }}>{value}</td>)}</tr>)}</tbody>
         </table>
       </div>
+      {status === "partial_evidence" ? <p role="status" style={{ ...muted, color: "#fbbf24", marginBottom: 8 }}>Fleet-wide improvement is not declared because one or more sites lack sufficient comparable telemetry. Review the site-level evidence gaps before drawing a fleet conclusion.</p> : null}
       <p style={{ ...muted, marginBottom: 0 }}>{result.note}</p>
     </section> : null}
   </div>;

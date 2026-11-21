@@ -221,8 +221,18 @@ def run(payload: dict) -> dict:
         for site_id in sorted(set(baseline_sites) | set(comparison_sites))
     ]
     comparable = [item for item in site_comparisons if item["status"] in {"regression", "improvement", "stable"}]
+    incomplete_site_count = sum(
+        item["status"] in {
+            "insufficient_evidence", "new_comparison_evidence", "missing_comparison_evidence",
+        }
+        for item in site_comparisons
+    )
     summary = {
         "comparable_site_count": len(comparable),
+        "site_comparison_count": len(site_comparisons),
+        "site_coverage_pct": round(len(comparable) / len(site_comparisons) * 100, 2)
+        if site_comparisons else None,
+        "incomplete_site_count": incomplete_site_count,
         "regressing_site_count": sum(item["status"] == "regression" for item in comparable),
         "improving_site_count": sum(item["status"] == "improvement" for item in comparable),
         "stable_site_count": sum(item["status"] == "stable" for item in comparable),
@@ -233,10 +243,14 @@ def run(payload: dict) -> dict:
         "comparison_eligible_sample_count": comparison_view["eligible_slo_sample_count"],
         "sla_attainment_delta_pct_points": overall["sla_attainment_delta_pct_points"],
     }
-    if overall["status"] == "insufficient_evidence":
-        status = "insufficient_evidence"
-    elif overall["status"] == "regression" or summary["regressing_site_count"]:
+    # Confirmed site regressions remain actionable with incomplete fleet coverage.
+    # Improvement/stable headlines require every site to have enough evidence.
+    if overall["status"] == "regression" or summary["regressing_site_count"]:
         status = "regression_detected"
+    elif overall["status"] == "insufficient_evidence":
+        status = "insufficient_evidence"
+    elif incomplete_site_count:
+        status = "partial_evidence"
     elif overall["status"] == "improvement" or summary["improving_site_count"]:
         status = "improvement_detected"
     else:
@@ -257,7 +271,8 @@ def run(payload: dict) -> dict:
         "note": (
             "Both periods are evaluated by F292 with identical required metrics and thresholds. "
             "Windows are non-overlapping, stale observations are excluded, and a site is compared only "
-            "when it has sufficient eligible samples in both periods. SLA attainment is sample-weighted; "
+            "when it has sufficient eligible samples in both periods. A positive fleet-wide improvement/stable " 
+            "headline is withheld when any site is missing or has insufficient comparison evidence. SLA attainment is sample-weighted; "
             "a percentage-point change is not duration-weighted uptime or a statistical confidence interval. "
             "Metric p95 deltas are descriptive and do not independently determine regression status. "
             "Client identifiers and raw samples are not returned or persisted."

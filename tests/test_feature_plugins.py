@@ -1299,13 +1299,15 @@ class FeatureCatalogTests(unittest.TestCase):
 
     def test_f293_compares_slo_windows_and_preserves_missing_site_evidence(self):
         result = run("client_experience_slo_window_comparator", PAYLOADS["client_experience_slo_window_comparator"])["result"]
-        self.assertEqual(result["status"], "improvement_detected")
+        self.assertEqual(result["status"], "partial_evidence")
         self.assertEqual(result["overall"]["status"], "improvement")
         self.assertEqual(result["overall"]["sla_attainment_delta_pct_points"], 66.67)
         sites = {item["site_id"]: item for item in result["sites"]}
         self.assertEqual(sites["hq"]["status"], "improvement")
         self.assertEqual(sites["branch"]["status"], "missing_comparison_evidence")
         self.assertEqual(result["summary"]["regressing_site_count"], 0)
+        self.assertEqual(result["summary"]["incomplete_site_count"], 1)
+        self.assertEqual(result["summary"]["site_coverage_pct"], 50.0)
         self.assertNotIn("station-private-alpha", json.dumps(result))
         self.assertNotIn("base-hq-001", json.dumps(result))
 
@@ -1327,6 +1329,7 @@ class FeatureCatalogTests(unittest.TestCase):
         result = run("client_experience_slo_window_comparator", reversed_windows)["result"]
         self.assertEqual(result["status"], "regression_detected")
         self.assertEqual(result["overall"]["status"], "regression")
+        self.assertEqual(result["summary"]["incomplete_site_count"], 1)
         insufficient = run("client_experience_slo_window_comparator", {
             **payload, "minimum_eligible_samples": 3,
         })["result"]
