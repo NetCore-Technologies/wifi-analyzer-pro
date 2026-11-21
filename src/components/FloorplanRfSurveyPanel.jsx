@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { apiBase, apiFetch } from '../lib/api.js';
 import { buildMeasurementContext, measurementContextFormState } from '../lib/measurementContext.js';
+import RfSurveyAcceptancePanel from './RfSurveyAcceptancePanel.jsx';
 
 const SERIES_COLORS = ['#06d6f0', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#60a5fa', '#f97316'];
 const MAX_JSON_BYTES = 900 * 1024;
@@ -753,6 +754,8 @@ export default function FloorplanRfSurveyPanel() {
               </div>
             ) : <div className="text-xs text-muted-foreground">No measurements available in the selected freshness window.</div>}
           </section>
+
+          {activeReport && <RfSurveyAcceptancePanel report={activeReport} result={result} />}
 
           <section className="glass rounded-xl p-4 space-y-3">
             <div className="text-sm font-semibold text-foreground">Per-access-point measured summaries</div>

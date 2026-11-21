@@ -1669,6 +1669,19 @@
     }
   },
   {
+    "slug": "rf_survey_acceptance_auditor",
+    "name": "RF survey acceptance auditor",
+    "category": "RF assurance",
+    "description": "Evaluate fresh measured Wi-Fi survey points against customer-defined RSSI/SNR and sampled-point acceptance thresholds with optional floor-plan zones; never infer unsampled coverage.",
+    "parameters": {
+      "site_id": "Site identifier which must match the saved report",
+      "report": "Stored F203 report metadata and immutable result",
+      "policy": "Customer-defined minimum RSSI/SNR, passing-point percentage, minimum point count and qualifying AP count",
+      "zones": "Optional 1-100 axis-aligned rectangles in floor-plan pixel coordinates",
+      "as_of": "Optional timezone-aware assessment timestamp; defaults to UTC now"
+    }
+  },
+  {
     "slug": "client_roam_transaction_analyzer",
     "name": "Client roam transaction analyzer",
     "category": "Roaming",

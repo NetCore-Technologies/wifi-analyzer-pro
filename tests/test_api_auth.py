@@ -1087,8 +1087,8 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 204)
-        self.assertEqual(len(catalog["features"]), 204)
+        self.assertEqual(catalog["count"], 205)
+        self.assertEqual(len(catalog["features"]), 205)
         self.assertIn("site_topology_history_timeline", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_topology_gateway_path_audit", {item["slug"] for item in catalog["features"]})
         self.assertIn("site_radio_configuration_audit", {item["slug"] for item in catalog["features"]})
@@ -1115,6 +1115,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertIn("rf_survey_evidence_normalizer", {item["slug"] for item in catalog["features"]})
         self.assertIn("client_experience_slo_evaluator", {item["slug"] for item in catalog["features"]})
         self.assertIn("client_experience_slo_window_comparator", {item["slug"] for item in catalog["features"]})
+        self.assertIn("rf_survey_acceptance_auditor", {item["slug"] for item in catalog["features"]})
 
     def test_f195_to_f201_security_and_rf_tools_run_through_authenticated_feature_api(self):
         _, setup = self.request("POST", "/api/auth/setup", {"password": "owner passphrase is secure"})
@@ -3077,7 +3078,7 @@ class AuthenticatedApiTests(unittest.TestCase):
 
         status, catalog = self.request("GET", "/api/features", token=analyst_token)
         self.assertEqual(status, 200)
-        self.assertEqual(catalog["count"], 204)
+        self.assertEqual(catalog["count"], 205)
 
         status, result = self.request("POST", "/api/features/frequency_to_channel", {
             "frequency_mhz": 5975,
@@ -3607,6 +3608,34 @@ class AuthenticatedApiTests(unittest.TestCase):
         )
         self.assertEqual(status, 403, denied)
         self.assertIn("outside your assigned access scope", denied["error"])
+
+        saved = server.RF_SURVEYS.save(
+            "head-office",
+            result["result"],
+            label="F205 acceptance input",
+        )
+        acceptance_payload = {
+            "site_id": "head-office",
+            "report": {"report": saved, "result": result["result"]},
+            "policy": {
+                "minimum_rssi_dbm": -67,
+                "minimum_passing_points_pct": 100,
+                "minimum_sample_count": 1,
+            },
+        }
+        status, acceptance = self.request(
+            "POST", "/api/features/rf_survey_acceptance_auditor",
+            acceptance_payload, token=token,
+        )
+        self.assertEqual(status, 200, acceptance)
+        self.assertEqual(acceptance["feature"], "F205")
+        self.assertEqual(acceptance["result"]["status"], "accepted")
+        cross_site_acceptance = {**acceptance_payload, "site_id": "branch"}
+        status, denied_acceptance = self.request(
+            "POST", "/api/features/rf_survey_acceptance_auditor",
+            cross_site_acceptance, token=token,
+        )
+        self.assertEqual(status, 403, denied_acceptance)
 
     def test_rf_survey_history_save_read_and_site_isolation(self):
         _, setup = self.request("POST", "/api/auth/setup", {

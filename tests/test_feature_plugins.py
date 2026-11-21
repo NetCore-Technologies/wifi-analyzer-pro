@@ -1270,6 +1270,45 @@ PAYLOADS = {
                     }
             ]
     },
+    "rf_survey_acceptance_auditor": {
+        "site_id": "head-office",
+        "as_of": _SURVEY_NOW.isoformat(),
+        "report": {
+            "report": {
+                "survey_id": "acceptance-survey",
+                "site_id": "head-office",
+                "floorplan_id": "hq-level-1",
+                "floor_id": "level-1",
+                "label": "HQ RF acceptance",
+                "created_at": (_SURVEY_NOW - timedelta(minutes=30)).isoformat()
+            },
+            "result": {
+                "status": "analysed",
+                "site_id": "head-office",
+                "floorplan_id": "hq-level-1",
+                "floor_id": "level-1",
+                "floorplan": {"width_px": 1000, "height_px": 800},
+                "access_points": [{"ap_id": "ap-01", "x_px": 100, "y_px": 100}],
+                "measurements": [
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1",
+                     "sample_fingerprint": "aaaaaaaaaaaaaaaa", "observed_at": (_SURVEY_NOW - timedelta(minutes=20)).isoformat(),
+                     "evidence_source": "survey", "survey_x_px": 200, "survey_y_px": 100, "rssi_dbm": -55},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1",
+                     "sample_fingerprint": "bbbbbbbbbbbbbbbb", "observed_at": (_SURVEY_NOW - timedelta(minutes=15)).isoformat(),
+                     "evidence_source": "survey", "survey_x_px": 300, "survey_y_px": 100, "rssi_dbm": -58},
+                    {"ap_id": "ap-01", "floorplan_id": "hq-level-1", "floor_id": "level-1",
+                     "sample_fingerprint": "cccccccccccccccc", "observed_at": (_SURVEY_NOW - timedelta(minutes=10)).isoformat(),
+                     "evidence_source": "survey", "survey_x_px": 400, "survey_y_px": 100, "rssi_dbm": -62}
+                ]
+            }
+        },
+        "policy": {
+            "minimum_rssi_dbm": -67,
+            "minimum_passing_points_pct": 95,
+            "minimum_sample_count": 3
+        },
+        "zones": [{"zone_id": "west-wing", "x1_px": 100, "y1_px": 50, "x2_px": 450, "y2_px": 200}]
+    },
     "client_roam_transaction_analyzer": {
         "events": [
             {"event_id":"evt-a1","site_id":"office","client_ref":"station-alpha","event_type":"roam_start","roam_id":"roam-a","from_ap_id":"ap-01","to_ap_id":"ap-02","occurred_at":_ROAM_NOW.isoformat(),"evidence_source":"controller"},
@@ -1289,14 +1328,14 @@ class FeatureCatalogTests(unittest.TestCase):
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
         self.assertEqual(len(FEATURE_MODULES), 204)
-        self.assertEqual(len(set(FEATURE_MODULES)), 204)
-        self.assertEqual(count(), 204)
-        self.assertEqual(len(entries), 204)
-        self.assertEqual(len({entry["slug"] for entry in entries}), 204)
+        self.assertEqual(len(set(FEATURE_MODULES)), 205)
+        self.assertEqual(count(), 205)
+        self.assertEqual(len(entries), 205)
+        self.assertEqual(len({entry["slug"] for entry in entries}), 205)
         self.assertEqual(
             [entry["id"] for entry in entries],
             [f"F{i:03d}" for i in range(1, 169)]
-            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F291", "F292", "F293"],
+            + ["F172", "F173", "F174", "F175", "F176", "F177", "F178", "F179", "F180", "F181", "F182", "F183", "F184", "F185", "F186", "F187", "F188", "F189", "F190", "F191", "F192", "F193", "F194", "F195", "F196", "F197", "F198", "F199", "F200", "F201", "F202", "F203", "F204", "F205", "F291", "F292", "F293"],
         )
 
     def test_static_feature_manifest_matches_the_registered_catalogue(self):
@@ -1686,6 +1725,14 @@ class FeatureCatalogTests(unittest.TestCase):
             run("client_roam_transaction_analyzer", {"events": [bad_reason]})
         with self.assertRaisesRegex(ValueError, "slow_roam_threshold_ms"):
             run("client_roam_transaction_analyzer", {"events": [payload["events"][0]], "slow_roam_threshold_ms": 1})
+
+    def test_f205_audits_saved_rf_survey_against_customer_acceptance_policy(self):
+        result = run("rf_survey_acceptance_auditor", PAYLOADS["rf_survey_acceptance_auditor"])["result"]
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["survey_id"], "acceptance-survey")
+        self.assertEqual(result["summary"]["sampled_point_count"], 3)
+        self.assertEqual(result["summary"]["passing_points_pct"], 100.0)
+        self.assertEqual(result["zones"][0]["status"], "accepted")
 
     def test_f204_compares_saved_rf_survey_reports_by_site_and_coordinate(self):
         result = run("rf_survey_report_comparator", PAYLOADS["rf_survey_report_comparator"])["result"]
