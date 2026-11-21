@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Wifi, Radio, BarChart2, Map, ArrowRightLeft, Terminal, Circle, Cpu, Activity, Globe, Search, Network, Zap, Download, ShieldAlert } from 'lucide-react';
 import useWifiData from '../hooks/useWifiData';
+import { appendDiagnosticSample } from '../lib/telemetryHistory.js';
+import { buildScanCsv, buildScanExport } from '../lib/telemetryExport.js';
 import StatsBar from '../components/wifi/StatsBar';
 import NetworkCard from '../components/wifi/NetworkCard';
 import ChannelChart from '../components/wifi/ChannelChart';
@@ -27,37 +29,60 @@ const TABS = [
   { id: 'diagnostics', label: 'Diagnostics', icon: Globe },
   { id: 'channels', label: 'Channels', icon: BarChart2 },
   { id: 'history', label: 'Signal History', icon: Radio },
-  { id: 'heatmap', label: 'Heatmap', icon: Map },
+  { id: 'heatmap', label: 'Signal Compare', icon: Map },
   { id: 'band', label: 'Band Steering', icon: ArrowRightLeft },
   { id: 'devices', label: 'Devices', icon: Network },
   { id: 'speedtest', label: 'Speed Test', icon: Zap },
   { id: 'rogue', label: 'Rogue AP', icon: ShieldAlert },
-  { id: 'recommend', label: 'Best Channel', icon: Radio },
+  { id: 'recommend', label: 'Channel Candidates', icon: Radio },
   { id: 'losshist', label: 'Loss History', icon: Activity },
 ];
 
 export default function WiFiAnalyzer() {
   const [refreshInterval, setRefreshInterval] = useState(5000);
   const [diagHistory, setDiagHistory] = useState([]);
-  const { networks, congestion, systemInfo, phyInfo, linkStats, diagnostics, devices, loading, error, backendConnected, observationSource, lastScan, history, refresh } = useWifiData(true, refreshInterval);
+  const { networks, congestion, systemInfo, phyInfo, linkStats, diagnostics, devices, loading, error, backendConnected, observationSource, dataStale, lastScan, history, refresh } = useWifiData(true, refreshInterval);
   React.useEffect(() => {
-    if (diagnostics) setDiagHistory(h => [...h.slice(-59), diagnostics]);
+    if (diagnostics) setDiagHistory(history => appendDiagnosticSample(history, diagnostics));
   }, [diagnostics]);
   const [activeTab, setActiveTab] = useState('networks');
 
   function exportData(fmt) {
-    const data = { timestamp: new Date().toISOString(), networks, devices };
-    const str = fmt === 'json' ? JSON.stringify(data, null, 2) : Object.keys(networks[0] || {}).join(',') + '\n' + networks.map(n => Object.values(n).join(',')).join('\n');
-    const blob = new Blob([str], { type: fmt === 'json' ? 'application/json' : 'text/csv' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `wifi-scan-${Date.now()}.${fmt}`; a.click();
+    const data = buildScanExport({
+      networks,
+      devices,
+      diagnostics,
+      systemInfo,
+      source: observationSource,
+      stale: dataStale || (observationSource === 'live' && !backendConnected),
+      lastScan,
+    });
+    const content = fmt === 'json' ? JSON.stringify(data, null, 2) : buildScanCsv(data);
+    const blob = new Blob([content], { type: fmt === 'json' ? 'application/json' : 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `wifi-scan-${Date.now()}.${fmt}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const [selectedNetwork, setSelectedNetwork] = useState(null);
   const [sortBy, setSortBy] = useState('rssi');
 
   const sorted = [...networks].sort((a, b) => {
-    if (sortBy === 'rssi') return b.rssi - a.rssi;
+    if (sortBy === 'rssi') {
+      const signalA = a.rssi !== null && a.rssi !== undefined && Number.isFinite(Number(a.rssi)) ? Number(a.rssi) : -Infinity;
+      const signalB = b.rssi !== null && b.rssi !== undefined && Number.isFinite(Number(b.rssi)) ? Number(b.rssi) : -Infinity;
+      return signalB - signalA;
+    }
     if (sortBy === 'ssid') return (a.ssid || '').localeCompare(b.ssid || '');
-    if (sortBy === 'channel') return a.channel - b.channel;
+    if (sortBy === 'channel') {
+      const channelA = a.channel !== null && a.channel !== undefined && Number.isFinite(Number(a.channel)) ? Number(a.channel) : Infinity;
+      const channelB = b.channel !== null && b.channel !== undefined && Number.isFinite(Number(b.channel)) ? Number(b.channel) : Infinity;
+      return channelA - channelB;
+    }
     return 0;
   });
 
@@ -78,7 +103,9 @@ export default function WiFiAnalyzer() {
                     ? observationSource === 'live'
                       ? `Live · ${systemInfo?.os || 'Connected'}`
                       : 'Demo observations · backend connected'
-                    : 'Demo Mode · Start backend for live data'}
+                    : observationSource === 'live' && dataStale
+                      ? 'Stale live observations · backend disconnected'
+                      : 'Demo Mode · Start backend for live data'}
                   {lastScan && <span>· {lastScan.toLocaleTimeString()}</span>}
                 </div>
               </div>
@@ -87,7 +114,7 @@ export default function WiFiAnalyzer() {
               {error && (
                 <div className="hidden sm:flex items-center gap-2 text-xs text-yellow-400 bg-yellow-400/10 border border-yellow-400/20 rounded-lg px-3 py-1.5">
                   <Terminal className="w-3 h-3" />
-                  Local API unavailable · live data paused
+                  {dataStale ? 'Local API unavailable · retained live measurements are stale' : 'Local API unavailable · live data paused'}
                 </div>
               )}
               <select value={refreshInterval} onChange={e => setRefreshInterval(Number(e.target.value))} className="px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary text-sm font-medium">
@@ -174,7 +201,7 @@ export default function WiFiAnalyzer() {
                 )}
                 {activeTab === 'channels' && (
                   <div className="glass rounded-xl p-5">
-                    <h2 className="text-sm font-semibold text-foreground mb-4">Channel Congestion Analysis</h2>
+                    <h2 className="text-sm font-semibold text-foreground mb-4">Observed Channel Density</h2>
                     <ChannelChart networks={networks} congestion={congestion} />
                   </div>
                 )}
@@ -186,8 +213,8 @@ export default function WiFiAnalyzer() {
                 )}
                 {activeTab === 'heatmap' && (
                   <div className="glass rounded-xl p-5">
-                    <h2 className="text-sm font-semibold text-foreground mb-2">Signal Heatmap</h2>
-                    <p className="text-xs text-muted-foreground mb-4">Relative signal distribution of detected networks</p>
+                    <h2 className="text-sm font-semibold text-foreground mb-2">Signal Distribution · Non-spatial</h2>
+                    <p className="text-xs text-muted-foreground mb-4">Measured RSSI comparison only. Physical AP locations require surveyed floor-plan coordinates.</p>
                     <HeatmapGrid networks={networks} />
                   </div>
                 )}
@@ -217,7 +244,7 @@ export default function WiFiAnalyzer() {
                 )}
                 {activeTab === 'recommend' && (
                   <div className="glass rounded-xl p-5">
-                    <h2 className="text-sm font-semibold text-foreground mb-4">Channel Recommendation</h2>
+                    <h2 className="text-sm font-semibold text-foreground mb-4">Observed Channel Candidates</h2>
                     <ChannelRecommendPanel congestion={congestion} networks={networks} />
                   </div>
                 )}
@@ -233,18 +260,19 @@ export default function WiFiAnalyzer() {
 
           <div className="space-y-4">
             <div className="glass rounded-xl p-5 flex flex-col items-center">
-              <h2 className="text-sm font-semibold text-muted-foreground mb-4 self-start">Radar Scan</h2>
-              <RadarSweep networks={networks} scanning={true} />
+              <h2 className="text-sm font-semibold text-muted-foreground mb-1 self-start">Signal Radar · Non-spatial</h2>
+              <p className="text-[11px] text-muted-foreground self-start mb-3">Relative signal visualisation, not AP location or range</p>
+              <RadarSweep networks={networks} scanning={loading} />
               <div className="mt-3 text-xs text-muted-foreground text-center">
-                {networks.length} network{networks.length !== 1 ? 's' : ''} detected
+                {networks.length} observed BSS record{networks.length !== 1 ? 's' : ''}
               </div>
             </div>
 
             <div className="glass rounded-xl p-4 space-y-3">
               <h2 className="text-sm font-semibold text-muted-foreground">Strongest Signals</h2>
-              {sorted.slice(0, 5).map(net => {
-                const quality = Math.max(0, Math.min(100, 2 * (net.rssi + 100)));
-                const color = net.rssi >= -55 ? 'bg-green-400' : net.rssi >= -65 ? 'bg-cyan-400' : net.rssi >= -75 ? 'bg-yellow-400' : 'bg-red-400';
+              {sorted.filter(net => net.rssi != null && Number.isFinite(Number(net.rssi))).slice(0, 5).map(net => {
+                const quality = Math.max(0, Math.min(100, 2 * (Number(net.rssi) + 100)));
+                const color = Number(net.rssi) >= -55 ? 'bg-green-400' : Number(net.rssi) >= -65 ? 'bg-cyan-400' : Number(net.rssi) >= -75 ? 'bg-yellow-400' : 'bg-red-400';
                 return (
                   <div key={net.bssid} className="space-y-1">
                     <div className="flex justify-between text-xs">
@@ -264,13 +292,14 @@ export default function WiFiAnalyzer() {
                 <div className="flex items-start gap-3">
                   <Terminal className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
                   <div className="space-y-1.5">
-                    <p className="text-sm font-semibold text-foreground">Enable Live Data</p>
-                    <p className="text-xs text-muted-foreground">Run the Python backend to see your real WiFi networks:</p>
-                    <code className="text-xs font-mono bg-secondary/80 rounded-lg px-3 py-2 block text-primary mt-2">
+                    {dataStale
+                      ? <><p className="text-sm font-semibold text-foreground">Live observations are stale</p><p className="text-xs text-muted-foreground">The last successful scan is retained for context. Refresh will replace it only after a complete live response.</p></>
+                      : <><p className="text-sm font-semibold text-foreground">Enable Live Data</p><p className="text-xs text-muted-foreground">Run the Python backend to see your real Wi-Fi networks:</p></>}
+                    {!dataStale && <><code className="text-xs font-mono bg-secondary/80 rounded-lg px-3 py-2 block text-primary mt-2">
                       cd wifi_analyzer_backend<br />
                       python wifi_analyzer.py
                     </code>
-                    <p className="text-xs text-muted-foreground mt-1">Requires Python 3.8+ · Auto-installs dependencies</p>
+                    <p className="text-xs text-muted-foreground mt-1">Install dependencies using the setup guide</p></>}
                   </div>
                 </div>
               </motion.div>
