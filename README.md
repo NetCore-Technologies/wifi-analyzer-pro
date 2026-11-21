@@ -100,6 +100,8 @@ Enable the optional multi-subscription dispatcher sidecar with:
 
 The dispatcher shares the API's persistent state volume, runs as the image's unprivileged UID, has no listening port and does not receive HMAC signing secrets. The scheduled-report worker requires destination credentials and is configured separately; see deploy/README.md and the report worker guide. Compose stores account/configuration and application state in named volumes; back them up before upgrades.
 
+The vendor product-licensing service is a separate deployment, not part of the customer Compose stack. NetCore operators should follow [the vendor licensing deployment guide](wifi_analyzer_backend/VENDOR_LICENSING.md) and use `compose.vendor-licensing.yaml` with a separate `.env.vendor` file.
+
 For systemd deployments, including the API and both optional workers, see deploy/README.md.
 
 ## Optional subscription billing
@@ -110,9 +112,12 @@ WiFi Analyzer Pro supports two separate billing concepts:
   token bound to one installation. Customer installations contain only the
   vendor public verification key. The vendor signing private key belongs on a
   separate licensing control plane and must never be copied to customer hosts.
-  Owners activate a signed token in Plans & Licensing. This local verifier is
-  implemented; the vendor-hosted checkout/issuance service is a separate
-  deployment milestone and is not claimed as live yet.
+  Owners buy a subscription from NetCore in Plans & Licensing. A separate
+  vendor-hosted Stripe control plane issues short-lived signed renewals; the
+  customer app stores only its installation-bound activation credential and
+  public verification key. Deployment instructions are in
+  [VENDOR_LICENSING.md](wifi_analyzer_backend/VENDOR_LICENSING.md). The service
+  still needs to be configured and deployed on vendor-owned infrastructure.
 - **Optional workspace billing:** an installation operator can configure its
   own Stripe account to charge its own organisation or customers. This is not
   payment to NetCore and is not the vendor subscription flow.
