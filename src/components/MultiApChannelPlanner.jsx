@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { apiFetch, apiBase } from '../lib/api.js';
+import { buildMultiApPlannerPayload } from '../lib/multiApChannelPlanner.js';
 import { Plus, Trash2, Play, AlertCircle, ShieldCheck, RadioTower, Info } from 'lucide-react';
 
 const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
@@ -13,25 +14,6 @@ const widths = [20, 40, 80, 160, 320];
 
 const blankRadio = id => ({ rowId: id, radio_id: '', ap_id: '', site_id: '', band: '2.4GHz', width: '20', current_channel: '', options: '' });
 const blankEdge = id => ({ rowId: id, left: '', right: '', weight: '', source: '' });
-
-function whole(value, name, optional = false) {
-  const text = String(value).trim();
-  if (!text && optional) return null;
-  if (!/^\d+$/.test(text)) throw new Error(`${name} must be a whole number.`);
-  const number = Number(text);
-  if (!Number.isSafeInteger(number)) throw new Error(`${name} is outside the supported range.`);
-  return number;
-}
-function channelOptions(value, width, radioId) {
-  const entries = value.split(',').map(item => item.trim()).filter(Boolean);
-  if (!entries.length) throw new Error(`Radio ${radioId}: enter at least one permitted channel.`);
-  return entries.map((entry, index) => {
-    if (width === 20) return whole(entry, `Radio ${radioId}, option ${index + 1}`);
-    const match = entry.match(/^(\d+)\s*@\s*(\d+(?:\.\d+)?)$/);
-    if (!match) throw new Error(`Radio ${radioId}: wide channel options must use channel@centreMHz, e.g. 36@5190.`);
-    return { channel: Number(match[1]), center_frequency_mhz: Number(match[2]) };
-  });
-}
 
 export default function MultiApChannelPlanner() {
   const [radios, setRadios] = useState([blankRadio(1), blankRadio(2)]);
@@ -64,40 +46,11 @@ export default function MultiApChannelPlanner() {
     setError('');
     setResult(null);
     try {
-      if (radios.length < 2) throw new Error('Add at least two AP radios before planning.');
-      const inputRadios = radios.map((radio, index) => {
-        const radioId = radio.radio_id.trim();
-        if (!radioId || !radio.ap_id.trim() || !radio.site_id.trim()) {
-          throw new Error(`Radio row ${index + 1}: radio ID, AP ID and site ID are required.`);
-        }
-        const width = Number(radio.width);
-        return {
-          radio_id: radioId,
-          ap_id: radio.ap_id.trim(),
-          site_id: radio.site_id.trim(),
-          band: radio.band,
-          channel_width_mhz: width,
-          current_channel: whole(radio.current_channel, `Radio ${radioId} current channel`, true),
-          channel_options: channelOptions(radio.options, width, radioId),
-        };
-      });
-      const inputEdges = edges.filter(edge => edge.left || edge.right || edge.weight || edge.source).map((edge, index) => {
-        if (!edge.left || !edge.right) throw new Error(`Interference link ${index + 1}: select both radios.`);
-        if (edge.left === edge.right) throw new Error(`Interference link ${index + 1}: select two different radio records.`);
-        if (!edge.weight.trim()) throw new Error(`Interference link ${index + 1}: enter a relative weight from 0 to 1.`);
-        const weight = Number(edge.weight);
-        if (!Number.isFinite(weight) || weight < 0 || weight > 1) throw new Error(`Interference link ${index + 1}: weight must be from 0 to 1.`);
-        if (!edge.source) throw new Error(`Interference link ${index + 1}: select its evidence source.`);
-        return { radio_ids: [edge.left, edge.right], weight, evidence_source: edge.source };
-      });
-      if (!inputEdges.length) throw new Error('Add at least one explicit RF interference relationship. The planner does not infer proximity or fabricate measurements.');
-      if (!penalty.trim() || !Number.isFinite(Number(penalty)) || Number(penalty) < 0 || Number(penalty) > 0.5) {
-        throw new Error('Channel-change penalty must be between 0 and 0.5.');
-      }
+      const payload = buildMultiApPlannerPayload(radios, edges, penalty);
       const response = await apiFetch(`${apiBase()}/api/features/multi_ap_channel_reuse_planner`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ radios: inputRadios, interference_edges: inputEdges, change_penalty: Number(penalty) }),
+        body: JSON.stringify(payload),
         signal: AbortSignal.timeout(20000),
       });
       const data = await response.json();
