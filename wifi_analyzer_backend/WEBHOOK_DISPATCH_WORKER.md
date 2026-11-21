@@ -74,3 +74,20 @@ must define an explicit non-empty site allowlist entirely contained in their
 assigned sites. Global/all-site definitions can be created only by all-site
 administrators. Subscription list, update and delete operations hide records
 outside the caller's site scope.
+
+
+## Saved subscriptions and egress proof
+
+Create or edit saved subscription definitions in the Webhook Delivery Center.
+The directory is capped at 100 records and stores endpoint routing metadata,
+exact host allowlists, event filters, site assignments and key IDs only.
+Restricted users can create or manage subscriptions only for explicitly
+assigned sites. The API hides definitions outside the account's scope.
+
+Use **Test TLS** on each enabled subscription before preparing a batch. This
+calls the local API's endpoint probe, which performs a fresh DNS resolution
+and pinned TLS handshake and then evaluates the evidence using F187. It sends
+no webhook HTTP request. Approved evidence is added to the next orchestration
+request; it expires quickly by design, so prepare promptly after testing.
+Signing secrets are entered in the UI only for the preparation request and
+are never part of the saved subscription record.

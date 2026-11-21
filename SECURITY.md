@@ -111,3 +111,19 @@ secrets are not accepted by the subscription CRUD API and are not stored in
 the subscription database. Operators provide signing keys transiently when
 preparing an envelope; the API clears them from the editor after success and
 stores only the resulting signed envelope in the protected delivery outbox.
+
+
+## Saved webhook subscriptions and endpoint probes
+
+The subscription directory stores only metadata: subscription ID, HTTPS
+endpoint, exact DNS hostname allowlist, event filters, minimum severity,
+site allowlist, key ID and batching limits. It does not accept or persist HMAC
+signing secrets. Operators enter the secret transiently in the Webhook Delivery
+Center when preparing an envelope; after successful preparation the browser
+clears the transient key field and the server stores only the signed envelope.
+
+The endpoint probe requires `webhooks.manage` and site access to the saved
+subscription. It resolves the configured DNS hostname, rejects non-public
+answers through the existing resolver, connects directly to a resolved IP,
+verifies TLS with the original hostname and performs no HTTP request. The
+result is short-lived and must be refreshed before the next preparation run.
