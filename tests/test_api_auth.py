@@ -21,6 +21,10 @@ from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealth
 from wifi_analyzer_backend.router_adapters.report_job_store import RouterReportJobStore
 from wifi_analyzer_backend.feature_plugins.feature_182_router_audit_report_bundle_builder import run as build_report_bundle
 from wifi_analyzer_backend.billing import WorkspaceBillingStore, verify_stripe_signature
+from wifi_analyzer_backend.license import VendorLicenseStore, create_signed_license
+from wifi_analyzer_backend.billing import PLAN_CATALOG
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 class AuthenticatedApiTests(unittest.TestCase):
@@ -35,6 +39,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_webhook_deliveries = server.WEBHOOK_DELIVERIES
         self.previous_webhook_subscriptions = server.WEBHOOK_SUBSCRIPTIONS
         self.previous_billing = server.BILLING
+        self.previous_licenses = server.LICENSES
         self.previous_rate_limiter = server.RATE_LIMITER
         self.previous_rate_policies = server.RATE_LIMIT_POLICIES
         server.RATE_LIMITER = TokenBucketRateLimiter()
@@ -47,7 +52,14 @@ class AuthenticatedApiTests(unittest.TestCase):
             "wifi_analyzer_backend.webhook_subscription_store",
             fromlist=["WebhookSubscriptionStore"],
         ).WebhookSubscriptionStore(path=str(Path(self.temp.name) / "webhook-subscriptions.sqlite3"))
-        server.BILLING = WorkspaceBillingStore(path=str(Path(self.temp.name) / "billing.sqlite3"))
+        server.LICENSES = VendorLicenseStore(
+            path=str(Path(self.temp.name) / "vendor-license.json"),
+            public_keys={},
+        )
+        server.BILLING = WorkspaceBillingStore(
+            path=str(Path(self.temp.name) / "billing.sqlite3"),
+            license_store=server.LICENSES,
+        )
         workspace_id = server.BILLING.instance_id()
         server.BILLING.process_stripe_event({
             "id": "evt_testenterprise",
@@ -97,6 +109,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.WEBHOOK_DELIVERIES = self.previous_webhook_deliveries
         server.WEBHOOK_SUBSCRIPTIONS = self.previous_webhook_subscriptions
         server.BILLING = self.previous_billing
+        server.LICENSES = self.previous_licenses
         server.RATE_LIMITER = self.previous_rate_limiter
         server.RATE_LIMIT_POLICIES = self.previous_rate_policies
         self.temp.cleanup()
@@ -122,6 +135,81 @@ class AuthenticatedApiTests(unittest.TestCase):
         finally:
             connection.close()
 
+
+    def test_vendor_license_activation_grants_signed_plan_without_customer_stripe_secrets(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "vendor license owner secure password",
+        })
+        owner_token = setup["token"]
+        private_key = Ed25519PrivateKey.generate()
+        public_bytes = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+        server.LICENSES.public_keys = {"test-key": public_bytes}
+        instance_id = server.BILLING.instance_id()
+        claims = {
+            "schema": "wifi-analyzer-pro.vendor-license.v1",
+            "key_id": "test-key",
+            "license_id": "lic_vendor_test_12345",
+            "installation_id": instance_id,
+            "plan_id": "business",
+            "issued_at": int(time.time()) - 60,
+            "expires_at": int(time.time()) + 30 * 24 * 60 * 60,
+            "limits": dict(PLAN_CATALOG["business"]["limits"]),
+        }
+        token = create_signed_license(claims, private_key)
+
+        status, response = self.request(
+            "POST", "/api/license/activate", {"license_token": token}, token=owner_token,
+        )
+        self.assertEqual(status, 200, response)
+        self.assertEqual(response["license"]["plan_id"], "business")
+        billing_status = server.BILLING.status()
+        self.assertEqual(billing_status["plan_id"], "business")
+        self.assertEqual(billing_status["product_license"]["license_id"], "lic_vendor_test_12345")
+        self.assertEqual(billing_status["limits"]["feature_runs_monthly"], 25_000)
+        self.assertFalse(billing_status["billing_configured"])
+
+    def test_vendor_license_rejects_other_installation_and_non_billing_roles(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "vendor license permission owner secure password",
+        })
+        owner_token = setup["token"]
+        private_key = Ed25519PrivateKey.generate()
+        server.LICENSES.public_keys = {
+            "test-key": private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,
+                format=serialization.PublicFormat.Raw,
+            )
+        }
+        claims = {
+            "schema": "wifi-analyzer-pro.vendor-license.v1",
+            "key_id": "test-key",
+            "license_id": "lic_vendor_test_54321",
+            "installation_id": "f" * 32,
+            "plan_id": "pro",
+            "issued_at": int(time.time()) - 60,
+            "expires_at": int(time.time()) + 30 * 24 * 60 * 60,
+            "limits": dict(PLAN_CATALOG["pro"]["limits"]),
+        }
+        token = create_signed_license(claims, private_key)
+        status, response = self.request(
+            "POST", "/api/license/activate", {"license_token": token}, token=owner_token,
+        )
+        self.assertEqual(status, 400, response)
+        self.assertEqual(server.BILLING.status()["plan_id"], "enterprise")
+
+        self.request("POST", "/api/users", {
+            "username": "license.viewer",
+            "password": "license viewer secure password",
+            "role": "viewer",
+        }, token=owner_token)
+        viewer_token = server.AUTH.login("license viewer secure password", "license.viewer")
+        status, response = self.request(
+            "POST", "/api/license/activate", {"license_token": token}, token=viewer_token,
+        )
+        self.assertEqual(status, 403, response)
 
     def test_billing_status_is_visible_only_to_workspace_billing_managers(self):
         _, setup = self.request("POST", "/api/auth/setup", {

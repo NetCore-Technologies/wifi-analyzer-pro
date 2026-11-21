@@ -22,6 +22,7 @@ if __package__:
         configured_price_plans, create_billing_portal_session, create_checkout_session,
         verify_stripe_signature,
     )
+    from .license import LicenseVerificationError, VendorLicenseStore
     from .audit_store import SecurityAuditStore
     from .audit_checkpoint import create_signed_checkpoint
     from .live_capture import LiveCaptureManager
@@ -55,6 +56,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
         configured_price_plans, create_billing_portal_session, create_checkout_session,
         verify_stripe_signature,
     )
+    from license import LicenseVerificationError, VendorLicenseStore
     from audit_store import SecurityAuditStore
     from audit_checkpoint import create_signed_checkpoint
     from live_capture import LiveCaptureManager
@@ -99,7 +101,8 @@ AUDIT = SecurityAuditStore()
 LIVE_CAPTURE = LiveCaptureManager()
 WEBHOOK_DELIVERIES = WebhookDeliveryStore()
 WEBHOOK_SUBSCRIPTIONS = WebhookSubscriptionStore()
-BILLING = WorkspaceBillingStore()
+LICENSES = VendorLicenseStore()
+BILLING = WorkspaceBillingStore(license_store=LICENSES)
 BILLING_QUOTA_LOCK = __import__("threading").RLock()
 RATE_LIMITER = TokenBucketRateLimiter()
 RATE_LIMIT_POLICIES = dict(DEFAULT_POLICIES)
@@ -1395,7 +1398,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"received": True, "duplicate": not processed})
             return
 
-        if path in {"/api/billing/checkout", "/api/billing/portal"}:
+        if path in {
+            "/api/billing/checkout", "/api/billing/portal",
+            "/api/license/activate", "/api/license/deactivate",
+        }:
             if not self.require_auth("billing.manage"):
                 return
 
@@ -1442,6 +1448,37 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/license/activate":
+            try:
+                activated = LICENSES.activate(
+                    payload.get("license_token"),
+                    BILLING.instance_id(),
+                )
+            except LicenseVerificationError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(
+                "license.activated",
+                target_type="product_license",
+                target_id=activated["license_id"],
+                metadata={"plan_id": activated["plan_id"]},
+            )
+            self.send_json({"license": activated})
+            return
+
+        if path == "/api/license/deactivate":
+            removed = LICENSES.deactivate()
+            self.audit_event(
+                "license.deactivated",
+                target_type="product_license",
+                metadata={"removed": removed},
+            )
+            self.send_json({"removed": removed, "billing": BILLING.status()})
             return
 
         if path == "/api/billing/checkout":
