@@ -62,5 +62,7 @@ actually returned by the local adapter. Driver permissions, scan intervals,
 radio availability and probe conditions affect data coverage. A missing line
 means no valid measurement was recorded for that interval.
 
+The main application exposes this history under Insights → Telemetry History. Operators can filter to one assigned site or review all sites in their permitted scope. CSV export uses a fixed allowlist of aggregate fields and excludes SSIDs, BSSIDs, client MAC addresses and other station identity fields. Site filtering is enforced again by the API; the frontend is not the authorization boundary.
+
 Historical trends are read-only. This subsystem does not change channel,
 transmit power, SSID, security or router configuration.

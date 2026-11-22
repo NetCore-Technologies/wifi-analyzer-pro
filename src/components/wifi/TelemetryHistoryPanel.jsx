@@ -1,15 +1,30 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, RefreshCw, Database, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Activity, RefreshCw, Database, ShieldCheck, AlertCircle, Download } from 'lucide-react';
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { apiBase, apiFetch } from '../../lib/api.js';
+import { buildTelemetryCsv } from '../../lib/telemetryCsv.js';
 import { buildTelemetryChartData, summariseTelemetry } from '../../lib/telemetryChartData.js';
 
 const SITE_COLORS = [
   '#06d6f0', '#a78bfa', '#34d399', '#fbbf24', '#fb7185',
   '#60a5fa', '#f97316', '#e879f9', '#a3e635', '#94a3b8',
 ];
+
+function downloadTelemetryCsv(rows) {
+  const content = buildTelemetryCsv(rows);
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "wifi-analyzer-telemetry-history.csv";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 
 function MetricChart({ title, metric, unit, description, rollups, domain }) {
   const chart = useMemo(() => buildTelemetryChartData(rollups, metric), [rollups, metric]);
@@ -73,6 +88,8 @@ function SummaryCard({ label, value, detail }) {
 
 export default function TelemetryHistoryPanel() {
   const [days, setDays] = useState(7);
+  const [siteId, setSiteId] = useState('all');
+  const [siteIds, setSiteIds] = useState([]);
   const [rollups, setRollups] = useState([]);
   const [retentionDays, setRetentionDays] = useState(90);
   const [privacy, setPrivacy] = useState('');
@@ -84,13 +101,19 @@ export default function TelemetryHistoryPanel() {
     setRefreshing(true);
     setError('');
     try {
-      const response = await apiFetch(apiBase() + '/api/telemetry/history?days=' + days, {
+      const query = '/api/telemetry/history?days=' + days
+        + (siteId === 'all' ? '' : '&site_id=' + encodeURIComponent(siteId))
+        + '&limit=5000';
+      const response = await apiFetch(apiBase() + query, {
         signal: AbortSignal.timeout(15000),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Historical telemetry request failed.');
       if (!Array.isArray(data.rollups)) throw new Error('The telemetry API returned an invalid history response.');
       setRollups(data.rollups);
+      if (siteId === 'all' && Array.isArray(data.site_ids)) {
+        setSiteIds([...new Set(data.site_ids.filter(value => typeof value === 'string' && value.length > 0))].sort());
+      }
       setRetentionDays(Number.isInteger(data.retention_days) ? data.retention_days : 90);
       setPrivacy(typeof data.privacy === 'string' ? data.privacy : '');
     } catch (requestError) {
@@ -99,7 +122,7 @@ export default function TelemetryHistoryPanel() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [days]);
+  }, [days, siteId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -115,7 +138,12 @@ export default function TelemetryHistoryPanel() {
             <div className="text-xs text-muted-foreground">One-minute aggregates from successful local scans and diagnostic probes</div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label="Telemetry site filter" value={siteId} onChange={event => setSiteId(event.target.value)}
+            className="px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground">
+            <option value="all">All assigned sites</option>
+            {siteIds.map(id => <option key={id} value={id}>{id}</option>)}
+          </select>
           <select aria-label="History window" value={days} onChange={event => setDays(Number(event.target.value))}
             className="px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground">
             {[1, 7, 30, 90].filter(value => value <= retentionDays).map(value => <option key={value} value={value}>{value} day{value === 1 ? '' : 's'}</option>)}
@@ -124,6 +152,10 @@ export default function TelemetryHistoryPanel() {
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-sm disabled:opacity-50">
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             Refresh
+          </button>
+          <button type="button" onClick={() => downloadTelemetryCsv(rollups)} disabled={!rollups.length || loading || refreshing}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-sm text-foreground disabled:opacity-50">
+            <Download className="w-3.5 h-3.5" /> Export CSV
           </button>
         </div>
       </div>
