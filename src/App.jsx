@@ -445,7 +445,7 @@ function SignalPanel({ rssiData = [] }) {
   const snrSamples = samples.filter(sample => sample?.snr != null && Number.isFinite(Number(sample.snr)));
   const latest = samples.at(-1) || null;
   const latestRssi = latest?.rssi == null ? null : Number(latest.rssi);
-  const latestSnr = snrSamples.at(-1)?.snr ?? null;
+  const latestSnr = latest?.snr ?? null;
   return (
     <div style={{ ...s.col, gap: 14 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
