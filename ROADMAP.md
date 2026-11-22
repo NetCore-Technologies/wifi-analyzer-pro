@@ -29,7 +29,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Python compilation and regression tests run on Python 3.10–3.13.
 - ✅ Resolve the npm manifest/lockfile mismatch and the ESM Vite alias.
 - ✅ Remove the old repository path from active README links.
-- 🚧 Audit all demo placeholders and clearly separate examples from live measurements.
+- ✅ Audit dashboard demo data, generated charts, sample alerts and future-state claims; live history now accepts only successful `source: live` scans and completed speed-test results.
 - ✅ Live Diagnostics reports missing/non-executable Wi-Fi tools and available scan fallbacks on Linux, macOS and Windows; OS privacy/adapter privileges remain explicitly unverified. Gateway probes no longer fall back to a public IP, and external DNS tests require an explicit target.
 - ✅ Document per-platform utilities, privacy/permission limitations and operator remediation in [Host scan capability diagnostics](wifi_analyzer_backend/HOST_DIAGNOSTICS.md).
 - 📋 Publish v1.0.7 only after release assets and a clean release workflow are verified.

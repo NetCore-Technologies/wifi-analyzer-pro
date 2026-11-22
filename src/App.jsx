@@ -8,7 +8,7 @@ import {
   Smartphone, BarChart2, Download, Bell, Bot, Map, Wrench, Code, Users, ClipboardList,
   RefreshCw, Shield, AlertTriangle, CheckCircle, XCircle, Info,
   Lock, Server, LayoutDashboard, ArrowDown, ArrowUp,
-  Cpu, HardDrive, Thermometer, Database, Signal, Search,
+  Cpu, HardDrive, Thermometer, Database, Radio, Signal, Search,
   Settings, Gauge, Network, Eye, Rss, ScanLine, ChevronRight,
   Moon, Sun, Menu, X, Terminal, Package, Antenna, FileSearch, CreditCard
 } from "lucide-react";
@@ -25,6 +25,7 @@ import BillingPanel from "./components/BillingPanel.jsx";
 import { PhyTelemetryPanel, InterfaceTelemetryPanel } from "./components/LiveRadioPanels.jsx";
 import CommandPalette from "./components/CommandPalette.jsx";
 import { calculateInterfaceRates } from "./lib/telemetryMath.js";
+import { appendLiveSignalSample, appendSpeedTestSample } from "./lib/measurementHistory.js";
 import { useAuth } from "./auth/AuthContext.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
@@ -152,10 +153,6 @@ function toUiDevice(device) {
   };
 }
 
-const sin = (i, o = 0) => Math.sin(i * 0.4 + o) * 0.5 + 0.5;
-const rand = () => (Math.random() - 0.5);
-const genRSSI  = () => Array.from({length:40},(_,i)=>({ t:i, rssi:-(42+sin(i)*10+rand()*4), snr:38+sin(i,1)*10+rand()*3 }));
-const genSpeed = () => Array.from({length:24},(_,i)=>({ t:i, dl:890+sin(i,2)*80+rand()*40, ul:415+sin(i,3)*40+rand()*20 }));
 const s = {
   flex: {display:"flex"},
   col:  {display:"flex",flexDirection:"column"},
@@ -443,115 +440,90 @@ function WirelessPanel({ networks: netsProp, isLive = false }) {
   );
 }
 
-function SignalPanel({ rssiData }) {
-  const scores=[
-    {label:"Signal Quality", val:null, col:C.green},
-    {label:"Stability", val:null, col:C.cyan},
-    {label:"Reliability", val:null, col:C.purple},
-    {label:"Overall Health", val:null, col:C.green},
-  ];
+function SignalPanel({ rssiData = [] }) {
+  const samples = Array.isArray(rssiData) ? rssiData : [];
+  const snrSamples = samples.filter(sample => sample?.snr != null && Number.isFinite(Number(sample.snr)));
+  const latest = samples.at(-1) || null;
+  const latestRssi = latest?.rssi == null ? null : Number(latest.rssi);
+  const latestSnr = snrSamples.at(-1)?.snr ?? null;
   return (
-    <div style={{...s.col,gap:14}}>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        {scores.map((sc,i)=>(
-          <div key={i} className={`hover-card anim-fade-d${i+1}`} style={s.card}>
-            <div style={{fontSize:10,color:C.muted,marginBottom:8,letterSpacing:0.8,fontWeight:600}}>{sc.label.toUpperCase()}</div>
-            <div style={{...s.row,gap:8,marginBottom:8}}>
-              <span style={{fontSize:26,fontWeight:700,color:sc.col,animation:"countUp 0.5s ease both"}}>{sc.val==null?"—":sc.val}</span>
-              <span style={{fontSize:12,color:C.muted}}>{sc.val==null?"not measured":"/100"}</span>
-            </div>
-            <div style={{height:4,background:C.border,borderRadius:2,overflow:"hidden"}}>
-              <div style={{width:`${sc.val==null?0:sc.val}%`,height:"100%",background:sc.col,borderRadius:2,transition:"width 1.2s cubic-bezier(.4,0,.2,1)"}}/>
-            </div>
-          </div>
-        ))}
+    <div style={{ ...s.col, gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+        <Stat label="Latest mean RSSI" value={latestRssi == null ? "—" : `${latestRssi} dBm`} sub={latest ? "Measured in latest live scan" : "No live scan samples"} col={C.green} Icon={Signal} delay={1}/>
+        <Stat label="Latest mean SNR" value={latestSnr == null ? "—" : `${Number(latestSnr)} dB`} sub={latestSnr == null ? "Noise floor not reported" : "Measured RSSI minus noise"} col={C.cyan} Icon={Activity} delay={2}/>
+        <Stat label="Scan samples" value={samples.length} sub="Successful live scans · current session" col={C.purple} Icon={Radio} delay={3}/>
+        <Stat label="BSS readings" value={latest?.bssCount ?? 0} sub="Valid RSSI values in latest scan" col={C.yellow} Icon={Wifi} delay={4}/>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <div className="hover-card anim-fade-d2" style={s.card}>
-          <SHdr title="RSSI chart preview" sub="Illustrative samples; not measured from the current adapter"/>
-          <ResponsiveContainer width="100%" height={170}>
-            <AreaChart data={rssiData} margin={{top:4,right:4,bottom:0,left:-16}}>
-              <defs>
-                <linearGradient id="gR" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={C.cyan}   stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor={C.cyan}   stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-              <XAxis dataKey="t" hide/>
-              <YAxis domain={[-80,-30]} tick={{fontSize:9,fill:C.muted}}/>
-              <Tooltip contentStyle={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,fontSize:11}}
-                formatter={v=>[v.toFixed(1)+" dBm","RSSI"]}/>
-              <Area type="monotone" dataKey="rssi" stroke={C.cyan} strokeWidth={2} fill="url(#gR)" dot={false} animationDuration={800}/>
-            </AreaChart>
-          </ResponsiveContainer>
+          <SHdr title="Measured RSSI over time" sub={samples.length ? `${samples.length} live scan summaries · latest 60 retained in memory` : "No successful live scan measurements yet"}/>
+          {samples.length >= 2 ? (
+            <ResponsiveContainer width="100%" height={190}>
+              <AreaChart data={samples} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
+                <defs><linearGradient id="gRssiLive" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.cyan} stopOpacity={0.4}/><stop offset="95%" stopColor={C.cyan} stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: C.muted }} minTickGap={24}/>
+                <YAxis domain={[-127,0]} tick={{ fontSize: 9, fill: C.muted }}/>
+                <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} formatter={value => [Number(value).toFixed(1) + " dBm", "Mean RSSI"]}/>
+                <Area type="monotone" dataKey="rssi" stroke={C.cyan} strokeWidth={2} fill="url(#gRssiLive)" dot={false}/>
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : <div style={{ height: 190, ...s.cen, color: C.muted, fontSize: 12, textAlign: "center", padding: 16 }}>{samples.length === 1 ? "One live scan is available. A time trend requires another successful scan." : "Historical signal data is collected after successful live scans. No synthetic trend is generated."}</div>}
         </div>
         <div className="hover-card anim-fade-d3" style={s.card}>
-          <SHdr title="SNR chart preview" sub="Illustrative values; measured SNR requires a noise-floor reading"/>
-          <ResponsiveContainer width="100%" height={170}>
-            <AreaChart data={rssiData} margin={{top:4,right:4,bottom:0,left:-16}}>
-              <defs>
-                <linearGradient id="gS" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={C.purple} stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor={C.purple} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-              <XAxis dataKey="t" hide/>
-              <YAxis domain={[20,55]} tick={{fontSize:9,fill:C.muted}}/>
-              <Tooltip contentStyle={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,fontSize:11}}
-                formatter={v=>[v.toFixed(1)+" dB","SNR"]}/>
-              <Area type="monotone" dataKey="snr" stroke={C.purple} strokeWidth={2} fill="url(#gS)" dot={false} animationDuration={800}/>
-            </AreaChart>
-          </ResponsiveContainer>
+          <SHdr title="Measured SNR over time" sub={snrSamples.length ? `${snrSamples.length} scans with a reported noise floor` : "SNR requires measured RSSI and noise-floor values"}/>
+          {snrSamples.length >= 2 ? (
+            <ResponsiveContainer width="100%" height={190}>
+              <AreaChart data={snrSamples} margin={{ top: 4, right: 4, bottom: 0, left: -16 }}>
+                <defs><linearGradient id="gSnrLive" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={C.purple} stopOpacity={0.4}/><stop offset="95%" stopColor={C.purple} stopOpacity={0}/></linearGradient></defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                <XAxis dataKey="label" tick={{ fontSize: 9, fill: C.muted }} minTickGap={24}/>
+                <YAxis domain={[-20,150]} tick={{ fontSize: 9, fill: C.muted }}/>
+                <Tooltip contentStyle={{ background: C.card2, border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 11 }} formatter={value => [Number(value).toFixed(1) + " dB", "Mean SNR"]}/>
+                <Area type="monotone" dataKey="snr" stroke={C.purple} strokeWidth={2} fill="url(#gSnrLive)" dot={false}/>
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : <div style={{ height: 190, ...s.cen, color: C.muted, fontSize: 12, textAlign: "center", padding: 16 }}>{snrSamples.length === 1 ? "One measured SNR sample is available. A trend requires another scan with noise-floor telemetry." : "No noise-floor measurements are available. SNR is left unknown rather than estimated."}</div>}
         </div>
       </div>
-      <div className="anim-fade-d4" style={{...s.card,...s.row,gap:10}}>
-        <div style={{...s.row,gap:8,padding:"9px 14px",background:C.greenFaint,border:`1px solid ${C.green}33`,borderRadius:7}}>
-          <CheckCircle size={13} color={C.green}/>
-          <span style={{fontSize:12,color:C.green}}>Stable — predicted -41 to -48 dBm next 10 samples</span>
-        </div>
-        <div style={{...s.row,gap:8,padding:"9px 14px",background:C.cyanFaint,border:`1px solid ${C.cyan}33`,borderRadius:7}}>
-          <Info size={13} color={C.cyan}/>
-          <span style={{fontSize:12,color:C.cyan}}>Roaming unlikely · Band steering: inactive</span>
-        </div>
+      <div className="anim-fade-d4" style={{ ...s.card, ...s.col, gap: 7 }}>
+        <div style={{ ...s.row, gap: 8 }}><Info size={13} color={C.cyan}/><span style={{ fontSize: 12, color: C.text }}>Measured history only</span></div>
+        <span style={{ fontSize: 11, color: C.textSec, lineHeight: 1.5 }}>This panel aggregates valid RSSI and explicitly reported SNR from successful live scans only. It retains up to 60 scan summaries in this app session. No propagation, stability or future-signal predictions are generated.</span>
+        <span style={{ fontSize: 11, color: C.muted }}>Roaming and band-steering state are not assessed here. Controller policy and client association evidence are required.</span>
       </div>
     </div>
   );
 }
 
-function SpeedPanel({ speedData }) {
+function SpeedPanel({ speedData = [], lastTest = null, onTestComplete }) {
   const [running,setRunning]=useState(false);
   const [pct,setPct]=useState(0);
   const [phase,setPhase]=useState("idle");
-  const [realDl,setRealDl]=useState(null);
-  const [realUl,setRealUl]=useState(null);
-  const [realPing,setRealPing]=useState(null);
   const [testError,setTestError]=useState("");
+  const history=Array.isArray(speedData)?speedData:[];
   const run=async()=>{
     if(running)return;
-    setRunning(true);setPct(0);setPhase("testing");setTestError("");setRealDl(null);setRealUl(null);setRealPing(null);
+    setRunning(true);setPct(0);setPhase("testing");setTestError("");
     try{
-      const r=await apiFetch(`${API_BASE}/api/speedtest`,{signal:AbortSignal.timeout(60000)});
-      if(!r.ok)throw new Error(`Speed test returned HTTP ${r.status}`);
-      const d=await r.json();
-      if(d.error)throw new Error(d.error);
-      const download=Number(d.download), upload=Number(d.upload), ping=Number(d.ping);
+      const response=await apiFetch(`${API_BASE}/api/speedtest`,{signal:AbortSignal.timeout(60000)});
+      if(!response.ok)throw new Error(`Speed test returned HTTP ${response.status}`);
+      const result=await response.json();
+      if(result.error)throw new Error(result.error);
+      const download=Number(result.download), upload=Number(result.upload), ping=Number(result.ping);
       if(![download,upload,ping].every(value=>Number.isFinite(value)&&value>=0))throw new Error("Speed test returned invalid measurements");
       setPct(100);setPhase("done");
-      setRealDl(download);setRealUl(upload);setRealPing(ping);
+      onTestComplete?.({download,upload,ping});
     }catch(error){
       setPhase("error");setTestError(error.message||"Speed test failed");
-    }
-    setRunning(false);
+    }finally{setRunning(false);}
   };
-  const dlVal=phase==="done"&&realDl!=null?realDl:running?"…":"—";
+  const downloadValue=running?"…":lastTest?.download==null?"—":`${lastTest.download} Mbps`;
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label="Download" value={realDl==null?"—":`${realDl} Mbps`} sub="Latest completed test" col={C.cyan} Icon={ArrowDown} delay={1}/>
-        <Stat label="Upload" value={realUl==null?"—":`${realUl} Mbps`} sub="Latest completed test" col={C.purple} Icon={ArrowUp} delay={2}/>
-        <Stat label="Ping" value={realPing==null?"—":`${realPing} ms`} sub="Single reachability timing" col={C.green} Icon={Activity} delay={3}/>
+        <Stat label="Download" value={lastTest?.download==null?"—":`${lastTest.download} Mbps`} sub="Latest completed test" col={C.cyan} Icon={ArrowDown} delay={1}/>
+        <Stat label="Upload" value={lastTest?.upload==null?"—":`${lastTest.upload} Mbps`} sub="Latest completed test" col={C.purple} Icon={ArrowUp} delay={2}/>
+        <Stat label="Ping" value={lastTest?.ping==null?"—":`${lastTest.ping} ms`} sub="Single reachability timing" col={C.green} Icon={Activity} delay={3}/>
         <Stat label="Bufferbloat" value="Not measured" sub="No loaded-latency test is run" col={C.muted} Icon={Gauge} delay={4}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.5fr",gap:10}}>
@@ -559,55 +531,35 @@ function SpeedPanel({ speedData }) {
           <div style={{position:"relative",width:170,height:170}}>
             <svg width="170" height="170" viewBox="0 0 170 170">
               <circle cx="85" cy="85" r="76" fill="none" stroke={C.border} strokeWidth="8"/>
-              <circle cx="85" cy="85" r="76" fill="none"
-                stroke={phase==="upload"?C.purple:C.cyan} strokeWidth="8"
-                strokeDasharray={`${2*Math.PI*76*(running?pct/100:1)} ${2*Math.PI*76}`}
-                strokeLinecap="round" transform="rotate(-90 85 85)"
-                style={{transition:"stroke-dasharray 0.06s linear,stroke 0.3s"}}/>
-              {running&&[0.3,0.6].map((d,i)=>(
-                <circle key={i} cx="85" cy="85" r="76" fill="none"
-                  stroke={phase==="upload"?C.purple:C.cyan} strokeWidth="6" opacity="0.15"
-                  style={{animation:`ripple 1.4s ${i*0.5}s ease-out infinite`}}/>
-              ))}
+              <circle cx="85" cy="85" r="76" fill="none" stroke={C.cyan} strokeWidth="8" strokeDasharray={`${2*Math.PI*76*(running?pct/100:lastTest?.download!=null?1:0)} ${2*Math.PI*76}`} strokeLinecap="round" transform="rotate(-90 85 85)" style={{transition:"stroke-dasharray 0.06s linear,stroke 0.3s"}}/>
+              {running&&[0.3,0.6].map((distance,index)=><circle key={index} cx="85" cy="85" r="76" fill="none" stroke={C.cyan} strokeWidth="6" opacity="0.15" style={{animation:`ripple 1.4s ${index*0.5}s ease-out infinite`}}/>)}
             </svg>
             <div style={{position:"absolute",inset:0,...s.cen,flexDirection:"column"}}>
-              <span style={{fontSize:36,fontWeight:700,color:phase==="upload"?C.purple:C.cyan,transition:"color 0.3s"}}>{dlVal}</span>
-              <span style={{fontSize:12,color:C.muted}}>Mbps</span>
-              <span style={{fontSize:10,color:C.textSec,marginTop:3,letterSpacing:0.5}}>
-                {running?"TEST RUNNING":phase==="done"?"COMPLETE":phase==="error"?"FAILED":"READY"}
-              </span>
+              <span style={{fontSize:30,fontWeight:700,color:C.cyan}}>{downloadValue}</span>
+              <span style={{fontSize:11,color:C.muted}}>Latest download</span>
+              <span style={{fontSize:10,color:C.textSec,marginTop:3,letterSpacing:0.5}}>{running?"TEST RUNNING":phase==="error"?"FAILED":lastTest?"LAST TEST COMPLETE":"READY"}</span>
             </div>
           </div>
           {testError&&<div role="alert" style={{...s.card,border:`1px solid ${C.red}55`,color:C.red,fontSize:12}}>{testError}</div>}
-          <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>This test contacts Cloudflare and transfers test data over the internet.</div>
-          <button onClick={run} disabled={running}
-            style={{padding:"10px 28px",background:running?C.border:C.cyan,
-              color:running?C.muted:"#000",border:"none",borderRadius:8,
-              fontWeight:700,cursor:running?"not-allowed":"pointer",fontSize:13,
-              transition:"all 0.2s",animation:running?"glow 1s ease-in-out infinite":"none"}}>
-            {running?"Testing...":phase==="error"?"Retry Speed Test":"▶ Run Speed Test"}
-          </button>
+          <div style={{fontSize:10,color:C.muted,textAlign:"center"}}>Running a test contacts Cloudflare and transfers test data over the internet.</div>
+          <button onClick={run} disabled={running} style={{padding:"10px 28px",background:running?C.border:C.cyan,color:running?C.muted:"#000",border:"none",borderRadius:8,fontWeight:700,cursor:running?"not-allowed":"pointer",fontSize:13,transition:"all 0.2s",animation:running?"glow 1s ease-in-out infinite":"none"}}>{running?"Testing...":phase==="error"?"Retry Speed Test":"▶ Run Speed Test"}</button>
         </div>
         <div className="hover-card anim-fade-d3" style={s.card}>
-          <SHdr title="Speed chart preview" sub="Illustrative sample series; completed runs are not stored yet"/>
-          <ResponsiveContainer width="100%" height={190}>
-            <LineChart data={speedData} margin={{top:4,right:4,bottom:0,left:-16}}>
-              <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-              <XAxis dataKey="t" hide/>
-              <YAxis domain={[300,1100]} tick={{fontSize:9,fill:C.muted}}/>
-              <Tooltip contentStyle={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,fontSize:11}}
-                formatter={(v,n)=>[Math.round(v)+" Mbps",n==="dl"?"Download":"Upload"]}/>
-              <Line type="monotone" dataKey="dl" stroke={C.cyan}   strokeWidth={2} dot={false} animationDuration={800}/>
-              <Line type="monotone" dataKey="ul" stroke={C.purple} strokeWidth={2} dot={false} animationDuration={800}/>
-            </LineChart>
-          </ResponsiveContainer>
+          <SHdr title="Completed speed-test history" sub={history.length?`${history.length} completed tests · current app session`:"No completed speed tests recorded in this session"}/>
+          {history.length>=2 ? (
+            <ResponsiveContainer width="100%" height={190}>
+              <LineChart data={history} margin={{top:4,right:4,bottom:0,left:-16}}>
+                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+                <XAxis dataKey="label" tick={{fontSize:9,fill:C.muted}} minTickGap={24}/>
+                <YAxis domain={[0,"auto"]} tick={{fontSize:9,fill:C.muted}}/>
+                <Tooltip contentStyle={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,fontSize:11}} formatter={(value,name)=>[`${Number(value).toFixed(1)} Mbps`,name==="dl"?"Download":"Upload"]}/>
+                <Line type="monotone" dataKey="dl" stroke={C.cyan} strokeWidth={2} dot={{r:2}}/>
+                <Line type="monotone" dataKey="ul" stroke={C.purple} strokeWidth={2} dot={{r:2}}/>
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <div style={{height:190,...s.cen,color:C.muted,fontSize:12,textAlign:"center",padding:16}}>{history.length===1?"One completed measurement is available. Run another test to compare results.":"No speed-test history is generated. This chart contains only completed test results."}</div>}
           <div style={{...s.row,gap:16,marginTop:8}}>
-            {[["Download",C.cyan],["Upload",C.purple]].map(([l,c])=>(
-              <div key={l} style={{...s.row,gap:5}}>
-                <div style={{width:12,height:2,background:c,borderRadius:1}}/>
-                <span style={{fontSize:11,color:C.textSec}}>{l}</span>
-              </div>
-            ))}
+            {[["Download",C.cyan],["Upload",C.purple]].map(([label,color])=><div key={label} style={{...s.row,gap:5}}><div style={{width:12,height:2,background:color,borderRadius:1}}/><span style={{fontSize:11,color:C.textSec}}>{label}</span></div>)}
           </div>
         </div>
       </div>
@@ -704,7 +656,7 @@ function AlertsPanel({ alerts = [] }) {
       </div>
       <div className="anim-fade-d2" style={s.card}>
         <div style={{...s.bet,marginBottom:12}}>
-          <SHdr title="Alert Feed" sub="Real-time · last 24h"/>
+          <SHdr title="Current Alert Conditions" sub="Derived from the latest scan and diagnostic response"/>
           <div style={{...s.row,gap:5,flexWrap:"wrap"}}>
             {["all","danger","warning","info","success"].map(f=>(
               <button key={f} onClick={()=>setFilter(f)}
@@ -1035,8 +987,9 @@ export default function App() {
   const [commandOpen,setCommandOpen]=useState(false);
   const collapsed=preferences.compactSidebar;
   const [toasts,setToasts]=useState([]);
-  const [rssiData]=useState(genRSSI);
-  const [speedData]=useState(genSpeed);
+  const [rssiData,setRssiData]=useState([]);
+  const [speedData,setSpeedData]=useState([]);
+  const [lastSpeedTest,setLastSpeedTest]=useState(null);
   const [liveMode,setLiveMode]=useState(false);
   const [liveNets,setLiveNets]=useState(null);
   const [liveDevs,setLiveDevs]=useState(null);
@@ -1116,7 +1069,12 @@ export default function App() {
         const scanSource=getScanSource(scanData);
         if(scanSource==="unknown")throw new Error("The scan endpoint did not identify its observation source");
         setLiveMode(scanSource==="live");
-        if(Array.isArray(scanData.networks))setLiveNets(scanData.networks);
+        if(Array.isArray(scanData.networks)){
+          setLiveNets(scanData.networks);
+          const scanTimestamp=Number(scanData.timestamp);
+          const sampledAt=Number.isFinite(scanTimestamp)&&scanTimestamp>0?scanTimestamp*1000:Date.now();
+          setRssiData(history=>appendLiveSignalSample(history,scanData.networks,{source:scanSource,timestamp:sampledAt}));
+        }
         if(Array.isArray(deviceData.devices))setLiveDevs(deviceData.devices);
         setLiveSystem({
           ...systemData,
@@ -1189,6 +1147,9 @@ export default function App() {
       if(scanSource==="unknown")throw new Error("The scan endpoint did not identify its observation source");
       setLiveNets(data.networks);
       setLiveMode(scanSource==="live");
+      const scanTimestamp=Number(data.timestamp);
+      const sampledAt=Number.isFinite(scanTimestamp)&&scanTimestamp>0?scanTimestamp*1000:Date.now();
+      setRssiData(history=>appendLiveSignalSample(history,data.networks,{source:scanSource,timestamp:sampledAt}));
       setLiveError("");
       setLastUpdated(Date.now());
       addToast(`${scanSource==="demo"?"Demo":"Live"} scan complete — ${data.networks.length} network(s) found`,scanSource==="demo"?"info":"success");
@@ -1197,6 +1158,12 @@ export default function App() {
     }finally{
       setScanning(false);
     }
+  };
+
+  const recordSpeedTest=measurement=>{
+    const completedAt=Date.now();
+    setLastSpeedTest({...measurement,completedAt});
+    setSpeedData(history=>appendSpeedTestSample(history,measurement,completedAt));
   };
 
   const switchTab=id=>{
@@ -1216,7 +1183,7 @@ export default function App() {
     dashboard:   <DashboardPanel networks={networks} devices={devices} diag={liveDiag} alertsProp={observedAlerts} isLive={liveMode}/>,
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
-    speed:       <SpeedPanel speedData={speedData}/>,
+    speed:       <SpeedPanel speedData={speedData} lastTest={lastSpeedTest} onTestComplete={recordSpeedTest}/>,
     devices:     <DevicesPanel devices={devices}/>,
     alerts:      <AlertsPanel alerts={observedAlerts}/>,
     system:      <SystemPanel sysInfo={liveSystem}/>,
