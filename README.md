@@ -40,7 +40,7 @@ Get the latest version from [GitHub Releases](https://github.com/NetCore-Technol
 | macOS Apple Silicon | DMG app bundle and portable tar.gz |
 | macOS Intel | DMG app bundle and portable tar.gz |
 | Linux x64 / ARM64 (Raspberry Pi) | AppImage, DEB, standalone ELF, installer script and tar.gz |
-| Windows x64 | EXE, MSI, PowerShell launcher and batch launcher |
+| Windows x64 | EXE, MSI, portable ZIP (launchers, README and LICENSE), PowerShell and batch launchers |
 
 The app bundles include the Python runtime and built web interface. Python and Node.js are not required to run a published standalone binary. On first launch, create a local password; the verifier is stored in your user configuration directory and bearer sessions expire automatically. macOS bundles are ad-hoc signed by default and will not be accepted by Gatekeeper as notarised software. Configure the five Apple Developer ID / notarisation repository secrets used by the release workflow to produce signed and notarised macOS downloads.
 

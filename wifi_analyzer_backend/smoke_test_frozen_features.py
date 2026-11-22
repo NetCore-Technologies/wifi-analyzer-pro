@@ -15,11 +15,17 @@ REQUIRED_FEATURES = {
     "router_webhook_delivery_orchestrator",
     "multi_ap_channel_reuse_planner",
     "rf_survey_evidence_normalizer",
+    "floorplan_rf_survey_analyzer",
+    "rf_survey_report_comparator",
+    "rf_survey_acceptance_auditor",
+    "radio_regulatory_evidence_validator",
+    "radio_capability_regulatory_channel_planner",
+    "rf_change_approval_packet",
     "client_roam_transaction_analyzer",
     "client_experience_slo_evaluator",
     "client_experience_slo_window_comparator",
 }
-MINIMUM_FEATURE_COUNT = 202
+MINIMUM_FEATURE_COUNT = 208
 PCAP_FIXTURE = "1MOyoQIABAAAAAAAAAAAAP//AAABAAAA"
 
 
@@ -129,6 +135,61 @@ def main() -> None:
     )
     if rf_evidence.get("feature") != "F202" or rf_evidence.get("result", {}).get("status") != "normalised":
         raise SystemExit("Frozen RF survey evidence normalizer did not execute successfully")
+
+    floorplan_survey = request(
+        "/api/features/floorplan_rf_survey_analyzer",
+        {
+            "site_id": "smoke",
+            "as_of": now,
+            "max_age_days": 7,
+            "floorplan": {
+                "floorplan_id": "smoke-floor-1",
+                "floor_id": "level-1",
+                "width_px": 1000,
+                "height_px": 800,
+                "scale_references": [
+                    {"x1_px": 0, "y1_px": 0, "x2_px": 1000, "y2_px": 0, "distance_m": 20},
+                ],
+            },
+            "access_points": [
+                {"ap_id": "smoke-ap1", "floor_id": "level-1", "x_px": 100, "y_px": 100},
+                {"ap_id": "smoke-ap2", "floor_id": "level-1", "x_px": 800, "y_px": 100},
+            ],
+            "survey_samples": [
+                {
+                    "sample_id": "frozen-floorplan-001",
+                    "floor_id": "level-1",
+                    "x_px": 200,
+                    "y_px": 100,
+                    "observed_at": now,
+                    "evidence_source": "survey",
+                    "measurements": [
+                        {"ap_id": "smoke-ap1", "rssi_dbm": -52, "noise_dbm": -95},
+                        {"ap_id": "smoke-ap2", "rssi_dbm": -68, "noise_dbm": -95},
+                    ],
+                },
+                {
+                    "sample_id": "frozen-floorplan-002",
+                    "floor_id": "level-1",
+                    "x_px": 400,
+                    "y_px": 100,
+                    "observed_at": now,
+                    "evidence_source": "survey",
+                    "measurements": [
+                        {"ap_id": "smoke-ap1", "rssi_dbm": -61, "noise_dbm": -94},
+                        {"ap_id": "smoke-ap2", "rssi_dbm": -60, "noise_dbm": -94},
+                    ],
+                },
+            ],
+        },
+        token=token,
+    )
+    if (
+        floorplan_survey.get("feature") != "F203"
+        or floorplan_survey.get("result", {}).get("status") != "analysed"
+        or floorplan_survey.get("result", {}).get("accepted_measurement_count") != 4
+    ):
+        raise SystemExit("Frozen floor-plan RF survey analyzer did not execute successfully")
     roam_result = request(
         "/api/features/client_roam_transaction_analyzer",
         {

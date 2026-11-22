@@ -296,6 +296,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           $exe = Join-Path $stage 'wifi-analyzer-pro.exe'
           Copy-Item 'wifi_analyzer_backend/build/binary/wifi-analyzer-pro.exe' $exe
+          Copy-Item 'README.md' $stage
+          Copy-Item 'LICENSE' $stage
           @'
           @echo off
           setlocal
@@ -343,6 +345,13 @@ jobs:
           Copy-Item $exe "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.exe"
           Copy-Item "$stage/wifi-analyzer-pro.bat" "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.bat"
           Copy-Item "$stage/wifi-analyzer-pro.ps1" "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.ps1"
+          Compress-Archive -Path @(
+            $exe,
+            "$stage/wifi-analyzer-pro.bat",
+            "$stage/wifi-analyzer-pro.ps1",
+            "$stage/README.md",
+            "$stage/LICENSE"
+          ) -DestinationPath "$out/wifi-analyzer-pro-$env:VERSION-windows-x64.zip" -CompressionLevel Optimal -Force
       - name: Smoke test standalone server (Linux)
         if: startsWith(matrix.target, 'linux-')
         shell: bash
@@ -360,7 +369,6 @@ jobs:
           done
           test "$ready" -eq 1 || { cat "$RUNNER_TEMP/wifi-analyzer-pro.log"; exit 1; }
           curl -fsS http://127.0.0.1:199/ | grep -q 'WiFi Analyzer Pro'
-          python wifi_analyzer_backend/smoke_test_frozen_features.py
           python smoke_test_frozen_features.py
       - name: Smoke test standalone server (macOS)
         if: startsWith(matrix.target, 'macos-')
@@ -379,6 +387,7 @@ jobs:
           done
           test "$ready" -eq 1 || { cat "$RUNNER_TEMP/wifi-analyzer-pro.log"; exit 1; }
           curl -fsS http://127.0.0.1:199/ | grep -q 'WiFi Analyzer Pro'
+          python wifi_analyzer_backend/smoke_test_frozen_features.py
       - name: Smoke test standalone server (Windows)
         if: matrix.target == 'windows-x64'
         shell: pwsh
