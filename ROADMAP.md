@@ -118,7 +118,7 @@ A candidate is promoted to an F-number only after checking that it is distinct f
 - 📋 Channel planner that suggests a full 2.4/5/6 GHz layout for several APs
 - 📋 Improved heatmaps with floor-plan upload
 - 📋 Better Evil Twin detection with a trusted BSSID allowlist
-- 📋 Alert rules editor (thresholds, quiet hours, deduplication)
+- ✅ Site-scoped alert policies with measured scan/gateway thresholds, recovery hysteresis, sustained-breach windows, timezone-aware quiet hours, deduplicated incidents, acknowledgements and tamper-evident audit events. Automatic evaluation currently covers the local host only; remote-site evaluators and external notification delivery remain separate work.
 
 ---
 
@@ -179,7 +179,7 @@ These aren't committed. Open an issue to discuss or vote.
 
 Security issues: please follow [SECURITY.md](SECURITY.md) and do not open a public issue.
 
-*Last updated: November 21, 2026*
+*Last updated: November 22, 2026*
 
 
 - ✅ Saved, site-scoped webhook subscription directory with metadata-only persistence, a 100-subscription workspace bound, transient HMAC key entry, live pinned-TLS endpoint probing and short-lived F187 egress evidence reuse.

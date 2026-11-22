@@ -28,6 +28,7 @@ import CommandPalette from "./components/CommandPalette.jsx";
 import { calculateInterfaceRates } from "./lib/telemetryMath.js";
 import { appendLiveSignalSample, appendSpeedTestSample } from "./lib/measurementHistory.js";
 import { useAuth } from "./auth/AuthContext.jsx";
+import SiteAlertRulesPanel from "./components/SiteAlertRulesPanel.jsx";
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
 
@@ -658,15 +659,16 @@ function AlertsPanel({ alerts = [] }) {
   const filtered=filter==="all"?alerts:alerts.filter(a=>a.type===filter);
   return (
     <div style={{...s.col,gap:14}}>
+      <SiteAlertRulesPanel />
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
         <Stat label="Critical" value={alerts.filter(a=>a.type==="danger").length} sub="Verified critical conditions" col={C.red} Icon={XCircle} delay={1}/>
         <Stat label="Warnings" value={alerts.filter(a=>a.type==="warning").length} sub="From current measurements" col={C.yellow} Icon={AlertTriangle} delay={2}/>
         <Stat label="Info" value={alerts.filter(a=>a.type==="info").length} sub="Advisories" col={C.cyan} Icon={Info} delay={3}/>
-        <Stat label="Resolved" value="—" sub="No alert history stored" col={C.green} Icon={CheckCircle} delay={4}/>
+        <Stat label="Policies" value="Managed above" sub="Persistent site-scoped rules" col={C.green} Icon={CheckCircle} delay={4}/>
       </div>
       <div className="anim-fade-d2" style={s.card}>
         <div style={{...s.bet,marginBottom:12}}>
-          <SHdr title="Current Alert Conditions" sub="Derived from the latest scan and diagnostic response"/>
+          <SHdr title="Latest scan hints" sub="Current observations · not historical incidents"/>
           <div style={{...s.row,gap:5,flexWrap:"wrap"}}>
             {["all","danger","warning","info","success"].map(f=>(
               <button key={f} onClick={()=>setFilter(f)}
@@ -680,7 +682,7 @@ function AlertsPanel({ alerts = [] }) {
           </div>
         </div>
         <div style={{...s.col,gap:8}}>
-          {filtered.length===0&&<div style={{padding:"16px 10px",color:C.muted,fontSize:12}}>No alert conditions were detected in the available measurements. This is not a guarantee that the network is secure.</div>}
+          {filtered.length===0&&<div style={{padding:"16px 10px",color:C.muted,fontSize:12}}>No local alert hints were detected in the latest available measurements. Persistent policy incidents are shown above.</div>}
           {filtered.map((a,i)=>{
             const c=COLS[a.type]; const I=ICONS[a.type];
             return (
@@ -695,7 +697,7 @@ function AlertsPanel({ alerts = [] }) {
           })}
         </div>
       </div>
-      <div style={{...s.card,fontSize:12,color:C.muted}}>Alert delivery is not connected in this build. Current alerts are displayed locally and are not sent to Discord, email or MQTT.</div>
+      <div style={{...s.card,fontSize:12,color:C.muted}}>These local scan hints are transient. Site policy incidents are persisted and acknowledged above; external delivery is not configured.</div>
     </div>
   );
 }

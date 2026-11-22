@@ -1,5 +1,6 @@
 psutil>=7.2.2
 cryptography>=48.0.0
+tzdata>=2025.2
 # Windows only (uncomment if needed):
 # pywifi
 # comtypes

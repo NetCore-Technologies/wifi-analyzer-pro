@@ -24,6 +24,7 @@ DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "api.site.audit": (5, 60),
     "api.trusted_aps.manage": (60, 60),
     "api.rf_surveys.manage": (12, 60),
+    "api.alert_rules.manage": (60, 60),
     "api.rf_surveys.compare": (20, 60),
     "api.rf_change.create": (8, 60),
     "api.rf_change.decision": (20, 60),

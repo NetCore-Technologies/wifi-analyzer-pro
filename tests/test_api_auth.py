@@ -26,6 +26,7 @@ from wifi_analyzer_backend.license import VendorLicenseStore, create_signed_lice
 from wifi_analyzer_backend.telemetry_store import WiFiTelemetryStore
 from wifi_analyzer_backend.trusted_ap_store import TrustedAccessPointStore
 from wifi_analyzer_backend.rf_survey_store import RfSurveyHistoryStore
+from wifi_analyzer_backend.alert_rule_store import AlertRuleStore
 from wifi_analyzer_backend.regulatory_dataset_store import RegulatoryDatasetStore
 from wifi_analyzer_backend.rf_change_approval_store import RfChangeApprovalStore
 from wifi_analyzer_backend.feature_plugins import run as run_feature_tool
@@ -42,6 +43,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.previous_telemetry = server.TELEMETRY
         self.previous_trusted_aps = server.TRUSTED_APS
         self.previous_rf_surveys = server.RF_SURVEYS
+        self.previous_alert_rules = server.ALERT_RULES
         self.previous_regulatory_datasets = server.REGULATORY_DATASETS
         self.previous_rf_change_requests = server.RF_CHANGE_REQUESTS
         self.previous_agent_health = server.AGENT_HEALTH
@@ -100,6 +102,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.TELEMETRY = WiFiTelemetryStore(path=Path(self.temp.name) / "telemetry.sqlite3")
         server.TRUSTED_APS = TrustedAccessPointStore(path=Path(self.temp.name) / "trusted-aps.sqlite3")
         server.RF_SURVEYS = RfSurveyHistoryStore(path=Path(self.temp.name) / "rf-surveys.sqlite3")
+        server.ALERT_RULES = AlertRuleStore(path=Path(self.temp.name) / "alert-rules.sqlite3")
         server.REGULATORY_DATASETS = RegulatoryDatasetStore(path=Path(self.temp.name) / "regulatory-datasets.sqlite3")
         server.RF_CHANGE_REQUESTS = RfChangeApprovalStore(path=Path(self.temp.name) / "rf-change-requests.sqlite3")
         server.AGENT_HEALTH = RouterAgentHealthStore(path=str(Path(self.temp.name) / "agent-health.sqlite3"))
@@ -122,6 +125,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         server.TELEMETRY = self.previous_telemetry
         server.TRUSTED_APS = self.previous_trusted_aps
         server.RF_SURVEYS = self.previous_rf_surveys
+        server.ALERT_RULES = self.previous_alert_rules
         server.REGULATORY_DATASETS = self.previous_regulatory_datasets
         server.RF_CHANGE_REQUESTS = self.previous_rf_change_requests
         server.AGENT_HEALTH = self.previous_agent_health
@@ -4155,6 +4159,68 @@ class AuthenticatedApiTests(unittest.TestCase):
             self.assertEqual(status, 200, history)
             self.assertEqual(history["request_count"], 1)
             self.assertEqual(history["requests"][0]["request_id"], request_id)
+
+    def test_site_alert_rules_persist_evaluate_acknowledge_and_enforce_scope(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "alert rules owner secure password",
+        })
+        owner = setup["token"]
+        _, created = self.request("POST", "/api/users", {
+            "username": "alert.network.admin",
+            "password": "alert network admin secure password",
+            "role": "network_admin",
+            "all_sites": False,
+            "site_ids": ["local"],
+        }, token=owner)
+        self.assertEqual(created["user"]["username"], "alert.network.admin")
+        token = server.AUTH.login("alert network admin secure password", "alert.network.admin")
+        rule_payload = {
+            "operation": "save", "site_id": "local",
+            "rule": {
+                "name": "Weak corporate Wi-Fi signal",
+                "metric": "minimum_rssi_dbm", "operator": "lt", "threshold": -75,
+                "recovery_threshold": -70, "severity": "critical",
+                "hold_for_seconds": 0, "dedupe_window_seconds": 900,
+                "quiet_start": "22:00", "quiet_end": "07:00", "timezone": "Australia/Sydney",
+            },
+        }
+        status, saved = self.request("POST", "/api/sites/alert-rules", rule_payload, token=token)
+        self.assertEqual(status, 201, saved)
+        self.assertEqual(saved["rule"]["metric"], "minimum_rssi_dbm")
+        rule_id = saved["rule"]["rule_id"]
+        status, listing = self.request("GET", "/api/sites/alert-rules?site_id=local", token=token)
+        self.assertEqual(status, 200, listing)
+        self.assertTrue(listing["can_manage"])
+        self.assertEqual(len(listing["rules"]), 1)
+        self.assertIn("minimum_rssi_dbm", [item["key"] for item in listing["metric_catalog"]])
+        self.assertEqual(listing["notification_delivery"], "not_configured")
+        result = server.ALERT_RULES.evaluate("local", {"minimum_rssi_dbm": -82})
+        event_id = result["created_event_ids"][0]
+        status, acknowledged = self.request("POST", "/api/sites/alert-rules", {
+            "operation": "acknowledge", "site_id": "local", "event_id": event_id,
+        }, token=token)
+        self.assertEqual(status, 200, acknowledged)
+        self.assertEqual(acknowledged["event"]["status"], "acknowledged")
+        self.assertEqual(acknowledged["event"]["acknowledged_by"], "alert.network.admin")
+        status, cross_site = self.request("GET", "/api/sites/alert-rules?site_id=branch", token=token)
+        self.assertEqual(status, 403, cross_site)
+        status, denied = self.request("POST", "/api/sites/alert-rules", {
+            **rule_payload, "site_id": "branch",
+        }, token=token)
+        self.assertEqual(status, 403, denied)
+
+        status, unavailable = self.request("POST", "/api/sites/alert-rules", {
+            **rule_payload, "site_id": "branch",
+        }, token=owner)
+        self.assertEqual(status, 409, unavailable)
+        self.assertEqual(unavailable["code"], "alert_evaluation_source_unavailable")
+        status, removed = self.request("POST", "/api/sites/alert-rules", {
+            "operation": "delete", "site_id": "local", "rule_id": rule_id,
+        }, token=token)
+        self.assertEqual(status, 200, removed)
+        self.assertTrue(removed["deleted"])
+        self.assertEqual(server.ALERT_RULES.list_events("local")[0]["status"], "resolved")
+        self.assertTrue(server.AUDIT.verify_chain()["valid"])
 
 if __name__ == "__main__":
     unittest.main()

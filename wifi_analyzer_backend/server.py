@@ -43,6 +43,7 @@ if __package__:
     from .telemetry_store import WiFiTelemetryStore
     from .trusted_ap_store import TrustedAccessPointStore
     from .rf_survey_store import RfSurveyHistoryStore
+    from .alert_rule_store import AlertRuleStore, METRICS as ALERT_METRICS, scan_observations, diagnostic_observations
     from .rf_change_approval_store import RfChangeApprovalStore
     from .regulatory_dataset_store import RegulatoryDatasetStore
     from .router_adapters.registry import list_manifests as router_adapter_manifests
@@ -86,6 +87,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from telemetry_store import WiFiTelemetryStore
     from trusted_ap_store import TrustedAccessPointStore
     from rf_survey_store import RfSurveyHistoryStore
+    from alert_rule_store import AlertRuleStore, METRICS as ALERT_METRICS, scan_observations, diagnostic_observations
     from rf_change_approval_store import RfChangeApprovalStore
     from regulatory_dataset_store import RegulatoryDatasetStore
     from router_adapters.registry import list_manifests as router_adapter_manifests
@@ -116,6 +118,7 @@ HISTORY = SiteHistoryStore()
 TELEMETRY = WiFiTelemetryStore()
 TRUSTED_APS = TrustedAccessPointStore()
 RF_SURVEYS = RfSurveyHistoryStore()
+ALERT_RULES = AlertRuleStore()
 REGULATORY_DATASETS = RegulatoryDatasetStore()
 RF_CHANGE_REQUESTS = RfChangeApprovalStore()
 LOCAL_SITE_ID = os.getenv("WIFI_ANALYZER_LOCAL_SITE_ID", "local")
@@ -971,6 +974,15 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 telemetry_status = "unavailable"
                 print("[TELEMETRY ERROR] Could not persist scan rollup")
+        if not DEMO_MODE and not (OS == "Linux" and not interface):
+            try:
+                ALERT_RULES.evaluate(
+                    LOCAL_SITE_ID,
+                    scan_observations(networks),
+                    observed_at=datetime.fromtimestamp(sampled_at, timezone.utc).isoformat(),
+                )
+            except Exception:
+                print("[ALERT ENGINE ERROR] Scan metrics could not be evaluated")
         return {
             "networks": networks,
             "congestion": channel_congestion(networks),
@@ -987,6 +999,10 @@ class Handler(BaseHTTPRequestHandler):
                 TELEMETRY.record_diagnostics(LOCAL_SITE_ID, diagnostics)
             except Exception:
                 print("[TELEMETRY ERROR] Could not persist diagnostic rollup")
+            try:
+                ALERT_RULES.evaluate(LOCAL_SITE_ID, diagnostic_observations(diagnostics))
+            except Exception:
+                print("[ALERT ENGINE ERROR] Diagnostic metrics could not be evaluated")
         return diagnostics
 
     def speedtest_response(self):
@@ -1147,6 +1163,7 @@ class Handler(BaseHTTPRequestHandler):
         site_ids = set(HISTORY.site_ids(limit=100))
         site_ids.update(TELEMETRY.site_ids(limit=100))
         site_ids.update(RF_SURVEYS.site_ids(limit=100))
+        site_ids.update(ALERT_RULES.site_ids(limit=100))
         site_ids.update(REGULATORY_DATASETS.site_ids(limit=100))
         site_ids.update(RF_CHANGE_REQUESTS.site_ids(limit=100))
         for credential in AGENT_HEALTH.list_agent_credentials():
@@ -1220,7 +1237,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys", "/api/sites/regulatory-datasets", "/api/sites/rf-change-requests"} or path.startswith("/api/sites/rf-surveys/") or path.startswith("/api/sites/regulatory-datasets/") or path.startswith("/api/sites/rf-change-requests/"):
+            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys", "/api/sites/regulatory-datasets", "/api/sites/rf-change-requests", "/api/sites/alert-rules"} or path.startswith("/api/sites/rf-surveys/") or path.startswith("/api/sites/regulatory-datasets/") or path.startswith("/api/sites/rf-change-requests/"):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -1561,6 +1578,7 @@ class Handler(BaseHTTPRequestHandler):
                 discovered.update(TELEMETRY.site_ids(limit=100))
                 discovered.update(TRUSTED_APS.site_ids(limit=100))
                 discovered.update(RF_SURVEYS.site_ids(limit=100))
+                discovered.update(ALERT_RULES.site_ids(limit=100))
                 discovered.update(REGULATORY_DATASETS.site_ids(limit=100))
                 discovered.update(RF_CHANGE_REQUESTS.site_ids(limit=100))
                 discovered.update(scope["site_ids"])
@@ -1615,6 +1633,28 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json({"error": "RF change request not found"}, 404)
                     return
                 self.send_json(saved)
+            elif path == "/api/sites/alert-rules":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=2)
+                site_values = params.get("site_id", [])
+                if len(site_values) != 1 or not site_values[0].strip():
+                    raise ValueError("site_id must be supplied exactly once")
+                site_id = site_values[0].strip()
+                if not self.require_site_access([site_id], require_explicit=True):
+                    return
+                self.send_json({
+                    "site_id": site_id,
+                    "rules": ALERT_RULES.list_rules(site_id),
+                    "events": ALERT_RULES.list_events(site_id, limit=100),
+                    "can_manage": AUTH.has_permission(self.bearer_token(), "sites.manage"),
+                    "metric_catalog": [
+                        {"key": key, "unit": value["unit"], "description": value["description"],
+                         "minimum": value["minimum"], "maximum": value["maximum"]}
+                        for key, value in ALERT_METRICS.items()
+                    ],
+                    "notification_delivery": "not_configured",
+                    "evaluation_enabled": site_id == LOCAL_SITE_ID,
+                    "evaluation_source": "local_host_scans_and_gateway_diagnostics" if site_id == LOCAL_SITE_ID else "not_connected",
+                })
             elif path == "/api/sites/rf-surveys":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=3)
                 site_values = params.get("site_id", [])
@@ -1843,6 +1883,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/trusted-aps" and not self.require_auth("sites.manage"):
             return
+        if path == "/api/sites/alert-rules" and not self.require_auth("sites.manage"):
+            return
         if path == "/api/sites/rf-surveys":
             if not self.require_auth("diagnostics.run") or not self.require_auth("sites.manage"):
                 return
@@ -1871,6 +1913,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/sites/audit": ("api.site.audit", False),
             "/api/trusted-aps": ("api.trusted_aps.manage", False),
             "/api/sites/rf-surveys": ("api.rf_surveys.manage", False),
+            "/api/sites/alert-rules": ("api.alert_rules.manage", False),
             "/api/sites/rf-surveys/compare": ("api.rf_surveys.compare", False),
             "/api/sites/regulatory-datasets": ("api.regulatory_datasets.manage", False),
             "/api/sites/rf-change-requests": ("api.rf_change.create", False),
@@ -2424,6 +2467,107 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(response, 202)
             else:
                 self.send_json(response, 201 if retained["created"] else 200)
+            return
+
+        if path == "/api/sites/alert-rules":
+            operation = payload.get("operation")
+            site_id = payload.get("site_id")
+            if not self.require_site_access([site_id], require_explicit=True):
+                return
+            if operation == "save" and site_id != LOCAL_SITE_ID:
+                self.send_json({
+                    "error": "No telemetry evaluator is connected to this remote site yet",
+                    "code": "alert_evaluation_source_unavailable",
+                    "local_site_id": LOCAL_SITE_ID,
+                }, 409)
+                return
+            if operation not in {"save", "delete", "acknowledge"}:
+                self.send_json({"error": "operation must be save, delete or acknowledge"}, 400)
+                return
+            target_value = payload.get("rule_id") or payload.get("event_id") or "new"
+            fingerprint = hashlib.sha256(
+                (str(site_id) + "\\0" + str(operation) + "\\0" + str(target_value)).encode("utf-8")
+            ).hexdigest()[:24]
+            action = {
+                "save": "alert_rule.save_requested",
+                "delete": "alert_rule.delete_requested",
+                "acknowledge": "alert.acknowledge_requested",
+            }[operation]
+            metadata = {"site_id": site_id, "operation": operation, "target_fingerprint": fingerprint}
+            requested = self.audit_event(
+                action, target_type="alert_policy" if operation != "acknowledge" else "alert_event",
+                target_id=fingerprint, metadata=metadata,
+            )
+            if requested is None:
+                self.send_json({"error": "The security audit ledger is unavailable; no alert change was applied"}, 503)
+                return
+            try:
+                if operation == "save":
+                    rule = ALERT_RULES.save_rule(site_id, payload.get("rule"), rule_id=payload.get("rule_id"))
+                    completed = self.audit_event(
+                        "alert_rule.saved", target_type="alert_policy",
+                        target_id=rule["rule_id"],
+                        metadata={"site_id": site_id, "metric": rule["metric"], "enabled": rule["enabled"]},
+                    )
+                    response = {"site_id": site_id, "rule": rule}
+                    if completed is None:
+                        response["audit_status"] = "rule saved; outcome audit event could not be persisted"
+                        self.send_json(response, 202)
+                    else:
+                        self.send_json(response, 201 if not payload.get("rule_id") else 200)
+                    return
+                if operation == "delete":
+                    rule_id = payload.get("rule_id")
+                    if not isinstance(rule_id, str) or not rule_id:
+                        raise ValueError("rule_id is required")
+                    deleted = ALERT_RULES.delete_rule(site_id, rule_id)
+                    if deleted:
+                        completed = self.audit_event(
+                            "alert_rule.deleted", target_type="alert_policy",
+                            target_id=fingerprint, metadata=metadata,
+                        )
+                        response = {"site_id": site_id, "deleted": True}
+                        if completed is None:
+                            response["audit_status"] = "rule deleted; outcome audit event could not be persisted"
+                            self.send_json(response, 202)
+                        else:
+                            self.send_json(response)
+                    else:
+                        self.send_json({"site_id": site_id, "deleted": False}, 404)
+                    return
+                event_id = payload.get("event_id")
+                if not isinstance(event_id, str) or not event_id:
+                    raise ValueError("event_id is required")
+                identity = AUTH.identity(self.bearer_token()) or {}
+                actor = identity.get("username") or "unknown"
+                event = ALERT_RULES.acknowledge(site_id, event_id, actor)
+                if event is None:
+                    self.send_json({"error": "Alert event not found for this site"}, 404)
+                    return
+                completed = self.audit_event(
+                    "alert.acknowledged", target_type="alert_event",
+                    target_id=fingerprint,
+                    metadata={"site_id": site_id, "acknowledged_by": actor},
+                )
+                response = {"site_id": site_id, "event": event}
+                if completed is None:
+                    response["audit_status"] = "alert acknowledged; outcome audit event could not be persisted"
+                    self.send_json(response, 202)
+                else:
+                    self.send_json(response)
+            except ValueError as error:
+                self.audit_event(
+                    "alert_rule.change_rejected", target_type="alert_policy",
+                    target_id=fingerprint, outcome="failure", metadata=metadata,
+                )
+                self.send_json({"error": str(error)}, 400)
+            except Exception:
+                self.audit_event(
+                    "alert_rule.change_failed", target_type="alert_policy",
+                    target_id=fingerprint, outcome="failure", metadata=metadata,
+                )
+                print("[ALERT ENGINE ERROR] Could not persist site alert change")
+                self.send_json({"error": "Alert rule operation failed"}, 503)
             return
 
         if path == "/api/sites/rf-surveys" and payload.get("operation") == "delete":
