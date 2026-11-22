@@ -78,6 +78,11 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("Generate master SHA256SUMS", RELEASE_WORKFLOW)
         self.assertIn("Attest release asset provenance", RELEASE_WORKFLOW)
 
+    def test_release_artifact_actions_use_compatible_v7_upload_and_v8_download(self):
+        self.assertIn("uses: actions/upload-artifact@v7", RELEASE_WORKFLOW)
+        self.assertIn("uses: actions/download-artifact@v8", RELEASE_WORKFLOW)
+        self.assertNotIn("uses: actions/download-artifact@v4", RELEASE_WORKFLOW)
+
     def test_release_tag_must_match_application_version(self):
         self.assertIn("Verify release tag matches application version", RELEASE_WORKFLOW)
         self.assertIn("JSON.parse(require('fs').readFileSync('package.json')).version", RELEASE_WORKFLOW)
