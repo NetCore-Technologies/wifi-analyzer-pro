@@ -213,7 +213,7 @@ class AlertRuleStoreTests(unittest.TestCase):
         values = scan_observations([
             {"ssid": "open", "security": "Open", "rssi": -40},
             {"ssid": "secured", "security": "WPA2", "rssi": -61},
-            {"ssid": "unknown", "rssi": None},
+            {"ssid": "unknown", "security": "WPA2", "rssi": None},
         ])
         self.assertEqual(values["network_count"], 3)
         self.assertEqual(values["open_network_count"], 1)
