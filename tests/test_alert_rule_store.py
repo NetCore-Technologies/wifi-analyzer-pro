@@ -185,6 +185,12 @@ class AlertRuleStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite number"):
             self.store.evaluate("head-office", {"minimum_rssi_dbm": float("inf")})
 
+    def test_empty_scan_does_not_create_zero_network_measurements(self):
+        values = scan_observations([])
+        self.assertIsNone(values["network_count"])
+        self.assertIsNone(values["open_network_count"])
+        self.assertIsNone(values["minimum_rssi_dbm"])
+
     def test_open_network_and_measured_diagnostic_extraction(self):
         values = scan_observations([
             {"ssid": "open", "security": "Open", "rssi": -40},

@@ -974,7 +974,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 telemetry_status = "unavailable"
                 print("[TELEMETRY ERROR] Could not persist scan rollup")
-        if not DEMO_MODE and not (OS == "Linux" and not interface):
+        if not DEMO_MODE and not (OS == "Linux" and not interface) and networks:
             try:
                 ALERT_RULES.evaluate(
                     LOCAL_SITE_ID,

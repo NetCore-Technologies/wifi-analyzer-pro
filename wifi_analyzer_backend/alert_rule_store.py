@@ -197,14 +197,14 @@ class AlertRuleStore:
     def _db(self):
         parent_existed = self.path.parent.exists()
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self.path.is_symlink() or (self.path.exists() and not self.path.is_file()):
+            raise ValueError("alert database path must be a regular non-symbolic-link file")
         if os.name != "nt":
             if not parent_existed:
                 try:
                     os.chmod(self.path.parent, 0o700)
                 except OSError:
                     pass
-            if self.path.is_symlink() or (self.path.exists() and not self.path.is_file()):
-                raise ValueError("alert database path must be a regular non-symbolic-link file")
             try:
                 fd = os.open(
                     str(self.path),
@@ -636,9 +636,12 @@ def scan_observations(networks: list[dict]) -> dict:
             rssi.append(float(value))
         if str(network.get("security", network.get("sec", ""))).strip().lower() == "open":
             open_count += 1
+    # An empty result is ambiguous: current platform adapters can return [] for
+    # either a valid empty scan or a command/adapter failure. Do not manufacture
+    # a zero-network measurement until the scanner exposes a success indicator.
     return {
-        "network_count": float(len(networks)),
-        "open_network_count": float(open_count),
+        "network_count": float(len(networks)) if networks else None,
+        "open_network_count": float(open_count) if networks else None,
         "minimum_rssi_dbm": min(rssi) if rssi else None,
     }
 
