@@ -27,6 +27,7 @@ import TelemetryHistoryPanel from "./components/wifi/TelemetryHistoryPanel.jsx";
 import CommandPalette from "./components/CommandPalette.jsx";
 import { calculateInterfaceRates } from "./lib/telemetryMath.js";
 import { appendLiveSignalSample, appendSpeedTestSample } from "./lib/measurementHistory.js";
+import { selectObservationRows } from "./lib/observationRows.js";
 import { useAuth } from "./auth/AuthContext.jsx";
 import SiteAlertRulesPanel from "./components/SiteAlertRulesPanel.jsx";
 
@@ -579,15 +580,20 @@ function DevicesPanel({ devices: devsProp, isLive = false }) {
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label={isLive?"Devices Found":DEVS.length?"Demo Devices":"Devices"} value={DEVS.length} sub={isLive?`${onlineCount} reported online · ${offlineCount} offline · ${unknownStatusCount} unknown`:DEVS.length?"Illustrative sample records · not live inventory":"No live client inventory available"} col={C.cyan} Icon={Smartphone} delay={1}/>
-        <Stat label={isLive?"Gateway":"Demo Gateway"} value={isLive?(DEVS.find(d=>d.gw)?.ip||"N/A"):"—"} sub={isLive?(DEVS.find(d=>d.gw)?.vendor||"Not resolved"):"No gateway observed from this host"} col={C.purple} Icon={Activity} delay={2}/>
+        <Stat label={isLive?"Observed Neighbours":DEVS.length?"Demo Devices":"Devices"} value={DEVS.length} sub={isLive?"ARP neighbour-table records · Wi-Fi association is not verified":DEVS.length?"Illustrative sample records · not live inventory":"No live neighbour records available"} col={C.cyan} Icon={Smartphone} delay={1}/>
+        <Stat label={isLive?"Gateway":"Demo Gateway"} value={isLive?"—":"—"} sub={isLive?"Gateway role is not inferred from the ARP neighbour table": "No gateway observed from this host"} col={C.purple} Icon={Activity} delay={2}/>
         <Stat label={isLive?"Vendors Found":"Demo Vendors"} value={[...new Set(DEVS.map(d=>d.vendor).filter(Boolean))].length} sub={isLive?"Unique manufacturers in live inventory":"Illustrative fixture labels"} col={C.green} Icon={CheckCircle} delay={3}/>
         <Stat label={isLive?"Unknown Vendors":"Unknown Demo Vendors"} value={DEVS.filter(d=>!d.vendor||d.vendor==="???").length} sub={isLive?"Manufacturer lookup unresolved":"Illustrative fixture classification"} col={C.red} Icon={AlertTriangle} delay={4}/>
       </div>
       {!isLive && DEVS.length > 0 && (
         <div role="note" style={{...s.card,border:`1px solid ${C.purple}44`,background:C.purpleFaint,...s.col,gap:5}}>
-          <span style={{fontSize:11,fontWeight:700,color:C.purple}}>DEMO DEVICE FIXTURES · NOT LIVE CLIENT INVENTORY</span>
-          <span style={{fontSize:11,color:C.textSec}}>The sample IP addresses, MAC addresses, vendors, signal and online/offline states below are illustrative. No nearby client inventory was collected.</span>
+          <span style={{fontSize:11,fontWeight:700,color:C.purple}}>DEMO DEVICE FIXTURES · NOT LIVE NEIGHBOUR DATA</span>
+          <span style={{fontSize:11,color:C.textSec}}>The sample IP addresses, MAC addresses, vendors, signal and online/offline states below are illustrative. No host neighbour table was collected.</span>
+        </div>
+      )}
+      {isLive && DEVS.length === 0 && (
+        <div role="status" style={{...s.card,...s.cen,color:C.muted,fontSize:12,minHeight:90,textAlign:"center"}}>
+          No ARP neighbour records were returned by the host. This does not establish that the Wi-Fi network has no associated clients.
         </div>
       )}
       {!isLive && DEVS.length === 0 && (
@@ -1088,7 +1094,12 @@ export default function App() {
           const sampledAt=Number.isFinite(scanTimestamp)&&scanTimestamp>0?scanTimestamp*1000:Date.now();
           setRssiData(history=>appendLiveSignalSample(history,scanData.networks,{source:scanSource,timestamp:sampledAt}));
         }
-        if(Array.isArray(deviceData.devices))setLiveDevs(deviceData.devices);
+        if(scanSource==="live"){
+          setLiveDevs(Array.isArray(deviceData.devices)?deviceData.devices:[]);
+        }else{
+          // Device API results from the host are not part of a demo scan.
+          setLiveDevs(null);
+        }
         setLiveSystem({
           ...systemData,
           wifi_interface:scanData.interface||availability.interfaces?.[0]||null,
@@ -1130,12 +1141,19 @@ export default function App() {
     return()=>{disposed=true;clearInterval(intervalId);};
   },[preferences.refreshIntervalSeconds]);
 
-  const networks=liveMode&&Array.isArray(liveNets)
-    ?liveNets.map(toUiNetwork)
-    :preferences.hideDemoData?[]:(Array.isArray(liveNets)?liveNets.map(toUiNetwork):NETWORKS);
-  const devices=liveMode&&Array.isArray(liveDevs)
-    ?liveDevs.map(toUiDevice)
-    :preferences.hideDemoData?[]:(Array.isArray(liveDevs)?liveDevs.map(toUiDevice):DEVICES);
+  const observationSource=liveMode?"live":"demo";
+  const networks=selectObservationRows({
+    source:observationSource,
+    rows:liveNets,
+    demoRows:NETWORKS,
+    hideDemoData:preferences.hideDemoData,
+  }).map(toUiNetwork);
+  const devices=selectObservationRows({
+    source:observationSource,
+    rows:liveDevs,
+    demoRows:DEVICES,
+    hideDemoData:preferences.hideDemoData,
+  }).map(toUiDevice);
   const observedAlerts=liveMode?buildObservedAlerts(networks,liveDiag):[];
 
   const addToast=(msg,type="info")=>{
@@ -1152,7 +1170,10 @@ export default function App() {
     if(scanning)return;
     setScanning(true);
     try{
-      const response=await apiFetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(18000)});
+      const [response,deviceResponse]=await Promise.all([
+        apiFetch(`${API_BASE}/api/scan`,{signal:AbortSignal.timeout(18000)}),
+        apiFetch(`${API_BASE}/api/devices`,{signal:AbortSignal.timeout(10000)}).catch(()=>null),
+      ]);
       if(!response.ok)throw new Error(`HTTP ${response.status}`);
       const data=await response.json();
       if(!Array.isArray(data.networks))throw new Error("The scan endpoint returned an invalid response");
@@ -1160,6 +1181,16 @@ export default function App() {
       if(scanSource==="unknown")throw new Error("The scan endpoint did not identify its observation source");
       setLiveNets(data.networks);
       setLiveMode(scanSource==="live");
+      if(scanSource==="live" && deviceResponse?.ok){
+        try{
+          const deviceData=await deviceResponse.json();
+          setLiveDevs(Array.isArray(deviceData.devices)?deviceData.devices:[]);
+        }catch{
+          setLiveDevs([]);
+        }
+      }else{
+        setLiveDevs(null);
+      }
       const scanTimestamp=Number(data.timestamp);
       const sampledAt=Number.isFinite(scanTimestamp)&&scanTimestamp>0?scanTimestamp*1000:Date.now();
       setRssiData(history=>appendLiveSignalSample(history,data.networks,{source:scanSource,timestamp:sampledAt}));
