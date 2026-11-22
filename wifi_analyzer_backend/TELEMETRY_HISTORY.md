@@ -40,6 +40,8 @@ request with an explicit site_id outside the caller's scope is rejected. The
 site appears in the managed-site directory after the first telemetry bucket is
 written, so an owner can assign it to a viewer or analyst.
 
+The read-only history is available in the main application under **Insights → Telemetry History**. The page visualises only rollups returned within the authenticated user's site scope.
+
 The read-only endpoint is:
 
 - GET /api/telemetry/history?days=7

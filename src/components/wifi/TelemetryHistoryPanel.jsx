@@ -151,7 +151,7 @@ export default function TelemetryHistoryPanel() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
             <MetricChart title="Average measured RSSI" metric="average_rssi_dbm" unit=" dBm"
               description="Mean of valid BSS signal readings within each minute."
-              rollups={rollups} domain={[-100, -30]} />
+              rollups={rollups} domain={[-127, 0]} />
             <MetricChart title="Average observed network count" metric="average_network_count" unit=""
               description="Mean number of BSS records returned by scans within each minute."
               rollups={rollups} domain={[0, 'auto']} />

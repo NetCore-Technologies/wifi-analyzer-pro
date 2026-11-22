@@ -23,6 +23,7 @@ import AccountSecurityPanel from "./components/AccountSecurityPanel.jsx";
 import WebhookDeliveryPanel from "./components/WebhookDeliveryPanel.jsx";
 import BillingPanel from "./components/BillingPanel.jsx";
 import { PhyTelemetryPanel, InterfaceTelemetryPanel } from "./components/LiveRadioPanels.jsx";
+import TelemetryHistoryPanel from "./components/wifi/TelemetryHistoryPanel.jsx";
 import CommandPalette from "./components/CommandPalette.jsx";
 import { calculateInterfaceRates } from "./lib/telemetryMath.js";
 import { appendLiveSignalSample, appendSpeedTestSample } from "./lib/measurementHistory.js";
@@ -852,6 +853,7 @@ const NAV=[
     {id:"securityAudit",label:"Security Audit",Icon:ClipboardList},
   ]},
   {g:"INSIGHTS", items:[
+    {id:"history",label:"Telemetry History",Icon:Database},
     {id:"viz",    label:"Visualisation",   Icon:BarChart2},
     {id:"export", label:"Export",          Icon:Download},
     {id:"alerts", label:"Alerts",          Icon:Bell},
@@ -1194,6 +1196,7 @@ export default function App() {
     signal:      <SignalPanel rssiData={rssiData}/>,
     speed:       <SpeedPanel speedData={speedData} lastTest={lastSpeedTest} onTestComplete={recordSpeedTest}/>,
     devices:     <DevicesPanel devices={devices} isLive={liveMode}/>,
+    history:     <TelemetryHistoryPanel/>,
     alerts:      <AlertsPanel alerts={observedAlerts}/>,
     system:      <SystemPanel sysInfo={liveSystem}/>,
     ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem} isLive={liveMode}/>,
