@@ -283,10 +283,10 @@ function DashboardPanel({ networks: netsProp, devices: devsProp, diag, alertsPro
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label="Networks Found" value={nets.length} sub={nets.some(n=>n.rogue===true)?`${nets.filter(n=>n.rogue===true).length} scanner candidate flag(s)`:"No scanner flags supplied"} col={C.cyan} Icon={Wifi} delay={1}/>
-        <Stat label="Strongest RSSI" value={best?`${Number(best.rssi)} dBm`:"—"} sub={best?`${best.ssid||best.bssid} · ${best.band}`:"No measured RSSI in scan"} col={C.green} Icon={Signal} delay={2}/>
+         <Stat label={isLive?"Networks Found":"Demo Networks"} value={nets.length} sub={isLive?(nets.some(n=>n.rogue===true)?`${nets.filter(n=>n.rogue===true).length} scanner candidate flag(s)`:"No scanner flags supplied"):"Illustrative fixture records · no local Wi-Fi scan performed"} col={C.cyan} Icon={Wifi} delay={1}/>
+         <Stat label={isLive?"Strongest RSSI":"Demo RSSI"} value={best?`${Number(best.rssi)} dBm`:"—"} sub={best?(isLive?`${best.ssid||best.bssid} · ${best.band}`:"Illustrative value · not measured on this host"):"No valid RSSI value in the current view"} col={C.green} Icon={Signal} delay={2}/>
         <Stat label="Packet Loss" value={diag?.packet_loss_pct==null?"—":`${diag.packet_loss_pct}%`} sub={diag?.latency_ms==null?"No latency result":`Latency: ${diag.latency_ms} ms`} col={diag?.packet_loss_pct===0?C.green:C.yellow} Icon={Zap} delay={3}/>
-        <Stat label="Device Status" value={`${onlineCount} confirmed online`} sub={`${offlineCount} offline · ${unknownStatusCount} unknown`} col={C.yellow} Icon={Smartphone} delay={4}/>
+         <Stat label={isLive?"Device Status":"Demo Device Status"} value={isLive?`${onlineCount} reported online`:"Demo fixtures"} sub={isLive?`${offlineCount} reported offline · ${unknownStatusCount} status unknown`:"Illustrative online/offline states · not live client inventory"} col={C.yellow} Icon={Smartphone} delay={4}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr",gap:10}}>
         <div className="hover-card anim-fade-d2" style={s.card}>
@@ -301,7 +301,7 @@ function DashboardPanel({ networks: netsProp, devices: devsProp, diag, alertsPro
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
               <XAxis dataKey="t" hide/>
-              <YAxis domain={[-75,-30]} tick={{fontSize:9,fill:C.muted}}/>
+              <YAxis domain={[-127,0]} tick={{fontSize:9,fill:C.muted}}/>
               <Tooltip contentStyle={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:6,fontSize:11}}
                 formatter={v=>[v.toFixed(1)+" dBm","RSSI"]}/>
               <Area type="monotone" dataKey="rssi" stroke={C.cyan} strokeWidth={2} fill="url(#gC)" dot={false} animationDuration={600}/>
@@ -327,7 +327,7 @@ function DashboardPanel({ networks: netsProp, devices: devsProp, diag, alertsPro
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10}}>
         <div className="hover-card anim-fade-d3" style={s.card}>
-          <SHdr title="Nearby Networks" sub={`${nets.length} BSS records in the current view`}/>
+           <SHdr title="Nearby Networks" sub={isLive?`${nets.length} BSS records in the current live scan`:`${nets.length} illustrative demo records · not nearby observations`}/>
           {(netsProp||NETWORKS).slice(0,4).map((n,i)=>(
             <div key={i} style={{...s.bet,padding:"7px 0",borderBottom:i<3?`1px solid ${C.border}44`:"none"}}>
               <div style={{...s.row,gap:7}}>
@@ -567,7 +567,7 @@ function SpeedPanel({ speedData = [], lastTest = null, onTestComplete }) {
   );
 }
 
-function DevicesPanel({ devices: devsProp }) {
+function DevicesPanel({ devices: devsProp, isLive = false }) {
   const DEVS = Array.isArray(devsProp) ? devsProp : DEVICES;
   const onlineCount=DEVS.filter(device=>device.online===true).length;
   const offlineCount=DEVS.filter(device=>device.online===false).length;
@@ -577,11 +577,20 @@ function DevicesPanel({ devices: devsProp }) {
   return (
     <div style={{...s.col,gap:14}}>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-        <Stat label="Devices Found" value={DEVS.length} sub={`${onlineCount} online · ${offlineCount} offline · ${unknownStatusCount} unknown`} col={C.cyan} Icon={Smartphone} delay={1}/>
-        <Stat label="Gateway"         value={DEVS.find(d=>d.gw)?.ip||"N/A"} sub={DEVS.find(d=>d.gw)?.vendor||""} col={C.purple} Icon={Activity} delay={2}/>
-        <Stat label="Vendors Found"   value={[...new Set(DEVS.map(d=>d.vendor).filter(Boolean))].length} sub="Unique manufacturers" col={C.green} Icon={CheckCircle} delay={3}/>
-        <Stat label="Unknown"         value={DEVS.filter(d=>!d.vendor||d.vendor==="???").length} sub="Unidentified MAC vendor" col={C.red} Icon={AlertTriangle} delay={4}/>
+        <Stat label={isLive?"Devices Found":DEVS.length?"Demo Devices":"Devices"} value={DEVS.length} sub={isLive?`${onlineCount} reported online · ${offlineCount} offline · ${unknownStatusCount} unknown`:DEVS.length?"Illustrative sample records · not live inventory":"No live client inventory available"} col={C.cyan} Icon={Smartphone} delay={1}/>
+        <Stat label={isLive?"Gateway":"Demo Gateway"} value={isLive?(DEVS.find(d=>d.gw)?.ip||"N/A"):"—"} sub={isLive?(DEVS.find(d=>d.gw)?.vendor||"Not resolved"):"No gateway observed from this host"} col={C.purple} Icon={Activity} delay={2}/>
+        <Stat label={isLive?"Vendors Found":"Demo Vendors"} value={[...new Set(DEVS.map(d=>d.vendor).filter(Boolean))].length} sub={isLive?"Unique manufacturers in live inventory":"Illustrative fixture labels"} col={C.green} Icon={CheckCircle} delay={3}/>
+        <Stat label={isLive?"Unknown Vendors":"Unknown Demo Vendors"} value={DEVS.filter(d=>!d.vendor||d.vendor==="???").length} sub={isLive?"Manufacturer lookup unresolved":"Illustrative fixture classification"} col={C.red} Icon={AlertTriangle} delay={4}/>
       </div>
+      {!isLive && DEVS.length > 0 && (
+        <div role="note" style={{...s.card,border:`1px solid ${C.purple}44`,background:C.purpleFaint,...s.col,gap:5}}>
+          <span style={{fontSize:11,fontWeight:700,color:C.purple}}>DEMO DEVICE FIXTURES · NOT LIVE CLIENT INVENTORY</span>
+          <span style={{fontSize:11,color:C.textSec}}>The sample IP addresses, MAC addresses, vendors, signal and online/offline states below are illustrative. No nearby client inventory was collected.</span>
+        </div>
+      )}
+      {!isLive && DEVS.length === 0 && (
+        <div style={{...s.card,...s.cen,color:C.muted,fontSize:12,minHeight:90}}>No live device inventory is available. Connect a supported scanner/router agent or enable demo data to view examples.</div>
+      )}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
         {DEVS.map((d,i)=>{
           const Icon=ICONS[d.type]||Smartphone;
@@ -1184,7 +1193,7 @@ export default function App() {
     wireless:    <WirelessPanel networks={networks} isLive={liveMode}/>,
     signal:      <SignalPanel rssiData={rssiData}/>,
     speed:       <SpeedPanel speedData={speedData} lastTest={lastSpeedTest} onTestComplete={recordSpeedTest}/>,
-    devices:     <DevicesPanel devices={devices}/>,
+    devices:     <DevicesPanel devices={devices} isLive={liveMode}/>,
     alerts:      <AlertsPanel alerts={observedAlerts}/>,
     system:      <SystemPanel sysInfo={liveSystem}/>,
     ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem} isLive={liveMode}/>,

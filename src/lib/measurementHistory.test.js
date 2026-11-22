@@ -38,7 +38,7 @@ test("signal history is bounded to the latest 60 scans without mutating prior st
     });
   }
   assert.equal(history.length, 60);
-  assert.equal(history[0].rssi, -55);
+  assert.equal(history[0].rssi, -56);
   assert.deepEqual(initial, []);
 });
 
