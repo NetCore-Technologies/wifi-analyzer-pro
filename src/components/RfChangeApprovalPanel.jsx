@@ -5,6 +5,7 @@ import {
   RefreshCw, ShieldAlert, ShieldCheck, XCircle,
 } from 'lucide-react';
 import { apiBase, apiFetch } from '../lib/api.js';
+import { normaliseVisibleSiteIds } from '../lib/siteScope.js';
 
 function when(value) {
   if (!value) return '—';
@@ -34,6 +35,8 @@ function Metric({ label, value }) {
 export default function RfChangeApprovalPanel() {
   const base = useMemo(() => apiBase() + '/api/sites', []);
   const [siteId, setSiteId] = useState('');
+  const [siteIds, setSiteIds] = useState([]);
+  const [loadingSites, setLoadingSites] = useState(true);
   const [datasets, setDatasets] = useState([]);
   const [datasetRef, setDatasetRef] = useState('');
   const [adapterId, setAdapterId] = useState('openwrt');
@@ -49,6 +52,48 @@ export default function RfChangeApprovalPanel() {
   const [comment, setComment] = useState('');
 
   const requestUrl = base + '/rf-change-requests';
+
+  const loadSites = useCallback(async () => {
+    setLoadingSites(true);
+    setError('');
+    try {
+      const response = await apiFetch(base, { signal: AbortSignal.timeout(12000) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to load sites assigned to this account.');
+      const visible = normaliseVisibleSiteIds(data);
+      setSiteIds(visible);
+      setSiteId(current => current && visible.includes(current) ? current : visible[0] || '');
+      if (!visible.length) {
+        setDatasets([]);
+        setDatasetRef('');
+        setRequests([]);
+        setSelected(null);
+        setCanManage(false);
+      }
+    } catch (loadError) {
+      setSiteIds([]);
+      setSiteId('');
+      setDatasets([]);
+      setDatasetRef('');
+      setRequests([]);
+      setSelected(null);
+      setCanManage(false);
+      setError(loadError.message || 'Unable to load assigned sites.');
+    } finally {
+      setLoadingSites(false);
+    }
+  }, [base]);
+
+  useEffect(() => { void loadSites(); }, [loadSites]);
+
+  useEffect(() => {
+    setDatasets([]);
+    setDatasetRef('');
+    setRequests([]);
+    setSelected(null);
+    setCanManage(false);
+    setComment('');
+  }, [siteId]);
 
   const refresh = useCallback(async () => {
     if (!siteId.trim()) {
@@ -244,17 +289,39 @@ export default function RfChangeApprovalPanel() {
       <section className="glass rounded-xl p-4 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold text-foreground flex items-center gap-2"><History className="w-4 h-4 text-primary" /> Site approval history</div>
-          <button type="button" onClick={() => void refresh()} disabled={loading || !siteId.trim()}
+          <button type="button" onClick={() => void refresh()} disabled={loading || loadingSites || !siteId.trim()}
             className="flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground disabled:opacity-50">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </div>
-        <label className="block text-xs text-muted-foreground">
-          Assigned site ID
-          <input value={siteId} onChange={event => { setSiteId(event.target.value); setSelected(null); }}
-            maxLength={128} placeholder="Enter an assigned site ID"
-            className="mt-1 w-full px-3 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
-        </label>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="block text-xs text-muted-foreground min-w-[220px] flex-1">
+            Assigned site
+            <select value={siteId} onChange={event => {
+              setSiteId(event.target.value);
+              setSelected(null);
+              setDatasetRef('');
+              setNotice('');
+              setError('');
+            }} disabled={loadingSites || siteIds.length === 0}
+              className="mt-1 w-full px-3 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground disabled:opacity-50">
+              {siteIds.length
+                ? siteIds.map(id => <option key={id} value={id}>{id}</option>)
+                : <option value="">No assigned sites</option>}
+            </select>
+          </label>
+          <button type="button" onClick={() => void loadSites()} disabled={loadingSites}
+            aria-label="Reload assigned sites"
+            className="px-3 py-2 rounded-lg bg-secondary border border-border text-xs text-foreground disabled:opacity-50">
+            Reload sites
+          </button>
+        </div>
+        {loadingSites && <div className="text-[11px] text-muted-foreground">Loading assigned sites…</div>}
+        {!loadingSites && siteIds.length === 0 && (
+          <div className="rounded-lg border border-amber-400/25 bg-amber-400/5 p-3 text-xs text-amber-200">
+            No sites are assigned to this account. Ask a workspace administrator to grant site access before creating or reviewing RF change requests.
+          </div>
+        )}
         {canManage
           ? <div className="text-[11px] text-muted-foreground">Site-management permission confirmed.</div>
           : siteId.trim() && <div className="text-[11px] text-muted-foreground">Read-only site access; sites.manage is required for changes.</div>}
@@ -267,10 +334,10 @@ export default function RfChangeApprovalPanel() {
             </span>
             <Badge status={item.status} />
           </button>)}
-        </div> : <div className="text-xs text-muted-foreground">{siteId.trim() ? 'No retained requests for this site.' : 'Enter an assigned site ID to load approval history.'}</div>}
+        </div> : <div className="text-xs text-muted-foreground">{siteId.trim() ? 'No retained requests for this site.' : loadingSites ? 'Loading site approval history…' : 'No assigned site is available for this account.'}</div>}
       </section>
 
-      {canManage && <form onSubmit={createRequest} className="glass rounded-xl p-4 space-y-3">
+      {canManage && siteIds.includes(siteId) && <form onSubmit={createRequest} className="glass rounded-xl p-4 space-y-3">
         <div className="text-sm font-semibold text-foreground flex items-center gap-2"><FileCheck2 className="w-4 h-4 text-primary" /> Create two-person approval request</div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <label className="text-xs text-muted-foreground md:col-span-2">
@@ -374,7 +441,7 @@ export default function RfChangeApprovalPanel() {
           </div>)}
           {(record.approvals || []).length === 0 && <div className="text-xs text-muted-foreground">No approvals recorded.</div>}
         </div>
-        {canManage && record.status === 'pending_approval' && <div className="border-t border-border pt-3 space-y-2">
+        {canManage && siteIds.includes(siteId) && record.status === 'pending_approval' && <div className="border-t border-border pt-3 space-y-2">
           <label className="block text-xs text-muted-foreground">Decision comment (optional)
             <input value={comment} onChange={event => setComment(event.target.value.slice(0, 1000))}
               maxLength={1000} className="mt-1 w-full px-3 py-2 rounded-lg bg-background/70 border border-border text-sm text-foreground" />
@@ -393,7 +460,7 @@ export default function RfChangeApprovalPanel() {
           </div>
           <p className="text-[11px] text-muted-foreground">The requester cannot approve their own request. Two separate site managers are mandatory.</p>
         </div>}
-        {canManage && record.status === 'approved_not_applied' && <div className="rounded-lg border border-amber-400/25 bg-amber-400/5 p-3 space-y-2">
+        {canManage && siteIds.includes(siteId) && record.status === 'approved_not_applied' && <div className="rounded-lg border border-amber-400/25 bg-amber-400/5 p-3 space-y-2">
           <div className="flex items-center gap-2 text-xs font-semibold text-amber-200"><LockKeyhole className="w-4 h-4" /> Approved, not applied</div>
           <p className="text-xs text-muted-foreground">All installed adapters are read-only. The deployment gate remains closed.</p>
           <button type="button" onClick={checkExecutionGate} disabled={busy !== ''}
