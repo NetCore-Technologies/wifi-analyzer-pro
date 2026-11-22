@@ -47,8 +47,8 @@ class AlertRuleStoreTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "POSIX file mode assertions")
     def test_database_and_new_state_directory_are_owner_only(self):
         self.store.list_rules("head-office")
-        self.assertEqual(stat.S_IMODE(self.path.parent.stat().st_mode), 0o700)
-        self.assertEqual(stat.S_IMODE(self.path.stat().st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(self.store.path.parent.stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE(self.store.path.stat().st_mode), 0o600)
 
     def test_rule_lifecycle_is_durable_and_site_scoped(self):
         saved = self.store.save_rule("head-office", self.rule())
@@ -190,6 +190,24 @@ class AlertRuleStoreTests(unittest.TestCase):
         self.assertIsNone(values["network_count"])
         self.assertIsNone(values["open_network_count"])
         self.assertIsNone(values["minimum_rssi_dbm"])
+
+
+    def test_unknown_security_metadata_does_not_become_a_zero_open_network_measurement(self):
+        complete = scan_observations([
+            {"ssid": "guest", "security": "Open", "rssi": -40},
+            {"ssid": "corp", "security": "WPA2 Personal", "rssi": -55},
+        ])
+        self.assertEqual(complete["open_network_count"], 1)
+        incomplete = scan_observations([
+            {"ssid": "guest", "security": "Open", "rssi": -40},
+            {"ssid": "unreported", "rssi": -55},
+        ])
+        self.assertIsNone(incomplete["open_network_count"])
+        incomplete_label = scan_observations([
+            {"ssid": "guest", "security": "Open", "rssi": -40},
+            {"ssid": "unreported", "security": "Unknown", "rssi": -55},
+        ])
+        self.assertIsNone(incomplete_label["open_network_count"])
 
     def test_open_network_and_measured_diagnostic_extraction(self):
         values = scan_observations([

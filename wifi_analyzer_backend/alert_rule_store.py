@@ -78,7 +78,9 @@ def _bounded_number(value: object, field: str, minimum: float, maximum: float) -
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{field} must be a finite number")
     number = float(value)
-    if not math.isfinite(number) or not minimum <= number <= maximum:
+    if not math.isfinite(number):
+        raise ValueError(f"{field} must be a finite number")
+    if not minimum <= number <= maximum:
         raise ValueError(f"{field} must be between {minimum:g} and {maximum:g}")
     return number
 
@@ -628,20 +630,25 @@ def scan_observations(networks: list[dict]) -> dict:
         raise ValueError("networks must be a list containing no more than 512 records")
     rssi = []
     open_count = 0
+    security_complete = bool(networks)
     for network in networks:
         if not isinstance(network, dict):
+            security_complete = False
             continue
         value = network.get("rssi")
         if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)) and -127 <= value <= 0:
             rssi.append(float(value))
-        if str(network.get("security", network.get("sec", ""))).strip().lower() == "open":
+        security = network.get("security", network.get("sec"))
+        if not isinstance(security, str) or security.strip().lower() in {"", "unknown", "n/a", "not reported"}:
+            security_complete = False
+        elif security.strip().lower() == "open":
             open_count += 1
     # An empty result is ambiguous: current platform adapters can return [] for
-    # either a valid empty scan or a command/adapter failure. Do not manufacture
-    # a zero-network measurement until the scanner exposes a success indicator.
+    # either a valid empty scan or a command/adapter failure. Unknown security
+    # metadata also cannot be counted as evidence of a secured network.
     return {
         "network_count": float(len(networks)) if networks else None,
-        "open_network_count": float(open_count) if networks else None,
+        "open_network_count": float(open_count) if security_complete else None,
         "minimum_rssi_dbm": min(rssi) if rssi else None,
     }
 

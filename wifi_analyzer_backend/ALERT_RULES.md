@@ -16,7 +16,7 @@ The persistent alert engine evaluates measured observations from the host's live
 | `gateway_jitter_ms` | Host diagnostics | Mean absolute change between successive gateway ping RTT samples |
 | `dns_resolution_ms` | Host diagnostics | DNS resolution duration only when the optional DNS probe is configured and succeeds |
 
-Missing, invalid, unavailable or unconfigured measurements are omitted. They do not count as healthy values and do not resolve an active incident. The current platform scanner returns an empty list for both a genuinely empty scan and some adapter/command failures, so an empty scan is treated as unknown and does not trigger a zero-network rule. A distinct successful-empty scan status is required before that alert can be enabled safely.
+Missing, invalid, unavailable or unconfigured measurements are omitted. They do not count as healthy values and do not resolve an active incident. The open-network count is unknown if any observed AP has missing or explicitly unknown security metadata; unknown does not mean secured. The current platform scanner returns an empty list for both a genuinely empty scan and some adapter/command failures, so an empty scan is treated as unknown and does not trigger a zero-network rule. A distinct successful-empty scan status is required before that alert can be enabled safely.
 
 ## Rule semantics
 
