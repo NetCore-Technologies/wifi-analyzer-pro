@@ -33,6 +33,7 @@ DEFAULT_POLICIES: dict[str, tuple[int, int]] = {
     "api.report.enqueue": (20, 60),
     "api.webhook.enqueue": (20, 60),
     "api.live.ticket": (20, 60),
+    "api.plugins.manage": (10, 60),
     "api.webhook.manage": (30, 60),
     "api.webhook.probe": (10, 300),
     "api.billing.webhook": (120, 60),
