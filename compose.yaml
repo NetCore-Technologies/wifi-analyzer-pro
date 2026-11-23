@@ -65,6 +65,45 @@ services:
     command:
       - python
       - webhook_dispatch_worker.py
+
+  alert-webhook-bridge:
+    image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wifi-analyzer-alert-webhook-bridge
+    profiles:
+      - webhook-dispatcher
+    command:
+      - python
+      - -m
+      - wifi_analyzer_backend.alert_webhook_worker
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /home/wifi-analyzer
+      XDG_STATE_HOME: /home/wifi-analyzer/.local/state
+      WIFI_ANALYZER_WEBHOOK_SIGNING_KEYS_FILE: /run/secrets/webhook-signing-keys
+      WIFI_ANALYZER_ALERT_WEBHOOK_POLL_SECONDS: ${WIFI_ANALYZER_ALERT_WEBHOOK_POLL_SECONDS:-5}
+      WIFI_ANALYZER_ALERT_WEBHOOK_BATCH_SIZE: ${WIFI_ANALYZER_ALERT_WEBHOOK_BATCH_SIZE:-50}
+    secrets:
+      - source: webhook_signing_keys
+        target: webhook-signing-keys
+    volumes:
+      - state:/home/wifi-analyzer/.local/state
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
     restart: unless-stopped
     init: true
     environment:
@@ -86,6 +125,10 @@ services:
     pids_limit: 128
     mem_limit: 256m
     cpus: 1.0
+
+secrets:
+  webhook_signing_keys:
+    file: ${WIFI_ANALYZER_WEBHOOK_SIGNING_KEYS_FILE:-/dev/null}
 
 volumes:
   config:
