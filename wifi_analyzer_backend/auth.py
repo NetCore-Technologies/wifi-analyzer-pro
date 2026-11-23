@@ -50,7 +50,7 @@ ROLE_PERMISSIONS = {
     "admin": frozenset({
         "users.manage", "billing.manage", "agents.manage", "agents.read",
         "reports.manage", "reports.read",
-        "webhooks.manage", "webhooks.read",
+        "webhooks.manage", "webhooks.read", "plugins.manage",
         "sites.manage", "sites.read",
         "diagnostics.run", "diagnostics.read",
     }),
