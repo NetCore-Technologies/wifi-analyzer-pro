@@ -3399,6 +3399,13 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(rollup["average_latency_ms"], 14)
         self.assertEqual(rollup["average_jitter_ms"], 2)
         self.assertEqual(rollup["average_packet_loss_pct"], 0)
+        latest_status, latest = self.request(
+            "GET", "/api/telemetry/latest?days=7", token=owner_token,
+        )
+        self.assertEqual(latest_status, 200, latest)
+        self.assertEqual(latest["record_count"], 1)
+        self.assertEqual(latest["site_ids"], ["local"])
+        self.assertEqual(latest["rollups"][0]["average_rssi_dbm"], -62)
         self.assertNotIn("Private-SSID", json.dumps(history))
         self.assertNotIn("AA:BB:CC:DD:EE:FF", json.dumps(history))
 
@@ -3414,6 +3421,15 @@ class AuthenticatedApiTests(unittest.TestCase):
         status, empty_history = self.request("GET", "/api/telemetry/history", token=viewer_token)
         self.assertEqual(status, 200, empty_history)
         self.assertEqual(empty_history["rollups"], [])
+        latest_status, empty_latest = self.request(
+            "GET", "/api/telemetry/latest", token=viewer_token,
+        )
+        self.assertEqual(latest_status, 200, empty_latest)
+        self.assertEqual(empty_latest["rollups"], [])
+        hidden_latest_status, hidden_latest = self.request(
+            "GET", "/api/telemetry/latest?site_id=local", token=viewer_token,
+        )
+        self.assertEqual(hidden_latest_status, 403, hidden_latest)
         status, hidden_site = self.request(
             "GET", "/api/telemetry/history?site_id=local", token=viewer_token,
         )
