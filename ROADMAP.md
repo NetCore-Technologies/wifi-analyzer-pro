@@ -66,12 +66,19 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - 📋 Enterprise identity: OIDC/SAML SSO, WebAuthn and SCIM provisioning, external SIEM forwarding and centralised retention; local TOTP authenticator-app MFA is implemented.
 - 📋 Multi-site dashboards for distributed local agents.
 - ✅ Bounded token-bucket API rate limits for setup/login, scans, speed tests, feature execution, site audits, capture startup, report enqueue and webhook enqueue; authenticated limits are per account and return HTTP 429 with Retry-After.
-- 📋 Authenticated WebSocket streaming for live multi-site updates.
+- ✅ Authenticated, site-scoped WebSocket streaming with single-use tickets, session/scope revocation and bounded clients.
 - 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
 
 ---
 
 
+
+### Authenticated live streaming delivered
+
+- ✅ One-use 30-second WebSocket tickets are issued only after authenticated `sites.read` and explicit site-scope validation; tickets are carried in the subprotocol header rather than the URL.
+- ✅ Read-only live events cover local scans, diagnostics, alert transitions and assigned router-agent snapshots, with per-site fan-out and no SSID/BSSID/client/MAC/IP inventory in event summaries.
+- ✅ Sessions, permissions and site assignments are revalidated while connected. Connection counts, per-user limits, event size, client queue depth, ping/pong liveness and slow-consumer closure are bounded.
+- ✅ The dashboard obtains fresh tickets and reconnects with backoff. The stream is process-local and ephemeral; it is not claimed as a durable log or distributed multi-replica event bus.
 
 ### Node-RED integration delivered
 
