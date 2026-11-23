@@ -877,7 +877,7 @@ const NAV=[
     {id:"advanced",label:"Advanced",       Icon:Wrench},
     {id:"api",     label:"API",            Icon:Code},
     {id:"featureTools", label:"Feature Workbench", Icon:Package},
-    {id:"fleet", label:"Fleet Overview", Icon:RadioTower},
+    {id:"fleet", label:"Fleet Overview", Icon:Package},
     {id:"plugins", label:"Plugin Manager", Icon:Package},
   ]},
 ];
