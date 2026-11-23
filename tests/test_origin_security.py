@@ -1,0 +1,93 @@
+"""Regression tests for host allowlisting and DNS-rebinding-resistant Origin checks."""
+from __future__ import annotations
+
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from wifi_analyzer_backend import server
+
+
+class OriginSecurityTests(unittest.TestCase):
+    def setUp(self):
+        self.cors = patch.object(server, "CORS_ORIGINS", {"https://trusted-portal.example"})
+        self.hosts = patch.object(server, "ALLOWED_HOSTS", {"localhost", "127.0.0.1", "::1", "analyzer.lan"})
+        self.cors.start()
+        self.hosts.start()
+        self.addCleanup(self.cors.stop)
+        self.addCleanup(self.hosts.stop)
+
+    @staticmethod
+    def allowed(origin=None, host=None):
+        handler = SimpleNamespace(headers={})
+        if origin is not None:
+            handler.headers["Origin"] = origin
+        if host is not None:
+            handler.headers["Host"] = host
+        return server.Handler.origin_allowed(handler)
+
+    def test_non_browser_requests_without_origin_remain_supported(self):
+        self.assertTrue(self.allowed(host="127.0.0.1:199"))
+        self.assertTrue(self.allowed())
+
+    def test_explicit_cors_origins_remain_supported(self):
+        self.assertTrue(self.allowed(
+            origin="https://trusted-portal.example",
+            host="analyzer.lan",
+        ))
+
+    def test_same_origin_loopback_and_explicit_lan_hosts_are_allowed(self):
+        self.assertTrue(self.allowed(
+            origin="http://127.0.0.1:199",
+            host="127.0.0.1:199",
+        ))
+        self.assertTrue(self.allowed(
+            origin="http://analyzer.lan:199",
+            host="analyzer.lan:199",
+        ))
+        self.assertTrue(self.allowed(
+            origin="http://localhost",
+            host="localhost:80",
+        ))
+
+    def test_dns_rebinding_attacker_host_is_rejected_even_when_origin_matches_host(self):
+        self.assertFalse(self.allowed(
+            origin="http://attacker.example:199",
+            host="attacker.example:199",
+        ))
+        self.assertFalse(self.allowed(
+            origin="http://evil.example",
+            host="evil.example",
+        ))
+
+    def test_mismatched_hosts_and_ports_are_rejected(self):
+        self.assertFalse(self.allowed(
+            origin="http://localhost:199",
+            host="127.0.0.1:199",
+        ))
+        self.assertFalse(self.allowed(
+            origin="http://localhost:199",
+            host="localhost:198",
+        ))
+
+    def test_invalid_origin_syntax_and_userinfo_are_rejected(self):
+        self.assertFalse(self.allowed(
+            origin="javascript://localhost",
+            host="localhost",
+        ))
+        self.assertFalse(self.allowed(
+            origin="http://user@localhost:199",
+            host="localhost:199",
+        ))
+        self.assertFalse(self.allowed(
+            origin="http://localhost/path",
+            host="localhost",
+        ))
+        self.assertFalse(self.allowed(
+            origin="http://localhost:bad",
+            host="localhost",
+        ))
+
+
+if __name__ == "__main__":
+    unittest.main()
