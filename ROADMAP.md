@@ -73,6 +73,12 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 
 
 
+### Node-RED integration delivered
+
+- ✅ An installable `node-red-contrib-wifi-analyzer-pro` package provides scan, registered-feature execution, aggregate telemetry, site-alert and live feature-catalogue nodes.
+- ✅ Connection tokens are stored using Node-RED credentials; the client restricts requests to the documented API operations, requires HTTPS for remote endpoints, bounds response size/time and preserves API-side permission/site-scope enforcement.
+- ✅ Includes local HTTP-mock tests and a dedicated CI job. The nodes do not provide arbitrary HTTP access or a router configuration-write surface.
+
 ### Home Assistant MQTT integration delivered
 
 - ✅ An opt-in MQTT 3.1.1 worker publishes 15 aggregate numeric sensors and a telemetry-freshness binary sensor through retained Home Assistant discovery messages with stable unique IDs and device metadata.
@@ -135,7 +141,7 @@ A candidate is promoted to an F-number only after checking that it is distinct f
 
 - ✅ Home Assistant integration (MQTT discovery)
 - ✅ Official Grafana dashboard and Prometheus exporter documentation
-- 📋 Node-RED nodes
+- ✅ Node-RED nodes
 - 📋 Mobile app: move from beta to stable on iOS and Android
 - 📋 Push notifications through the mobile app
 - 💡 Webhook templates for Discord, Slack and Teams
