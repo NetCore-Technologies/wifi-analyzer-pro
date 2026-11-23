@@ -55,6 +55,22 @@ at the gateway as well; these local buckets do not coordinate between processes.
 
 
 
+## Host header and DNS rebinding protection
+
+Same-origin requests are accepted only for loopback or an explicitly
+configured hostname/IP in `WIFI_ANALYZER_ALLOWED_HOSTS`. The default trusted
+hosts are `localhost,127.0.0.1,::1`. The server rejects arbitrary same-Origin
+and Host header pairs even when the two attacker-controlled values match; this
+prevents a DNS-rebinding domain from becoming trusted merely by resolving to
+the local server. Explicit full origins in `WIFI_ANALYZER_CORS_ORIGINS` remain
+an administrator-controlled cross-origin exception.
+
+For LAN or reverse-proxy deployments, add each exact browser-facing hostname
+or IP to the Host allowlist, keep the API behind a firewall and VPN/authenticated
+TLS proxy, and configure only the specific portal origins required. Wildcard
+Host or CORS entries are not supported. Reverse proxies should preserve the
+external Host header; forwarded-host headers are not trusted by the application.
+
 ## Authenticated live-stream transport
 
 The live WebSocket endpoint does not accept long-lived bearer session tokens in
