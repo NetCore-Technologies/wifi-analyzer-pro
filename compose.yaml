@@ -77,12 +77,14 @@ services:
       WIFI_ANALYZER_HA_MQTT_PORT: ${WIFI_ANALYZER_HA_MQTT_PORT:-8883}
       WIFI_ANALYZER_HA_MQTT_USERNAME: ${WIFI_ANALYZER_HA_MQTT_USERNAME:-}
       WIFI_ANALYZER_HA_MQTT_PASSWORD_FILE: ${WIFI_ANALYZER_HA_MQTT_PASSWORD_FILE:+/run/secrets/mqtt-password}
+      WIFI_ANALYZER_HA_MQTT_CA_CERT_FILE: ${WIFI_ANALYZER_HA_MQTT_CA_CERT_FILE:+/run/secrets/mqtt-ca}
       WIFI_ANALYZER_HA_MQTT_TLS: ${WIFI_ANALYZER_HA_MQTT_TLS:-true}
       WIFI_ANALYZER_HA_MQTT_DISCOVERY_PREFIX: ${WIFI_ANALYZER_HA_MQTT_DISCOVERY_PREFIX:-homeassistant}
       WIFI_ANALYZER_HA_MQTT_POLL_SECONDS: ${WIFI_ANALYZER_HA_MQTT_POLL_SECONDS:-60}
     volumes:
       - state:/home/wifi-analyzer/.local/state
       - ${WIFI_ANALYZER_HA_MQTT_PASSWORD_FILE:-/dev/null}:/run/secrets/mqtt-password:ro
+      - ${WIFI_ANALYZER_HA_MQTT_CA_CERT_FILE:-/dev/null}:/run/secrets/mqtt-ca:ro
     depends_on:
       api:
         condition: service_healthy
