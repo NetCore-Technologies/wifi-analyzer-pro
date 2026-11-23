@@ -1528,7 +1528,7 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "agents.manage"
             elif path.startswith("/api/agents/"):
                 permission = "agents.read"
-            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/trusted-aps", "/api/sites/rf-surveys", "/api/sites/regulatory-datasets", "/api/sites/rf-change-requests", "/api/sites/alert-rules"} or path.startswith("/api/sites/rf-surveys/") or path.startswith("/api/sites/regulatory-datasets/") or path.startswith("/api/sites/rf-change-requests/"):
+            elif path == "/api/sites" or path.startswith("/api/sites/history") or path in {"/api/telemetry/history", "/api/telemetry/latest", "/api/trusted-aps", "/api/sites/rf-surveys", "/api/sites/regulatory-datasets", "/api/sites/rf-change-requests", "/api/sites/alert-rules"} or path.startswith("/api/sites/rf-surveys/") or path.startswith("/api/sites/regulatory-datasets/") or path.startswith("/api/sites/rf-change-requests/"):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
@@ -1835,6 +1835,36 @@ class Handler(BaseHTTPRequestHandler):
                     "record_count": len(records),
                     "can_manage": AUTH.has_permission(self.bearer_token(), "sites.manage"),
                     "privacy": "This is a shared site inventory. SSIDs and BSSIDs are visible to users assigned to this site.",
+                })
+            elif path == "/api/telemetry/latest":
+                params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=3)
+                def latest_telemetry_parameter(name):
+                    values = params.get(name, [])
+                    if len(values) > 1:
+                        raise ValueError(f"{name} may be supplied only once")
+                    return values[0] if values else None
+                try:
+                    raw_days = latest_telemetry_parameter("days")
+                    raw_limit = latest_telemetry_parameter("limit")
+                    days = 1 if raw_days is None else int(raw_days)
+                    limit = 100 if raw_limit is None else int(raw_limit)
+                except ValueError as error:
+                    raise ValueError("days and limit must be integers") from error
+                raw_site_id = latest_telemetry_parameter("site_id")
+                scope = AUTH.site_access(self.bearer_token())
+                if raw_site_id is not None:
+                    if not self.require_site_access([raw_site_id]):
+                        return
+                    site_filter = [raw_site_id]
+                else:
+                    site_filter = None if scope["all_sites"] else scope["site_ids"]
+                rollups = TELEMETRY.latest(site_ids=site_filter, days=days, limit=limit)
+                self.send_json({
+                    "days": days,
+                    "site_ids": sorted({item["site_id"] for item in rollups}),
+                    "rollups": rollups,
+                    "record_count": len(rollups),
+                    "privacy": "One latest minute-level aggregate per authorised site; SSIDs, BSSIDs and client identifiers are not retained.",
                 })
             elif path == "/api/telemetry/history":
                 params = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=5)
