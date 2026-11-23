@@ -159,6 +159,15 @@ class HomeAssistantMqttTests(unittest.TestCase):
         self.assertFalse(stale_snapshot["telemetry_fresh"])
         self.assertEqual(stale_snapshot["average_rssi_dbm"], -54.5)
 
+        with self.assertRaisesRegex(ValueError, "timezone-aware timestamp"):
+            build_home_assistant_snapshot([
+                dict(self.rollup, minute_utc="not-a-timestamp")
+            ], now=self.now)
+        with self.assertRaisesRegex(ValueError, "timezone offset"):
+            build_home_assistant_snapshot([
+                dict(self.rollup, minute_utc="2026-11-23T12:00:00")
+            ], now=self.now)
+
     def test_discovery_messages_have_unique_entities_retained_topics_and_availability(self):
         messages = build_discovery_messages("office_gateway")
         self.assertEqual(len(messages), len(SENSORS) + 1)
@@ -249,7 +258,7 @@ class HomeAssistantMqttTests(unittest.TestCase):
             os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
             link = Path(directory) / "password-link"
             link.symlink_to(path)
-            with self.assertRaisesRegex(ValueError, "opened safely"):
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
                 _read_password_file(str(link))
 
 
