@@ -6,6 +6,7 @@ import concurrent.futures
 import hashlib
 import hmac
 import json
+import os
 import socket
 import struct
 import time
