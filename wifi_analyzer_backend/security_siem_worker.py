@@ -20,6 +20,7 @@ if __package__:
         MAX_RESPONSE_BYTES,
         _DeliveryFailure,
         _PinnedHTTPSConnection,
+        _normalise_resolver_result,
         _resolve_public_addresses,
         _validate_webhook,
     )
@@ -52,6 +53,21 @@ else:  # Direct execution from the installed backend directory.
 WORKER_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
 MAX_SECRET_BYTES = 4096
 MAX_REQUEST_BYTES = 1024 * 1024
+
+
+def _parse_timestamp(value: object, field: str) -> datetime:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError(f"{field} must be a timezone-aware ISO-8601 timestamp") from error
+    else:
+        raise ValueError(f"{field} must be a timezone-aware ISO-8601 timestamp")
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{field} must include a timezone offset")
+    return parsed.astimezone(timezone.utc)
 
 
 def _read_secret_file(path_value: str | None) -> str:
@@ -165,7 +181,7 @@ class SecuritySiemWorker:
             host = urlsplit(webhook["endpoint"]).hostname
             resolution_at = self._now()
             try:
-                resolved = self.resolver(host)
+                resolved = _normalise_resolver_result(self.resolver(host))
             except _DeliveryFailure:
                 raise
             except Exception:
@@ -284,7 +300,7 @@ class SecuritySiemWorker:
             raise ValueError(f"max_events must be from 1 to {MAX_INGEST_BATCH}")
         if isinstance(max_jobs, bool) or not isinstance(max_jobs, int) or not 1 <= max_jobs <= MAX_DELIVERY_BATCH:
             raise ValueError(f"max_jobs must be from 1 to {MAX_DELIVERY_BATCH}")
-        moment = self._now() if now is None else _timestamp(now, "now")
+        moment = self._now() if now is None else _parse_timestamp(now, "now")
 
         cursor = self.store.cursor_id()
         source_events = self.audit_store.list_events_after(after_id=cursor, limit=max_events)
