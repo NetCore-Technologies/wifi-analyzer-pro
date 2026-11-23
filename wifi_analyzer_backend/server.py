@@ -2107,6 +2107,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"received": True, "duplicate": not processed})
             return
 
+        if path == "/api/live/ticket" and not self.require_auth("sites.read"):
+            return
         if path in {
             "/api/billing/checkout", "/api/billing/portal",
             "/api/license/activate", "/api/license/deactivate",
@@ -2154,6 +2156,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/capture/start": ("api.capture.start", False),
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
+            "/api/live/ticket": ("api.live.ticket", False),
             "/api/billing/checkout": ("api.billing.checkout", False),
             "/api/billing/portal": ("api.billing.portal", False),
             "/api/license/checkout": ("api.license.checkout", False),
@@ -2186,6 +2189,64 @@ class Handler(BaseHTTPRequestHandler):
             payload = self.read_json_body()
         except ValueError as error:
             self.send_json({"error": str(error)}, 400)
+            return
+
+        if path == "/api/live/ticket":
+            scope = AUTH.site_access(self.bearer_token())
+            if scope is None:
+                self.send_json({"error": "Authentication required"}, 401)
+                return
+            requested_sites = payload.get("site_ids")
+            if requested_sites is None:
+                if scope["all_sites"]:
+                    site_ids = self.managed_site_ids()
+                    if LOCAL_SITE_ID not in site_ids:
+                        site_ids.append(LOCAL_SITE_ID)
+                    site_ids = sorted(set(site_ids))[:100]
+                else:
+                    site_ids = list(scope["site_ids"])
+            else:
+                if (
+                    not isinstance(requested_sites, list)
+                    or not 1 <= len(requested_sites) <= 100
+                    or any(
+                        not isinstance(site_id, str)
+                        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", site_id)
+                        for site_id in requested_sites
+                    )
+                    or len(requested_sites) != len(set(requested_sites))
+                ):
+                    self.send_json({"error": "site_ids must contain 1 to 100 unique valid site identifiers"}, 400)
+                    return
+                site_ids = requested_sites
+            if not site_ids:
+                self.send_json({"error": "At least one site must be assigned before opening a live stream"}, 400)
+                return
+            if not self.require_site_access(site_ids, require_explicit=True):
+                return
+            identity = AUTH.identity(self.bearer_token())
+            if identity is None:
+                self.send_json({"error": "Authentication required"}, 401)
+                return
+            try:
+                ticket = LIVE_STREAMS.issue_ticket(
+                    user_id=identity["id"],
+                    session_token=self.bearer_token(),
+                    site_ids=site_ids,
+                )
+            except LiveStreamCapacityError as error:
+                self.send_json({"error": str(error)}, 503)
+                return
+            except ValueError as error:
+                self.send_json({"error": str(error)}, 400)
+                return
+            self.audit_event(
+                "live_stream.ticket.issued",
+                target_type="live_stream",
+                target_id=identity["id"],
+                metadata={"site_count": len(site_ids), "ticket_ttl_seconds": ticket["expires_in_seconds"]},
+            )
+            self.send_json(ticket, 201)
             return
 
         if path == "/api/sites/rf-change-requests":
