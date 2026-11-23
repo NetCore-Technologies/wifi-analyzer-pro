@@ -125,7 +125,7 @@ A candidate is promoted to an F-number only after checking that it is distinct f
 ## v1.3.0: Integrations and mobile
 
 - 📋 Home Assistant integration (MQTT discovery)
-- 📋 Official Grafana dashboard and Prometheus exporter documentation
+- ✅ Official Grafana dashboard and Prometheus exporter documentation
 - 📋 Node-RED nodes
 - 📋 Mobile app: move from beta to stable on iOS and Android
 - 📋 Push notifications through the mobile app
