@@ -137,7 +137,7 @@ class LiveStreamHub:
         if not isinstance(token, str) or not token or len(token) > 128:
             return None
         moment = time.time() if now is None else now
-        if isinstance(moment, bool) or not isinstance(moment, (int, float)):
+        if isinstance(moment, bool) or not isinstance(moment, (int, float)) or not math.isfinite(float(moment)):
             return None
         with self._lock:
             self._prune_tickets(float(moment))
@@ -193,7 +193,14 @@ class LiveStreamHub:
         if occurred_at is None:
             occurred_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         if not isinstance(occurred_at, str) or not occurred_at:
-            raise ValueError("occurred_at must be a timestamp string")
+            raise ValueError("occurred_at must be a timezone-aware ISO-8601 timestamp")
+        try:
+            timestamp = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError("occurred_at must be a timezone-aware ISO-8601 timestamp") from error
+        if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+            raise ValueError("occurred_at must include a timezone offset")
+        occurred_at = timestamp.astimezone(timezone.utc).isoformat(timespec="seconds")
         event = {
             "type": event_type,
             "site_id": site_id,
