@@ -91,6 +91,35 @@ class WiFiTelemetryStoreTests(unittest.TestCase):
         self.assertEqual(self.store.history(site_ids=[], days=1), [])
         self.assertEqual(self.store.site_ids(), ["branch", "office"])
 
+    def test_latest_returns_one_newest_minute_per_site_without_busy_site_starvation(self):
+        base = self.timestamp()
+        self.store.record_scan("office", [{"rssi": -80}], sampled_at=base)
+        self.store.record_scan("office", [{"rssi": -60}, {"rssi": -70}], sampled_at=base + timedelta(minutes=1))
+        self.store.record_scan("branch", [{"rssi": -45}], sampled_at=base + timedelta(minutes=2))
+        latest = self.store.latest(days=1, limit=10)
+        self.assertEqual([row["site_id"] for row in latest], ["branch", "office"])
+        self.assertEqual(latest[0]["sample_count"], 1)
+        self.assertEqual(latest[0]["average_rssi_dbm"], -45)
+        self.assertEqual(latest[1]["sample_count"], 1)
+        self.assertEqual(latest[1]["average_network_count"], 2)
+        self.assertEqual(latest[1]["average_rssi_dbm"], -65)
+        self.assertNotIn("network_count_sum", latest[1])
+
+    def test_latest_site_filter_empty_scope_and_limits_are_enforced(self):
+        self.store.record_scan("office", [{"rssi": -55}], sampled_at=self.timestamp())
+        self.store.record_scan("branch", [{"rssi": -65}], sampled_at=self.timestamp())
+        self.assertEqual(
+            [row["site_id"] for row in self.store.latest(site_ids=["office"], days=1)],
+            ["office"],
+        )
+        self.assertEqual(self.store.latest(site_ids=[], days=1), [])
+        with self.assertRaisesRegex(ValueError, "unique"):
+            self.store.latest(site_ids=["office", "office"])
+        with self.assertRaisesRegex(ValueError, "1 and 100"):
+            self.store.latest(limit=101)
+        with self.assertRaisesRegex(ValueError, "retention_days"):
+            self.store.latest(days=8)
+
     def test_history_is_durable_across_store_recreation(self):
         self.store.record_scan("office", [{"rssi": -64}], sampled_at=self.timestamp())
         reopened = WiFiTelemetryStore(self.path, retention_days=7, max_rollups_per_site=10)
