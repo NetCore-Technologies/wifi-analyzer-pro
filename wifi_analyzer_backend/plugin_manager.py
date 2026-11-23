@@ -201,7 +201,7 @@ class PluginManager:
             raw = _read_regular_file(
                 self.trust_keys_file,
                 maximum_bytes=MAX_TRUST_FILE_BYTES,
-                owner_only=True,
+                owner_only=False,
             )
             document = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
