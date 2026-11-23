@@ -65,6 +65,27 @@ services:
     command:
       - python
       - webhook_dispatch_worker.py
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /home/wifi-analyzer
+      XDG_STATE_HOME: /home/wifi-analyzer/.local/state
+      WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS: ${WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS:-90}
+    volumes:
+      - state:/home/wifi-analyzer/.local/state
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
 
   alert-webhook-bridge:
     image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
@@ -104,28 +125,6 @@ services:
     pids_limit: 128
     mem_limit: 256m
     cpus: 1.0
-    restart: unless-stopped
-    init: true
-    environment:
-      HOME: /home/wifi-analyzer
-      XDG_STATE_HOME: /home/wifi-analyzer/.local/state
-      WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS: ${WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS:-90}
-    volumes:
-      - state:/home/wifi-analyzer/.local/state
-    depends_on:
-      api:
-        condition: service_healthy
-    read_only: true
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,size=32m
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 128
-    mem_limit: 256m
-    cpus: 1.0
-
 secrets:
   webhook_signing_keys:
     file: ${WIFI_ANALYZER_WEBHOOK_SIGNING_KEYS_FILE:-/dev/null}
