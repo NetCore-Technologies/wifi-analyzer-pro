@@ -29,7 +29,10 @@ PLUGIN_NAME = "Acme channel quality"
 
 
 def sample_source() -> bytes:
-    return b"""from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+    return b"""try:
+    from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+except ModuleNotFoundError:
+    from plugin_sdk import FeaturePlugin
 
 def run(payload):
     networks = payload.get("networks", [])
@@ -188,6 +191,10 @@ class PluginManagerTests(unittest.TestCase):
         listing = self.manager.list_plugins()
         self.assertEqual(listing["plugin_count"], 0)
         self.assertEqual(listing["rejected_count"], 1)
+
+    def test_manifest_schema_version_must_be_an_integer_not_a_boolean(self):
+        with self.assertRaisesRegex(PluginValidationError, "schema version"):
+            validate_manifest_shape(self.manifest(schema_version=True))
 
     def test_incompatible_api_version_and_unknown_permissions_are_rejected(self):
         with self.assertRaisesRegex(PluginValidationError, "API version"):
