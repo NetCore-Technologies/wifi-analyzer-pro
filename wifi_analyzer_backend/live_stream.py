@@ -128,7 +128,8 @@ class LiveStreamHub:
             "ticket": token,
             "expires_in_seconds": self.ticket_ttl_seconds,
             "site_ids": sorted(sites),
-            "websocket_url": f"/ws/live?ticket={token}",
+            "websocket_url": "/ws/live",
+            "websocket_protocol": f"wfa-ticket.{token}",
         }
 
     def consume_ticket(self, token: object, *, now: float | None = None) -> Ticket | None:
