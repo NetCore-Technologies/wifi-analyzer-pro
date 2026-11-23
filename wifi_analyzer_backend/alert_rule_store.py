@@ -296,7 +296,7 @@ class AlertRuleStore:
                 event_json TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending'
-                    CHECK (status IN ('pending', 'queued', 'not_configured')),
+                    CHECK (status IN ('pending', 'queued', 'not_configured', 'suppressed')),
                 attempts INTEGER NOT NULL DEFAULT 0,
                 available_at TEXT NOT NULL,
                 last_error_code TEXT,
@@ -304,6 +304,39 @@ class AlertRuleStore:
                 UNIQUE (event_id, transition)
             )
         """)
+        schema_row = db.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='alert_notification_outbox'"
+        ).fetchone()
+        if schema_row and "'suppressed'" not in (schema_row["sql"] or ""):
+            # Upgrade pre-bridge databases without losing queued or processed transitions.
+            db.execute("ALTER TABLE alert_notification_outbox RENAME TO alert_notification_outbox_legacy")
+            db.execute("""
+                CREATE TABLE alert_notification_outbox (
+                    notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    site_id TEXT NOT NULL,
+                    event_id TEXT NOT NULL,
+                    transition TEXT NOT NULL CHECK (transition IN ('opened', 'acknowledged', 'resolved')),
+                    event_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'queued', 'not_configured', 'suppressed')),
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    available_at TEXT NOT NULL,
+                    last_error_code TEXT,
+                    processed_at TEXT,
+                    UNIQUE (event_id, transition)
+                )
+            """)
+            db.execute("""
+                INSERT INTO alert_notification_outbox (
+                    notification_id, site_id, event_id, transition, event_json,
+                    created_at, status, attempts, available_at, last_error_code, processed_at
+                )
+                SELECT notification_id, site_id, event_id, transition, event_json,
+                    created_at, status, attempts, available_at, last_error_code, processed_at
+                FROM alert_notification_outbox_legacy
+            """)
+            db.execute("DROP TABLE alert_notification_outbox_legacy")
         db.execute("""
             CREATE INDEX IF NOT EXISTS idx_alert_notification_due
             ON alert_notification_outbox(status, available_at, notification_id)
@@ -731,8 +764,8 @@ class AlertRuleStore:
     def mark_notification_processed(self, notification_id: int, status: str) -> dict | None:
         if isinstance(notification_id, bool) or not isinstance(notification_id, int) or notification_id < 1:
             raise ValueError("notification_id must be a positive integer")
-        if status not in {"queued", "not_configured"}:
-            raise ValueError("notification status must be queued or not_configured")
+        if status not in {"queued", "not_configured", "suppressed"}:
+            raise ValueError("notification status must be queued, not_configured or suppressed")
         processed_at = _iso()
         with self._db() as db:
             db.execute("""
