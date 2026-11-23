@@ -65,12 +65,13 @@ on a host where UID 10001 is reserved for this service:
 ```sh
 sudo chown 10001:10001 /etc/wifi-analyzer-pro/webhook-signing-keys.json
 sudo chmod 0600 /etc/wifi-analyzer-pro/webhook-signing-keys.json
-docker compose --profile webhook-dispatcher up -d
+docker compose --profile alert-webhooks up -d
+# Also start the network delivery worker:
+docker compose --profile webhook-dispatcher --profile alert-webhooks up -d
 docker compose ps
 ```
 
-The profile starts the API's existing webhook dispatcher and the new
-notification bridge as separate non-root, read-only, resource-bounded sidecars.
+The `alert-webhooks` profile starts only the non-root, read-only, resource-bounded notification bridge. The separate `webhook-dispatcher` profile starts the network delivery worker. Enable both profiles when notifications should actually leave the host.
 Both workers share the local state volume. Only the bridge mounts the signing
 key file. The dispatcher receives signed envelopes only. Do not expose the
 container's Docker socket to either worker.
