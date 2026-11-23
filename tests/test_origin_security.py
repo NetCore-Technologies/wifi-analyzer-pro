@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import unittest
+import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -25,6 +26,61 @@ class OriginSecurityTests(unittest.TestCase):
         if host is not None:
             handler.headers["Host"] = host
         return server.Handler.origin_allowed(handler)
+
+    def test_cors_allowlist_accepts_only_exact_http_origins(self):
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {
+            "WIFI_ANALYZER_CORS_ORIGINS": "https://portal.example, http://192.168.1.20:5173",
+        }):
+            self.assertEqual(
+                server._configured_cors_origins(),
+                {"https://portal.example", "http://192.168.1.20:5173"},
+            )
+        for value in (
+            "*",
+            "https://portal.example/path",
+            "https://user@portal.example",
+            "ftp://portal.example",
+            "http://portal.example:bad",
+        ):
+            with patch.dict(os.environ, {"WIFI_ANALYZER_CORS_ORIGINS": value}):
+                with self.assertRaisesRegex(RuntimeError, "exact HTTP"):
+                    server._configured_cors_origins()
+
+    def test_options_preflight_echoes_only_an_explicitly_allowed_origin(self):
+        class FakeOptionsHandler:
+            headers = {
+                "Origin": "https://trusted-portal.example",
+                "Host": "analyzer.lan:199",
+            }
+
+            def origin_allowed(self):
+                return server.Handler.origin_allowed(self)
+
+            def send_response(self, status):
+                self.status = status
+
+            def send_header(self, name, value):
+                self.response_headers[name] = value
+
+            def end_headers(self):
+                self.ended = True
+
+            response_headers = {}
+
+        handler = FakeOptionsHandler()
+        server.Handler.do_OPTIONS(handler)
+        self.assertEqual(handler.status, 204)
+        self.assertEqual(
+            handler.response_headers["Access-Control-Allow-Origin"],
+            "https://trusted-portal.example",
+        )
+        self.assertEqual(
+            handler.response_headers["Access-Control-Allow-Headers"],
+            "Authorization, Content-Type",
+        )
+        self.assertTrue(handler.ended)
 
     def test_non_browser_requests_without_origin_remain_supported(self):
         self.assertTrue(self.allowed(host="127.0.0.1:199"))
