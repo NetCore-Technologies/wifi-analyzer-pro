@@ -91,3 +91,14 @@ no webhook HTTP request. Approved evidence is added to the next orchestration
 request; it expires quickly by design, so prepare promptly after testing.
 Signing secrets are entered in the UI only for the preparation request and
 are never part of the saved subscription record.
+
+
+## Site alert notifications
+
+Site-alert incidents can be routed into this same delivery queue by the
+separate `alert_webhook_worker`. It consumes durable incident transitions,
+applies saved event/severity/site filters, signs envelopes with a protected
+key file and enqueues them; it does not perform network I/O. Configure it as
+described in `ALERT_WEBHOOK_BRIDGE.md`. Run both workers when alert
+notifications need to reach their destination. The dispatcher itself never
+receives HMAC signing secrets.
