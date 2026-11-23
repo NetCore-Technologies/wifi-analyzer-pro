@@ -289,7 +289,7 @@ class AlertWebhookWorkerTests(unittest.TestCase):
             link.symlink_to(target)
         except (OSError, NotImplementedError):
             self.skipTest("symbolic links are unavailable")
-        with self.assertRaisesRegex(ValueError, "opened safely"):
+        with self.assertRaisesRegex(ValueError, "symbolic link"):
             load_signing_keys(str(link))
 
 
