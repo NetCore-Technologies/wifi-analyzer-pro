@@ -71,6 +71,15 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 
 ---
 
+
+
+### Home Assistant MQTT integration delivered
+
+- ✅ An opt-in MQTT 3.1.1 worker publishes 15 aggregate numeric sensors and a telemetry-freshness binary sensor through retained Home Assistant discovery messages with stable unique IDs and device metadata.
+- ✅ Uses QoS 1, retained state/configuration, online/offline availability, MQTT Last Will and Home Assistant birth-message rediscovery; TLS certificate and hostname validation are enabled by default.
+- ✅ Uses only the local site's minute-level telemetry aggregates. SSIDs, BSSIDs, client/MAC identifiers, IP addresses and raw scan records are not published. MQTT commands and router configuration writes are not supported.
+- ✅ Docker Compose and systemd deployment options are documented; broker credentials are read from a protected external file.
+
 ## Feature expansion roadmap: F101–F200
 
 These are planned deliverables, not implemented features. IDs are reserved only when a tool is implemented and tested; each tool must include a pure-function test, an API integration test where relevant, a catalog entry and a UI path.
@@ -124,7 +133,7 @@ A candidate is promoted to an F-number only after checking that it is distinct f
 
 ## v1.3.0: Integrations and mobile
 
-- 📋 Home Assistant integration (MQTT discovery)
+- ✅ Home Assistant integration (MQTT discovery)
 - ✅ Official Grafana dashboard and Prometheus exporter documentation
 - 📋 Node-RED nodes
 - 📋 Mobile app: move from beta to stable on iOS and Android
