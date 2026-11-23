@@ -21,6 +21,7 @@ MAX_BATCHES_PER_SUBSCRIPTION = 100
 MAX_EVENTS_PER_BATCH = 500
 MAX_ATTRIBUTES = 16
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+SITE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_.-]{0,79}$")
 HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
@@ -35,6 +36,12 @@ ATTRIBUTE_KEYS = {
 def _id(value: object, field: str) -> str:
     if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
         raise ValueError(f"{field} must be a 1 to 64 character identifier")
+    return value
+
+
+def _site_identifier(value: object, field: str) -> str:
+    if not isinstance(value, str) or not SITE_IDENTIFIER.fullmatch(value):
+        raise ValueError(f"{field} must be a 1 to 128 character site identifier")
     return value
 
 
@@ -126,7 +133,7 @@ def _subscription(raw: object, index: int) -> dict:
     sites = raw.get("site_allowlist", [])
     if not isinstance(sites, list) or len(sites) > 128:
         raise ValueError(f"{field}.site_allowlist must be a bounded list")
-    site_ids = [_id(value, f"{field}.site_allowlist entry") for value in sites]
+    site_ids = [_site_identifier(value, f"{field}.site_allowlist entry") for value in sites]
     if len(site_ids) != len(set(site_ids)):
         raise ValueError(f"{field}.site_allowlist entries must be unique")
     endpoint, allowed_hosts = _endpoint(
@@ -182,7 +189,7 @@ def _event(raw: object, index: int) -> dict:
     site_id = raw.get("site_id")
     router_id = raw.get("router_id")
     if site_id is not None:
-        site_id = _id(site_id, f"{field}.site_id")
+        site_id = _site_identifier(site_id, f"{field}.site_id")
     if router_id is not None:
         router_id = _id(router_id, f"{field}.router_id")
     summary = raw.get("summary")
