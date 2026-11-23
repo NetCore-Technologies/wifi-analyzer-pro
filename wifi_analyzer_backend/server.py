@@ -42,6 +42,7 @@ if __package__:
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .telemetry_store import WiFiTelemetryStore
     from .live_stream import LIVE_STREAMS, LiveStreamCapacityError
+    from .plugin_manager import PLUGIN_MANAGER, PluginManagerError
     from .prometheus_exporter import render_prometheus_metrics
     from .trusted_ap_store import TrustedAccessPointStore
     from .rf_survey_store import RfSurveyHistoryStore
@@ -88,6 +89,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from telemetry_store import WiFiTelemetryStore
     from live_stream import LIVE_STREAMS, LiveStreamCapacityError
+    from plugin_manager import PLUGIN_MANAGER, PluginManagerError
     from prometheus_exporter import render_prometheus_metrics
     from trusted_ap_store import TrustedAccessPointStore
     from rf_survey_store import RfSurveyHistoryStore
