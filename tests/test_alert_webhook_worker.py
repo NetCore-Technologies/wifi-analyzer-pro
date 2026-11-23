@@ -141,6 +141,7 @@ class AlertWebhookWorkerTests(unittest.TestCase):
             "processed_count": 1,
             "queued_count": 1,
             "not_configured_count": 0,
+            "suppressed_count": 0,
             "retry_count": 0,
         })
 
@@ -184,6 +185,71 @@ class AlertWebhookWorkerTests(unittest.TestCase):
         job = self.deliveries.get(pending[0]["id"], include_body=True)
         event = json.loads(job["body"])["events"][0]
         self.assertEqual(event["site_id"], site_id)
+
+    def test_quiet_hours_suppress_delivery_without_dropping_the_incident(self):
+        minute = self.now.hour * 60 + self.now.minute
+        start = (minute - 1) % (24 * 60)
+        end = (minute + 1) % (24 * 60)
+        quiet_start = f"{start // 60:02d}:{start % 60:02d}"
+        quiet_end = f"{end // 60:02d}:{end % 60:02d}"
+        self.alerts.save_rule(
+            "office",
+            self.rule(quiet_start=quiet_start, quiet_end=quiet_end, timezone="UTC"),
+        )
+        self.alerts.evaluate(
+            "office",
+            {"minimum_rssi_dbm": -82},
+            observed_at=self.now.isoformat(),
+        )
+        self.create_subscription()
+
+        result = self.worker().run_once()
+        self.assertEqual(result["processed_count"], 1)
+        self.assertEqual(result["queued_count"], 0)
+        self.assertEqual(result["suppressed_count"], 1)
+        event = self.alerts.list_events("office")[0]
+        self.assertTrue(event["quiet_hours_active"])
+        self.assertEqual(event["delivery_status"], "suppressed")
+        self.assertEqual(self.deliveries.list_deliveries(limit=10), [])
+
+    def test_existing_notification_schema_migrates_without_losing_pending_rows(self):
+        import sqlite3
+
+        path = Path(self.temp.name) / "legacy-alerts.sqlite3"
+        connection = sqlite3.connect(path)
+        connection.execute("""
+            CREATE TABLE alert_notification_outbox (
+                notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                transition TEXT NOT NULL CHECK (transition IN ('opened', 'acknowledged', 'resolved')),
+                event_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'queued', 'not_configured')),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                available_at TEXT NOT NULL,
+                last_error_code TEXT,
+                processed_at TEXT,
+                UNIQUE (event_id, transition)
+            )
+        """)
+        connection.execute(
+            "INSERT INTO alert_notification_outbox "
+            "(site_id,event_id,transition,event_json,created_at,status,attempts,available_at) "
+            "VALUES (?,?,?,?,?,'pending',0,?)",
+            ("office", "legacy-event", "opened", "{}", self.now.isoformat(), self.now.isoformat()),
+        )
+        connection.commit()
+        connection.close()
+
+        legacy_store = AlertRuleStore(path)
+        pending = legacy_store.pending_notifications(now=self.now.isoformat())
+        self.assertEqual(len(pending), 1)
+        migrated = legacy_store.mark_notification_processed(
+            pending[0]["notification_id"], "suppressed",
+        )
+        self.assertEqual(migrated["status"], "suppressed")
 
     def test_unmatched_notifications_are_marked_not_configured(self):
         self.create_incident()
