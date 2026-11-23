@@ -65,7 +65,6 @@ export default function FleetOverviewPanel() {
   const [rollups, setRollups] = useState([]);
   const [agents, setAgents] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
-  const [allSites, setAllSites] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(null);
   const [errors, setErrors] = useState([]);
@@ -100,7 +99,6 @@ export default function FleetOverviewPanel() {
           });
           if (result.key === "sites") {
             setSites([]);
-            setAllSites(false);
           } else if (result.key === "telemetry") {
             setRollups([]);
           } else if (result.key === "agents") {
@@ -115,7 +113,6 @@ export default function FleetOverviewPanel() {
             ? result.data.site_ids.filter((value) => typeof value === "string" && sitePattern.test(value))
             : [];
           setSites([...new Set(ids)].sort());
-          setAllSites(result.data.all_sites === true);
         } else if (result.key === "telemetry") {
           setRollups(Array.isArray(result.data.rollups) ? result.data.rollups : []);
         } else if (result.key === "agents") {
@@ -201,7 +198,7 @@ export default function FleetOverviewPanel() {
               <div style={{ color:"#e2e8f0", fontSize:15, fontWeight:800 }}>Multi-site fleet overview</div>
               <div style={{ color:muted, fontSize:11, marginTop:3 }}>
                 Latest measured telemetry and registered router-agent health
-                {allSites ? " · all-site administrator" : " · assigned sites only"}
+                {" · sites visible to this account"}
               </div>
             </div>
           </div>
@@ -324,7 +321,11 @@ export default function FleetOverviewPanel() {
                   </div>
                   <div style={{ color:"#cbd5e1", fontSize:10 }}>
                     {snapshot ? count(snapshot.wireless_radio_count) + " radios · " + count(snapshot.association_count) + " associations" : "No snapshot"}
-                    <div style={{ color:muted, fontSize:9, marginTop:3 }}>{snapshot?.received_at ? "Snapshot " + formatAge(ageSeconds(snapshot.received_at, now)) : ""}</div>
+                    <div style={{ color:muted, fontSize:9, marginTop:3 }}>
+                      {(snapshot?.received_at || snapshot?.captured_at)
+                        ? "Snapshot " + formatAge(ageSeconds(snapshot.received_at || snapshot.captured_at, now))
+                        : ""}
+                    </div>
                   </div>
                 </div>
               );
