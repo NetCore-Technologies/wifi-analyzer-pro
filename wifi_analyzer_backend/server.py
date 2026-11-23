@@ -112,7 +112,8 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
 OS = platform.system()
 APP_VERSION = "1.0.7"
 DEMO_MODE = os.getenv("WIFI_ANALYZER_DEMO", "").strip().lower() in {"1", "true", "yes", "on"}
-DEFAULT_CORS_ORIGINS = {
+DEFAULT_CORS_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173"}
+
 ALLOWED_HOSTS = {
     item.strip().strip("[]").lower()
     for item in os.getenv(
@@ -120,12 +121,43 @@ ALLOWED_HOSTS = {
         "localhost,127.0.0.1,::1",
     ).split(",")
     if item.strip()
-}"http://localhost:5173", "http://127.0.0.1:5173"}
-CORS_ORIGINS = {
-    origin.strip()
-    for origin in os.getenv("WIFI_ANALYZER_CORS_ORIGINS", "").split(",")
-    if origin.strip()
-} or DEFAULT_CORS_ORIGINS
+}
+
+
+def _configured_cors_origins() -> set[str]:
+    configured = {
+        origin.strip()
+        for origin in os.getenv("WIFI_ANALYZER_CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    }
+    if not configured:
+        return set(DEFAULT_CORS_ORIGINS)
+    for origin in configured:
+        try:
+            parsed = urlparse(origin)
+            valid = (
+                parsed.scheme in {"http", "https"}
+                and bool(parsed.netloc)
+                and parsed.hostname is not None
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.path == ""
+                and not parsed.params
+                and not parsed.query
+                and not parsed.fragment
+                and "*" not in origin
+            )
+            _ = parsed.port
+        except ValueError:
+            valid = False
+        if not valid:
+            raise RuntimeError(
+                "WIFI_ANALYZER_CORS_ORIGINS must contain exact HTTP(S) origins without paths or wildcards"
+            )
+    return configured
+
+
+CORS_ORIGINS = _configured_cors_origins()
 
 AUTH = AuthManager()
 HISTORY = SiteHistoryStore()
