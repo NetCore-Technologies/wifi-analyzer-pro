@@ -185,7 +185,7 @@ The local HTTP service exposes:
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
-| `GET /api/features` | Authenticated catalogue of the 208 built-in tools |
+| `GET /api/features` | Authenticated catalogue of 208 built-in tools plus enabled signed extensions |
 | `GET /api/plugins` | Owner/admin listing of signed third-party plugin packages and lifecycle state; requires `plugins.manage` |
 | `POST /api/plugins/{plugin_id}/enable`, `/disable`, `/reload` | Audited owner/admin plugin lifecycle operations; package upload is not supported |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
