@@ -1532,6 +1532,8 @@ class Handler(BaseHTTPRequestHandler):
                 permission = "sites.read"
             elif path == "/api/adapters":
                 permission = "agents.read"
+            elif path == "/api/plugins":
+                permission = "plugins.manage"
             elif path.startswith("/api/security/audit"):
                 permission = "users.manage"
             elif path == "/api/billing/status":
@@ -1672,6 +1674,7 @@ class Handler(BaseHTTPRequestHandler):
                 "count": len(feature_catalog()),
                 "features": feature_catalog(),
             },
+            "/api/plugins": PLUGIN_MANAGER.list_plugins,
             "/api/adapters": lambda: {
                 "count": len(router_adapter_manifests()),
                 "adapters": router_adapter_manifests(),
@@ -2131,6 +2134,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "Origin is not allowed"}, 403)
             return
 
+        if path == "/api/plugins" or path.startswith("/api/plugins/"):
+            if not self.require_auth("plugins.manage"):
+                return
         if path == "/api/billing/webhook":
             if not self.enforce_rate_limit("api.billing.webhook", client_only=True):
                 return
@@ -2214,6 +2220,7 @@ class Handler(BaseHTTPRequestHandler):
             "/api/reports/jobs/enqueue": ("api.report.enqueue", False),
             "/api/webhooks/deliveries/enqueue": ("api.webhook.enqueue", False),
             "/api/live/ticket": ("api.live.ticket", False),
+            "/api/plugins": ("api.plugins.manage", False),
             "/api/billing/checkout": ("api.billing.checkout", False),
             "/api/billing/portal": ("api.billing.portal", False),
             "/api/license/checkout": ("api.license.checkout", False),
@@ -2230,6 +2237,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path.startswith("/api/webhooks/subscriptions") and not self.enforce_rate_limit("api.webhook.manage"):
             return
         if path.startswith("/api/features/") and not self.enforce_rate_limit("api.feature.execution"):
+            return
+        if path.startswith("/api/plugins/") and not self.enforce_rate_limit("api.plugins.manage"):
             return
 
         if path == "/api/auth/logout":
@@ -2309,6 +2318,62 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(error)}, 400)
                 return
             self.send_json(ticket, 201)
+            return
+
+        plugin_action = re.fullmatch(
+            r"/api/plugins/([a-z][a-z0-9_-]{1,31}\.[a-z][a-z0-9_-]{1,63})/(enable|disable|reload)",
+            path,
+        )
+        if plugin_action:
+            plugin_id, operation = plugin_action.groups()
+            available = {
+                item.get("plugin_id")
+                for item in PLUGIN_MANAGER.list_plugins().get("plugins", [])
+                if isinstance(item, dict)
+            }
+            if plugin_id not in available:
+                self.send_json({"error": "Plugin package was not found"}, 404)
+                return
+            requested = self.audit_event(
+                "plugin." + operation + ".requested",
+                target_type="feature_plugin",
+                target_id=plugin_id,
+                metadata={"plugin_id": plugin_id, "operation": operation},
+            )
+            if requested is None:
+                self.send_json({
+                    "error": "The security audit ledger is unavailable; plugin state was not changed",
+                }, 503)
+                return
+            try:
+                if operation == "enable":
+                    result = PLUGIN_MANAGER.enable(plugin_id)
+                elif operation == "disable":
+                    result = PLUGIN_MANAGER.disable(plugin_id)
+                else:
+                    result = PLUGIN_MANAGER.reload(plugin_id)
+            except PluginManagerError as error:
+                self.audit_event(
+                    "plugin." + operation + ".rejected",
+                    target_type="feature_plugin",
+                    target_id=plugin_id,
+                    outcome="failure",
+                    metadata={"plugin_id": plugin_id, "operation": operation},
+                )
+                self.send_json({"error": str(error)}, 409)
+                return
+            completed = self.audit_event(
+                "plugin." + operation + ".completed",
+                target_type="feature_plugin",
+                target_id=plugin_id,
+                metadata={"plugin_id": plugin_id, "operation": operation},
+            )
+            response = {"plugin": result, "operation": operation}
+            if completed is None:
+                response["audit_status"] = "plugin state changed; completion audit event could not be persisted"
+                self.send_json(response, 202)
+            else:
+                self.send_json(response)
             return
 
         if path == "/api/sites/rf-change-requests":
@@ -4247,6 +4312,15 @@ class Handler(BaseHTTPRequestHandler):
             if slug not in {item["slug"] for item in feature_catalog()}:
                 self.send_json({"error": "Unknown feature"}, 404)
                 return
+            external_feature = PLUGIN_MANAGER.get_feature(slug)
+            if external_feature is not None:
+                for permission in external_feature.get("permissions", []):
+                    if not AUTH.has_permission(self.bearer_token(), permission):
+                        self.send_json({
+                            "error": "The feature requires an account permission that has not been granted",
+                            "required_permission": permission,
+                        }, 403)
+                        return
             try:
                 with BILLING_QUOTA_LOCK:
                     meter = BILLING.consume_monthly_feature_run()
