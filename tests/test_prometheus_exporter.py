@@ -144,6 +144,12 @@ class PrometheusEndpointTests(unittest.TestCase):
         self.assertEqual(status, 404)
         self.assertEqual(body, "Not found\n")
 
+    def test_exporter_hides_endpoint_for_a_short_configured_token(self):
+        with patch.dict(os.environ, {"WIFI_ANALYZER_PROMETHEUS_TOKEN": "too-short"}, clear=False):
+            status, body, _ = self.request()
+        self.assertEqual(status, 404)
+        self.assertEqual(body, "Not found\\n")
+
     def test_exporter_rejects_missing_wrong_and_query_string_credentials(self):
         token = "test-prometheus-export-token-0123456789abcdef"
         with patch.dict(os.environ, {"WIFI_ANALYZER_PROMETHEUS_TOKEN": token}, clear=False):
@@ -160,6 +166,12 @@ class PrometheusEndpointTests(unittest.TestCase):
             "rssi": -48,
             "security": "Open",
         }])
+        self.telemetry.record_scan("another-site", [{
+            "ssid": "other-site-private-name",
+            "bssid": "02:aa:bb:cc:dd:ee",
+            "band": "5GHz",
+            "rssi": -20,
+        }])
         with patch.dict(os.environ, {"WIFI_ANALYZER_PROMETHEUS_TOKEN": token}, clear=False):
             status, body, headers = self.request(token=token)
 
@@ -170,6 +182,8 @@ class PrometheusEndpointTests(unittest.TestCase):
         self.assertIn("wifi_analyzer_average_rssi_dbm -48", body)
         self.assertIn("wifi_analyzer_scan_samples_24h 1", body)
         self.assertNotIn("private-office-name", body)
+        self.assertNotIn("other-site-private-name", body)
+        self.assertNotIn("wifi_analyzer_average_rssi_dbm -20", body)
         self.assertNotIn("02:11:22:33:44:55", body)
         self.assertNotIn("ssid=", body)
         self.assertNotIn("bssid=", body)
