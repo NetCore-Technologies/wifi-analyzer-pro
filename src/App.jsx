@@ -17,6 +17,7 @@ import { createLiveStream } from "./lib/liveStream.js";
 import { getScanSource } from "./lib/observationProvenance.js";
 import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
 import PluginManagerPanel from "./components/PluginManagerPanel.jsx";
+import FleetOverviewPanel from "./components/FleetOverviewPanel.jsx";
 import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
 import PcapAnalyzer from "./components/PcapAnalyzer.jsx";
 import TeamAccessPanel from "./components/TeamAccessPanel.jsx";
@@ -876,6 +877,7 @@ const NAV=[
     {id:"advanced",label:"Advanced",       Icon:Wrench},
     {id:"api",     label:"API",            Icon:Code},
     {id:"featureTools", label:"Feature Workbench", Icon:Package},
+    {id:"fleet", label:"Fleet Overview", Icon:RadioTower},
     {id:"plugins", label:"Plugin Manager", Icon:Package},
   ]},
 ];
@@ -1248,6 +1250,7 @@ export default function App() {
 
   const panels={
     featureTools: <FeatureWorkbench/>,
+    fleet:        <FleetOverviewPanel/>,
     plugins:      <PluginManagerPanel/>,
     pcap:         <PcapAnalyzer/>,
     agents:       <RouterAgentConsole/>,
