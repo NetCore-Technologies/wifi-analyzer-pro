@@ -89,6 +89,29 @@ class LiveStreamHubTests(unittest.TestCase):
         self.assertTrue(client.closed.is_set())
         self.assertEqual(client.events.qsize(), MAX_QUEUED_EVENTS_PER_CLIENT)
 
+    def test_ticket_issuance_and_consumption_reject_non_finite_clocks(self):
+        with self.assertRaisesRegex(ValueError, "finite timestamp"):
+            self.hub.issue_ticket(
+                user_id="u",
+                session_token="secret",
+                site_ids=["office"],
+                now=float("nan"),
+            )
+        created = self.ticket()
+        self.assertIsNone(self.hub.consume_ticket(created["ticket"], now=float("inf")))
+
+    def test_event_timestamps_must_include_a_timezone(self):
+        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+            self.hub.publish(
+                "scan.updated", "office", {"network_count": 5},
+                occurred_at="2026-11-23T12:00:00",
+            )
+        with self.assertRaisesRegex(ValueError, "timestamp"):
+            self.hub.publish(
+                "scan.updated", "office", {"network_count": 5},
+                occurred_at="not-a-date",
+            )
+
     def test_event_payload_must_be_finite_json_and_bounded(self):
         with self.assertRaisesRegex(ValueError, "finite JSON"):
             self.hub.publish("scan.updated", "office", {"value": float("nan")})
