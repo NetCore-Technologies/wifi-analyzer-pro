@@ -17,6 +17,7 @@ Environment=WIFI_ANALYZER_PLUGIN_STATE_DB=/var/lib/wifi-analyzer-pro/plugin-regi
 Environment=WIFI_ANALYZER_PLUGIN_TRUST_KEYS_FILE=/etc/wifi-analyzer-pro/plugin-trust-keys.json
 Environment=WIFI_ANALYZER_HOST=127.0.0.1
 Environment=WIFI_ANALYZER_ALLOWED_HOSTS=localhost,127.0.0.1,::1
+Environment=WIFI_ANALYZER_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 Environment=WIFI_ANALYZER_PORT=199
 EnvironmentFile=-/etc/wifi-analyzer-pro/server.env
 StateDirectory=wifi-analyzer-pro
