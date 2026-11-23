@@ -130,7 +130,11 @@ class FeaturePlugin:
 def validate_manifest_shape(value: object) -> dict[str, Any]:
     if not isinstance(value, dict) or set(value) != MANIFEST_FIELDS:
         raise PluginValidationError("plugin manifest fields do not match schema version 1")
-    if value.get("schema_version") != PLUGIN_MANIFEST_SCHEMA:
+    if (
+        isinstance(value.get("schema_version"), bool)
+        or not isinstance(value.get("schema_version"), int)
+        or value.get("schema_version") != PLUGIN_MANIFEST_SCHEMA
+    ):
         raise PluginValidationError("plugin manifest schema version is unsupported")
     plugin_id = value.get("plugin_id")
     if not isinstance(plugin_id, str) or not PLUGIN_ID.fullmatch(plugin_id):
@@ -162,8 +166,12 @@ def validate_manifest_shape(value: object) -> dict[str, Any]:
     if not isinstance(description, str) or not description.strip() or len(description.strip()) > 500:
         raise PluginValidationError("plugin description must contain 1 to 500 characters")
     parameters = value.get("parameters")
-    if not isinstance(parameters, dict) or len(parameters) > 64:
-        raise PluginValidationError("plugin parameters must be an object with at most 64 entries")
+    if (
+        not isinstance(parameters, dict)
+        or len(parameters) > 64
+        or any(not isinstance(key, str) or not key for key in parameters)
+    ):
+        raise PluginValidationError("plugin parameters must be an object with at most 64 string keys")
     canonical_json(parameters)
     permissions = value.get("permissions")
     if (
