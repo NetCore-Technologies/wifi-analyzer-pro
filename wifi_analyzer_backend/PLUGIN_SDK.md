@@ -44,10 +44,16 @@ files over 1 MiB are rejected.
 ## Write the plugin entrypoint
 
 The package exports one `PLUGIN` object created from
-`wifi_analyzer_backend.plugin_sdk.FeaturePlugin`:
+`wifi_analyzer_backend.plugin_sdk.FeaturePlugin` (or the top-level
+`plugin_sdk.FeaturePlugin` in direct `server.py` installations):
 
 ```python
-from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+try:
+    from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+except ModuleNotFoundError:
+    # Direct server.py/systemd installations run with wifi_analyzer_backend
+    # as the working directory rather than as an importable package.
+    from plugin_sdk import FeaturePlugin
 
 
 def run(payload):
