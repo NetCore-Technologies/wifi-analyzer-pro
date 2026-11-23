@@ -315,6 +315,22 @@ class PluginManager:
         enabled = self._enabled_ids()
         discovered = []
         rejected = []
+
+        def revoke(plugin_id: str) -> bool:
+            was_enabled = plugin_id in enabled
+            if was_enabled:
+                now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                with self._connection() as database:
+                    database.execute(
+                        "UPDATE plugin_states SET enabled=0, updated_at=? WHERE plugin_id=?",
+                        (now, plugin_id),
+                    )
+                enabled.discard(plugin_id)
+            loaded = self._loaded.pop(plugin_id, None)
+            if loaded is not None:
+                sys.modules.pop(loaded[2].__name__, None)
+            return was_enabled
+
         try:
             directories = sorted(self.plugin_directory.iterdir(), key=lambda item: item.name)
         except OSError:
@@ -324,6 +340,8 @@ class PluginManager:
             if not item.name.startswith(".") and item.is_dir() and not item.is_symlink()
         ]
         if len(package_directories) > MAX_PLUGIN_PACKAGES:
+            for plugin_id in list(enabled):
+                revoke(plugin_id)
             return [], [{
                 "plugin_id": "",
                 "status": "rejected",
@@ -333,10 +351,12 @@ class PluginManager:
             if directory.name.startswith("."):
                 continue
             if directory.is_symlink() or not directory.is_dir():
+                was_enabled = revoke(directory.name)
                 rejected.append({
                     "plugin_id": directory.name[:128],
                     "status": "rejected",
                     "error_code": "plugin_entry_is_not_a_regular_directory",
+                    "previously_enabled": was_enabled,
                 })
                 continue
             try:
@@ -344,18 +364,7 @@ class PluginManager:
                 item["enabled"] = directory.name in enabled
                 discovered.append(item)
             except (PluginManagerError, OSError):
-                was_enabled = directory.name in enabled
-                if was_enabled:
-                    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-                    with self._connection() as database:
-                        database.execute(
-                            "UPDATE plugin_states SET enabled=0, updated_at=? WHERE plugin_id=?",
-                            (now, directory.name),
-                        )
-                    enabled.discard(directory.name)
-                    loaded = self._loaded.pop(directory.name, None)
-                    if loaded is not None:
-                        sys.modules.pop(loaded[2].__name__, None)
+                was_enabled = revoke(directory.name)
                 rejected.append({
                     "plugin_id": directory.name[:128],
                     "status": "rejected",
