@@ -167,6 +167,24 @@ class AlertWebhookWorkerTests(unittest.TestCase):
         self.assertEqual(self.worker().run_once()["processed_count"], 0)
         self.assertEqual(len(self.deliveries.list_deliveries(status="pending", limit=10)), 1)
 
+    def test_maximum_length_site_identifier_survives_routing_signing_and_queue_scope(self):
+        site_id = "s" * 128
+        self.alerts.save_rule(site_id, self.rule())
+        self.alerts.evaluate(
+            site_id,
+            {"minimum_rssi_dbm": -82},
+            observed_at=self.now.isoformat(),
+        )
+        self.create_subscription(site_allowlist=[site_id])
+        result = self.worker().run_once()
+        self.assertEqual(result["queued_count"], 1)
+        pending = self.deliveries.list_deliveries(status="pending", limit=10)
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["site_ids"], [site_id])
+        job = self.deliveries.get(pending[0]["id"], include_body=True)
+        event = json.loads(job["body"])["events"][0]
+        self.assertEqual(event["site_id"], site_id)
+
     def test_unmatched_notifications_are_marked_not_configured(self):
         self.create_incident()
         result = self.worker().run_once()
