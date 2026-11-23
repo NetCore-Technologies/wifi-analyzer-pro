@@ -94,7 +94,7 @@ services:
       dockerfile: Dockerfile
     container_name: wifi-analyzer-alert-webhook-bridge
     profiles:
-      - webhook-dispatcher
+      - alert-webhooks
     command:
       - python
       - -m
