@@ -149,9 +149,17 @@ export function createLiveStream({
       ) {
         throw new Error("The live-stream ticket response is invalid");
       }
-      const target = new URL(ticket.websocket_url, ticket.apiBase);
-      if (!["http:", "https:"].includes(target.protocol) || target.pathname !== "/ws/live" || target.search || target.hash) {
-        throw new Error("The live-stream endpoint is invalid");
+      const base = new URL(ticket.apiBase);
+      const target = new URL(ticket.websocket_url, base);
+      if (
+        !["http:", "https:"].includes(base.protocol) ||
+        target.origin !== base.origin ||
+        target.pathname !== "/ws/live" ||
+        target.search ||
+        target.hash ||
+        !/^wfa-ticket\\.[A-Za-z0-9_-]{32,80}$/.test(ticket.websocket_protocol)
+      ) {
+        throw new Error("The live-stream endpoint or one-use protocol is invalid");
       }
       target.protocol = target.protocol === "https:" ? "wss:" : "ws:";
       const candidate = new WebSocketImpl(target.toString(), ticket.websocket_protocol);
