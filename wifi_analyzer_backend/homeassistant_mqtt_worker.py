@@ -215,11 +215,16 @@ class HomeAssistantMqttPublisher:
             return
         try:
             if self.connected.is_set():
-                self.publish(self.availability_topic, AVAILABILITY_OFFLINE)
-            self.client.disconnect()
+                try:
+                    self.publish(self.availability_topic, AVAILABILITY_OFFLINE)
+                except Exception:
+                    pass
         finally:
-            self.client.loop_stop()
-            self.connected.clear()
+            try:
+                self.client.disconnect()
+            finally:
+                self.client.loop_stop()
+                self.connected.clear()
 
 
 class HomeAssistantMqttWorker:
@@ -317,7 +322,8 @@ def main() -> int:
                 print(f"Home Assistant MQTT publish failed ({type(error).__name__}).")
             if stopping:
                 break
-            publisher.discovery_requested.wait(float(os.environ.get("WIFI_ANALYZER_HA_MQTT_POLL_SECONDS", "60")))
+            # Bound retries even if a failed discovery publish leaves its request pending.
+            time.sleep(poll_seconds)
     finally:
         publisher.stop()
     print("WiFi Analyzer Pro Home Assistant MQTT worker stopped.")
