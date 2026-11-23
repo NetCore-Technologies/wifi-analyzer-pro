@@ -63,6 +63,8 @@ def load_signing_keys(path_value: str) -> dict[str, str]:
     if not isinstance(path_value, str) or not path_value.strip():
         raise ValueError("WIFI_ANALYZER_WEBHOOK_SIGNING_KEYS_FILE is required")
     path = Path(path_value).expanduser()
+    if path.is_symlink():
+        raise ValueError("webhook signing key file must not be a symbolic link")
     flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
         descriptor = os.open(str(path), flags)
