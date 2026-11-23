@@ -344,10 +344,23 @@ class PluginManager:
                 item["enabled"] = directory.name in enabled
                 discovered.append(item)
             except (PluginManagerError, OSError):
+                was_enabled = directory.name in enabled
+                if was_enabled:
+                    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                    with self._connection() as database:
+                        database.execute(
+                            "UPDATE plugin_states SET enabled=0, updated_at=? WHERE plugin_id=?",
+                            (now, directory.name),
+                        )
+                    enabled.discard(directory.name)
+                    loaded = self._loaded.pop(directory.name, None)
+                    if loaded is not None:
+                        sys.modules.pop(loaded[2].__name__, None)
                 rejected.append({
                     "plugin_id": directory.name[:128],
                     "status": "rejected",
                     "error_code": "plugin_validation_failed",
+                    "previously_enabled": was_enabled,
                 })
         enabled_valid = {
             item["plugin_id"] for item in discovered if item.get("enabled") is True
