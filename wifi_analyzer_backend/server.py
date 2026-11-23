@@ -1189,11 +1189,21 @@ class Handler(BaseHTTPRequestHandler):
                 print("[TELEMETRY ERROR] Could not persist scan rollup")
         if not DEMO_MODE and not (OS == "Linux" and not interface) and networks:
             try:
-                ALERT_RULES.evaluate(
+                alert_result = ALERT_RULES.evaluate(
                     LOCAL_SITE_ID,
                     scan_observations(networks),
                     observed_at=datetime.fromtimestamp(sampled_at, timezone.utc).isoformat(),
                 )
+                if (
+                    alert_result["created_event_ids"]
+                    or alert_result["updated_event_ids"]
+                    or alert_result["resolved_event_ids"]
+                ):
+                    self.publish_live_event("alerts.updated", LOCAL_SITE_ID, {
+                        "created_count": len(alert_result["created_event_ids"]),
+                        "updated_count": len(alert_result["updated_event_ids"]),
+                        "resolved_count": len(alert_result["resolved_event_ids"]),
+                    })
             except Exception:
                 print("[ALERT ENGINE ERROR] Scan metrics could not be evaluated")
         self.publish_live_event("scan.updated", LOCAL_SITE_ID, {
@@ -1220,7 +1230,17 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 print("[TELEMETRY ERROR] Could not persist diagnostic rollup")
             try:
-                ALERT_RULES.evaluate(LOCAL_SITE_ID, diagnostic_observations(diagnostics))
+                alert_result = ALERT_RULES.evaluate(LOCAL_SITE_ID, diagnostic_observations(diagnostics))
+                if (
+                    alert_result["created_event_ids"]
+                    or alert_result["updated_event_ids"]
+                    or alert_result["resolved_event_ids"]
+                ):
+                    self.publish_live_event("alerts.updated", LOCAL_SITE_ID, {
+                        "created_count": len(alert_result["created_event_ids"]),
+                        "updated_count": len(alert_result["updated_event_ids"]),
+                        "resolved_count": len(alert_result["resolved_event_ids"]),
+                    })
             except Exception:
                 print("[ALERT ENGINE ERROR] Diagnostic metrics could not be evaluated")
             self.publish_live_event("diagnostics.updated", LOCAL_SITE_ID, {
@@ -3978,6 +3998,18 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"[AGENT DELIVERY ERROR] {error}")
                 self.send_json({"error": "Agent snapshot delivery failed"}, 500)
                 return
+            assignment = AGENT_HEALTH.get_agent_scope(saved["agent_id"])
+            site_id = assignment.get("site_id") if isinstance(assignment, dict) else None
+            if site_id and not saved.get("replayed"):
+                self.publish_live_event("agent.snapshot.updated", site_id, {
+                    "agent_id": saved["agent_id"],
+                    "adapter_id": saved["adapter_id"],
+                    "captured_at": saved["captured_at"],
+                    "interface_count": saved["interface_count"],
+                    "wireless_radio_count": saved["wireless_radio_count"],
+                    "association_count": saved["association_count"],
+                    "route_count": saved["route_count"],
+                })
             self.send_json({"delivery": saved}, 200 if saved.get("replayed") else 201)
             return
 
@@ -4000,6 +4032,18 @@ class Handler(BaseHTTPRequestHandler):
                 print(f"[AGENT SNAPSHOT ERROR] {error}")
                 self.send_json({"error": "Agent snapshot ingestion failed"}, 500)
                 return
+            assignment = AGENT_HEALTH.get_agent_scope(saved["agent_id"])
+            site_id = assignment.get("site_id") if isinstance(assignment, dict) else None
+            if site_id:
+                self.publish_live_event("agent.snapshot.updated", site_id, {
+                    "agent_id": saved["agent_id"],
+                    "adapter_id": saved["adapter_id"],
+                    "captured_at": saved["captured_at"],
+                    "interface_count": saved["interface_count"],
+                    "wireless_radio_count": saved["wireless_radio_count"],
+                    "association_count": saved["association_count"],
+                    "route_count": saved["route_count"],
+                })
             self.send_json({"snapshot": saved}, 201)
             return
 
