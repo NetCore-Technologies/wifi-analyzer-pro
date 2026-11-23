@@ -179,6 +179,8 @@ The local HTTP service exposes:
 |---|---|
 | `GET /health` | Basic server health (public) |
 | `GET /metrics` | Optional Bearer-token-protected Prometheus exporter; disabled unless configured |
+| `POST /api/live/ticket` | Issue a 30-second, one-use, site-scoped WebSocket ticket; requires `sites.read` |
+| `GET /ws/live` | Authenticated read-only live event stream; ticket supplied in `Sec-WebSocket-Protocol` |
 | `GET /api/auth/status` | First-run account and session status |
 | `POST /api/auth/setup` | Create the first workspace owner and local password during first-run setup |
 | `POST /api/auth/login` | Create a short-lived bearer session |
@@ -226,6 +228,7 @@ The local HTTP service exposes:
 | [Prometheus and Grafana integration](PROMETHEUS.md) | Secure scrape setup, metric definitions and bundled dashboard |
 | [Home Assistant MQTT discovery](wifi_analyzer_backend/HOME_ASSISTANT_MQTT.md) | Retained telemetry sensors, availability, TLS and MQTT broker setup |
 | [Node-RED integration](integrations/node-red/README.md) | Installable flow nodes for scans, features, telemetry, alerts and catalogue discovery |
+| [Authenticated live stream](wifi_analyzer_backend/LIVE_STREAM.md) | One-use WebSocket tickets, site-scoped events, reconnects and resource limits |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
