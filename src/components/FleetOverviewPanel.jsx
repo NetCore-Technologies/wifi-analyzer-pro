@@ -305,7 +305,7 @@ export default function FleetOverviewPanel() {
           <div style={{ display:"grid", gap:7 }}>
             {agentRows.map((agent) => {
               const tone = agent.health_status === "healthy" ? "green"
-                : agent.health_status === "degraded" ? "amber"
+                : ["degraded", "stale"].includes(agent.health_status) ? "amber"
                 : ["unhealthy", "future_timestamp"].includes(agent.health_status) ? "red" : "grey";
               const snapshot = agent.snapshot;
               return (
