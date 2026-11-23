@@ -1218,8 +1218,9 @@ class Handler(BaseHTTPRequestHandler):
                 or request_host.hostname is None
             ):
                 return False
-            origin_port = parsed.port
-            request_port = request_host.port
+            default_port = 80 if parsed.scheme == "http" else 443
+            origin_port = parsed.port or default_port
+            request_port = request_host.port or default_port
         except ValueError:
             return False
         return (
