@@ -16,6 +16,9 @@ services:
       WIFI_ANALYZER_PROMETHEUS_TOKEN: ${WIFI_ANALYZER_PROMETHEUS_TOKEN:-}
       HOME: /home/wifi-analyzer
       XDG_STATE_HOME: /home/wifi-analyzer/.local/state
+      WIFI_ANALYZER_PLUGIN_DIR: /home/wifi-analyzer/.local/state/wifi-analyzer-pro/plugins
+      WIFI_ANALYZER_PLUGIN_STATE_DB: /home/wifi-analyzer/.local/state/wifi-analyzer-pro/plugin-registry.sqlite3
+      WIFI_ANALYZER_PLUGIN_TRUST_KEYS_FILE: /run/secrets/plugin-trust-keys
       WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS: ${WIFI_ANALYZER_WEBHOOK_DELIVERY_RETENTION_DAYS:-90}
       WIFI_ANALYZER_PUBLIC_URL: ${WIFI_ANALYZER_PUBLIC_URL:-}
       WIFI_ANALYZER_STRIPE_SECRET_KEY: ${WIFI_ANALYZER_STRIPE_SECRET_KEY:-}
@@ -33,6 +36,9 @@ services:
     volumes:
       - config:/home/wifi-analyzer/.config
       - state:/home/wifi-analyzer/.local/state
+    secrets:
+      - source: plugin_trust_keys
+        target: plugin-trust-keys
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
@@ -173,6 +179,8 @@ services:
 secrets:
   webhook_signing_keys:
     file: ${WIFI_ANALYZER_WEBHOOK_SIGNING_KEYS_FILE:-/dev/null}
+  plugin_trust_keys:
+    file: ${WIFI_ANALYZER_PLUGIN_TRUST_KEYS_FILE:-/dev/null}
 
 volumes:
   config:
