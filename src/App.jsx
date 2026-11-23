@@ -13,6 +13,7 @@ import {
   Moon, Sun, Menu, X, Terminal, Package, Antenna, FileSearch, CreditCard
 } from "lucide-react";
 import { apiFetch } from "./lib/api.js";
+import { createLiveStream } from "./lib/liveStream.js";
 import { getScanSource } from "./lib/observationProvenance.js";
 import FeatureWorkbench from "./components/FeatureWorkbench.jsx";
 import RouterAgentConsole from "./components/RouterAgentConsole.jsx";
@@ -1021,6 +1022,7 @@ export default function App() {
   const [checking,setChecking]=useState(true);
   const [liveError,setLiveError]=useState("");
   const [lastUpdated,setLastUpdated]=useState(null);
+  const [liveStreamStatus,setLiveStreamStatus]=useState("idle");
 
   useEffect(()=>{
     const handleKeyboardShortcuts=event=>{
@@ -1425,6 +1427,20 @@ export default function App() {
                   background:liveMode?C.green:liveError?C.red:C.purple,
                   animation:liveMode?"pulse 1.4s ease-in-out infinite":"none",display:"inline-block"}}/>
                 {liveMode?"LIVE":liveError?"OFFLINE":"DEMO"}
+              </div>
+            )}
+            {liveMode&&(
+              <div className="wa-live-stream-status" role="status" aria-live="polite"
+                title="Authenticated, site-scoped live event stream"
+                style={{display:"flex",alignItems:"center",gap:5,fontSize:9,fontWeight:700,
+                  padding:"3px 7px",borderRadius:5,letterSpacing:0.5,
+                  background:liveStreamStatus==="connected"?"rgba(6,214,240,0.10)":"rgba(168,85,247,0.10)",
+                  border:`1px solid ${liveStreamStatus==="connected"?C.cyan+"44":C.purple+"44"}`,
+                  color:liveStreamStatus==="connected"?C.cyan:C.purple}}>
+                <span style={{width:5,height:5,borderRadius:"50%",
+                  background:liveStreamStatus==="connected"?C.cyan:C.purple,
+                  display:"inline-block"}}/>
+                STREAM {liveStreamStatus.toUpperCase()}
               </div>
             )}
             <button className="wa-scan-button" onClick={scan} disabled={scanning}
