@@ -232,15 +232,29 @@ def _modules():
             loaded[feature["slug"]] = feature
     return loaded
 
+def _external_manager():
+    if __package__ and "." in __package__:
+        from ..plugin_manager import PLUGIN_MANAGER
+    else:
+        from plugin_manager import PLUGIN_MANAGER
+    return PLUGIN_MANAGER
+
+
 def catalog():
-    return [{k: v for k, v in feature.items() if k != "run"} for feature in sorted(_modules().values(), key=lambda f: f["id"])]
+    built_in = [
+        {k: v for k, v in feature.items() if k != "run"}
+        for feature in _modules().values()
+    ]
+    return sorted(built_in + _external_manager().catalog(), key=lambda f: f["id"])
+
 
 def run(slug: str, payload: dict | None = None):
     feature = _modules().get(slug)
     if feature is None:
-        raise KeyError(f"Unknown feature: {slug}")
+        return _external_manager().run(slug, payload or {})
     result = feature["run"](payload or {})
     return {"feature": feature["id"], "slug": slug, "result": result}
 
+
 def count():
-    return len(_modules())
+    return len(catalog())
