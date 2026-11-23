@@ -70,6 +70,30 @@ class OriginSecurityTests(unittest.TestCase):
             host="localhost:198",
         ))
 
+    def test_get_and_options_reject_dns_rebinding_origins_before_processing(self):
+        class FakeHandler:
+            headers = {
+                "Origin": "http://attacker.example:199",
+                "Host": "attacker.example:199",
+            }
+            path = "/api/sites"
+
+            def origin_allowed(self):
+                return server.Handler.origin_allowed(self)
+
+            def send_json(self, payload, status=200):
+                self.response = (payload, status)
+
+        get_handler = FakeHandler()
+        server.Handler.do_GET(get_handler)
+        self.assertEqual(get_handler.response[1], 403)
+        self.assertEqual(get_handler.response[0]["error"], "Origin is not allowed")
+
+        options_handler = FakeHandler()
+        server.Handler.do_OPTIONS(options_handler)
+        self.assertEqual(options_handler.response[1], 403)
+        self.assertEqual(options_handler.response[0]["error"], "Origin is not allowed")
+
     def test_invalid_origin_syntax_and_userinfo_are_rejected(self):
         self.assertFalse(self.allowed(
             origin="javascript://localhost",
