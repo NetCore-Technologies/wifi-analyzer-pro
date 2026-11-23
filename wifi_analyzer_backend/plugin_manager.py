@@ -349,6 +349,13 @@ class PluginManager:
                     "status": "rejected",
                     "error_code": "plugin_validation_failed",
                 })
+        enabled_valid = {
+            item["plugin_id"] for item in discovered if item.get("enabled") is True
+        }
+        for plugin_id, loaded in list(self._loaded.items()):
+            if plugin_id not in enabled_valid:
+                self._loaded.pop(plugin_id, None)
+                sys.modules.pop(loaded[2].__name__, None)
         return discovered, rejected
 
     @staticmethod
@@ -369,43 +376,46 @@ class PluginManager:
         }
 
     def list_plugins(self) -> dict:
-        discovered, rejected = self._discover()
-        plugins = [
-            self._public(item, enabled=item["enabled"])
-            for item in discovered
-        ]
-        plugins.extend(rejected)
-        return {
-            "plugin_count": len(discovered),
-            "enabled_count": sum(item["enabled"] for item in discovered),
-            "rejected_count": len(rejected),
-            "plugins": plugins,
-            "execution_model": "trusted_in_process",
-        }
+        with self._lock:
+            discovered, rejected = self._discover()
+            plugins = [
+                self._public(item, enabled=item["enabled"])
+                for item in discovered
+            ]
+            plugins.extend(rejected)
+            return {
+                "plugin_count": len(discovered),
+                "enabled_count": sum(item["enabled"] for item in discovered),
+                "rejected_count": len(rejected),
+                "plugins": plugins,
+                "execution_model": "trusted_in_process",
+            }
 
     def catalog(self) -> list[dict]:
-        discovered, _ = self._discover()
-        return [
-            {
-                "id": "EXT:" + item["plugin_id"],
-                "slug": item["slug"],
-                "name": item["name"],
-                "category": "Third-party",
-                "description": item["description"],
-                "parameters": dict(item["parameters"]),
-                "permissions": list(item["permissions"]),
-                "version": item["version"],
-                "publisher": item["publisher"],
-            }
-            for item in discovered
-            if item["enabled"]
-        ]
+        with self._lock:
+            discovered, _ = self._discover()
+            return [
+                {
+                    "id": "EXT:" + item["plugin_id"],
+                    "slug": item["slug"],
+                    "name": item["name"],
+                    "category": "Third-party",
+                    "description": item["description"],
+                    "parameters": dict(item["parameters"]),
+                    "permissions": list(item["permissions"]),
+                    "version": item["version"],
+                    "publisher": item["publisher"],
+                }
+                for item in discovered
+                if item["enabled"]
+            ]
 
     def get_feature(self, slug: str) -> dict[str, Any] | None:
-        for item in self.catalog():
-            if item["slug"] == slug:
-                return item
-        return None
+        with self._lock:
+            for item in self.catalog():
+                if item["slug"] == slug:
+                    return item
+            return None
 
     def _load(self, item: dict[str, Any]) -> dict[str, Any]:
         module_digest = hashlib.sha256(item["plugin_id"].encode("utf-8")).hexdigest()[:20]
@@ -422,7 +432,22 @@ class PluginManager:
             exec(code, module.__dict__)
             exported = getattr(module, "PLUGIN", None)
             if not isinstance(exported, FeaturePlugin):
-                raise PluginManagerError("plugin.py must export a FeaturePlugin instance named PLUGIN")
+                # Direct server.py startup and package-mode imports can load
+                # the SDK under different module names. Accept the same
+                # immutable SDK contract and normalize it to this host class.
+                required = ("slug", "name", "description", "parameters", "run")
+                if any(not hasattr(exported, attribute) for attribute in required):
+                    raise PluginManagerError("plugin.py must export a FeaturePlugin instance named PLUGIN")
+                try:
+                    exported = FeaturePlugin(
+                        slug=exported.slug,
+                        name=exported.name,
+                        description=exported.description,
+                        parameters=exported.parameters,
+                        run=exported.run,
+                    )
+                except (TypeError, AttributeError):
+                    raise PluginManagerError("plugin entrypoint does not implement the supported SDK contract") from None
             feature = exported.as_feature(item["manifest"])
         except Exception as error:
             sys.modules.pop(module_name, None)
