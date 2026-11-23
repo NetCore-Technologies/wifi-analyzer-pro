@@ -681,7 +681,7 @@ class AuthManager:
             return self._new_session(user["id"])
 
     def _session(self, token: str | None) -> tuple[dict[str, Any] | None, str | None]:
-        if not token or not self._state:
+        if not isinstance(token, str) or not token or len(token) > 256 or not self._state:
             return None, None
         key = hashlib.sha256(token.encode()).hexdigest()
         record = self._sessions.get(key)
@@ -854,7 +854,10 @@ class AuthManager:
                 target.clear()
                 target.update(original)
                 raise
-            if updates.get("enabled") is False or new_salt is not None:
+            if updates.get("enabled") is False or "role" in updates or new_salt is not None:
+                # Force a fresh authentication after an authority change. The
+                # next login receives the new role; old bearer tokens cannot
+                # silently inherit upgraded permissions.
                 for digest, record in list(self._sessions.items()):
                     if isinstance(record, dict) and record.get("user_id") == target["id"]:
                         self._sessions.pop(digest, None)
@@ -873,7 +876,7 @@ class AuthManager:
 
     def logout(self, token: str | None) -> bool:
         with self._lock:
-            if not token:
+            if not isinstance(token, str) or not token or len(token) > 256:
                 return False
             key = hashlib.sha256(token.encode()).hexdigest()
             return self._sessions.pop(key, None) is not None
