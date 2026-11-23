@@ -157,7 +157,7 @@ class HomeAssistantMqttTests(unittest.TestCase):
         stale = dict(self.rollup, minute_utc=(self.now - timedelta(minutes=10)).isoformat())
         stale_snapshot = build_home_assistant_snapshot([stale], now=self.now)
         self.assertFalse(stale_snapshot["telemetry_fresh"])
-        self.assertIsNone(stale_snapshot["average_rssi_dbm"] if False else None)
+        self.assertEqual(stale_snapshot["average_rssi_dbm"], -54.5)
 
     def test_discovery_messages_have_unique_entities_retained_topics_and_availability(self):
         messages = build_discovery_messages("office_gateway")
