@@ -1526,6 +1526,9 @@ class Handler(BaseHTTPRequestHandler):
         return payload
 
     def do_OPTIONS(self):
+        if not self.origin_allowed():
+            self.send_json({"error": "Origin is not allowed"}, 403)
+            return
         origin = self.headers.get("Origin")
         self.send_response(204)
         if origin in CORS_ORIGINS:
@@ -1538,6 +1541,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if not self.origin_allowed():
+            self.send_json({"error": "Origin is not allowed"}, 403)
+            return
         request_url = urlparse(self.path)
         path = request_url.path
         if path == "/ws/live":
