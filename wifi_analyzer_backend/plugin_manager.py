@@ -24,15 +24,26 @@ from typing import Any
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from .plugin_sdk import (
-    FeaturePlugin,
-    PluginValidationError,
-    manifest_signing_payload,
-    source_sha256,
-    validate_manifest_shape,
-    validate_plugin_payload,
-    validate_plugin_result,
-)
+if __package__:
+    from .plugin_sdk import (
+        FeaturePlugin,
+        PluginValidationError,
+        manifest_signing_payload,
+        source_sha256,
+        validate_manifest_shape,
+        validate_plugin_payload,
+        validate_plugin_result,
+    )
+else:  # Direct server.py execution from the backend directory.
+    from plugin_sdk import (
+        FeaturePlugin,
+        PluginValidationError,
+        manifest_signing_payload,
+        source_sha256,
+        validate_manifest_shape,
+        validate_plugin_payload,
+        validate_plugin_result,
+    )
 
 MAX_MANIFEST_BYTES = 16 * 1024
 MAX_TRUST_FILE_BYTES = 16 * 1024
