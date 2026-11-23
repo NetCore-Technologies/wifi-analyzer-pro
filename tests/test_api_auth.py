@@ -33,6 +33,9 @@ from wifi_analyzer_backend.rf_survey_store import RfSurveyHistoryStore
 from wifi_analyzer_backend.alert_rule_store import AlertRuleStore
 from wifi_analyzer_backend.regulatory_dataset_store import RegulatoryDatasetStore
 from wifi_analyzer_backend.rf_change_approval_store import RfChangeApprovalStore
+from wifi_analyzer_backend.plugin_manager import PluginManager
+from wifi_analyzer_backend.plugin_sdk import source_sha256, sign_manifest
+import wifi_analyzer_backend.plugin_manager as plugin_manager_module
 from wifi_analyzer_backend.feature_plugins import run as run_feature_tool
 from wifi_analyzer_backend.billing import PLAN_CATALOG
 from cryptography.hazmat.primitives import serialization
@@ -4332,6 +4335,126 @@ class AuthenticatedApiTests(unittest.TestCase):
             self.assertEqual(struct.unpack("!H", close_payload[:2])[0], 1008)
         finally:
             connection.close()
+
+    def test_signed_plugin_lifecycle_is_admin_only_and_feature_execution_is_audited(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "signed plugin owner secure password",
+        })
+        owner_token = setup["token"]
+
+        private_key = Ed25519PrivateKey.generate()
+        public_key = private_key.public_key().public_bytes(
+            serialization.Encoding.Raw,
+            serialization.PublicFormat.Raw,
+        )
+        plugin_directory = Path(self.temp.name) / "plugins"
+        plugin_directory.mkdir(mode=0o700)
+        package_directory = plugin_directory / "acme.channel_quality"
+        package_directory.mkdir(mode=0o700)
+        source = b"""from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+
+def run(payload):
+    networks = payload.get("networks", [])
+    return {"network_count": len(networks), "result": "signed-plugin"}
+
+PLUGIN = FeaturePlugin(
+    slug="ext_acme_channel_quality",
+    name="Acme channel quality",
+    description="Count the supplied network observations.",
+    parameters={"networks": "network[]"},
+    run=run,
+)
+"""
+        manifest = {
+            "schema_version": 1,
+            "plugin_id": "acme.channel_quality",
+            "slug": "ext_acme_channel_quality",
+            "name": "Acme channel quality",
+            "version": "1.0.0",
+            "api_version": "1.0",
+            "publisher": "acme",
+            "key_id": "acme-release",
+            "entrypoint": "plugin.py",
+            "source_sha256": source_sha256(source),
+            "description": "Count the supplied network observations.",
+            "parameters": {"networks": "network[]"},
+            "permissions": ["diagnostics.read"],
+        }
+        manifest = sign_manifest(manifest, private_key)
+        (package_directory / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, sort_keys=True),
+            encoding="utf-8",
+        )
+        (package_directory / "plugin.py").write_bytes(source)
+        os.chmod(package_directory, 0o700)
+        os.chmod(package_directory / "manifest.json", 0o600)
+        os.chmod(package_directory / "plugin.py", 0o600)
+
+        manager = PluginManager(
+            plugin_directory=plugin_directory,
+            state_database=Path(self.temp.name) / "plugin-state.sqlite3",
+            trusted_keys={"acme-release": public_key},
+        )
+        with patch.object(server, "PLUGIN_MANAGER", manager), \
+             patch.object(plugin_manager_module, "PLUGIN_MANAGER", manager):
+            status, listing = self.request("GET", "/api/plugins", token=owner_token)
+            self.assertEqual(status, 200, listing)
+            self.assertEqual(listing["plugin_count"], 1)
+            self.assertEqual(listing["enabled_count"], 0)
+
+            status, enabled = self.request(
+                "POST", "/api/plugins/acme.channel_quality/enable", {}, token=owner_token,
+            )
+            self.assertEqual(status, 200, enabled)
+            self.assertTrue(enabled["plugin"]["enabled"])
+
+            status, catalogue = self.request("GET", "/api/features", token=owner_token)
+            self.assertEqual(status, 200, catalogue)
+            self.assertEqual(catalogue["count"], 209)
+            self.assertIn(
+                "ext_acme_channel_quality",
+                [feature["slug"] for feature in catalogue["features"]],
+            )
+
+            status, result = self.request(
+                "POST", "/api/features/ext_acme_channel_quality",
+                {"networks": [{"rssi": -50}, {"rssi": -70}]},
+                token=owner_token,
+            )
+            self.assertEqual(status, 200, result)
+            self.assertEqual(result["feature"], "EXT:acme.channel_quality")
+            self.assertEqual(result["result"], {
+                "network_count": 2,
+                "result": "signed-plugin",
+            })
+
+            status, disabled = self.request(
+                "POST", "/api/plugins/acme.channel_quality/disable", {}, token=owner_token,
+            )
+            self.assertEqual(status, 200, disabled)
+            self.assertFalse(disabled["plugin"]["enabled"])
+            status, denied_feature = self.request(
+                "POST", "/api/features/ext_acme_channel_quality",
+                {"networks": []}, token=owner_token,
+            )
+            self.assertEqual(status, 404, denied_feature)
+
+            server.AUTH.create_user(
+                owner_token,
+                "plugin.viewer",
+                "plugin viewer secure password",
+                "viewer",
+                all_sites=True,
+            )
+            status, login = self.request("POST", "/api/auth/login", {
+                "username": "plugin.viewer",
+                "password": "plugin viewer secure password",
+            })
+            self.assertEqual(status, 200, login)
+            status, denied_admin = self.request(
+                "POST", "/api/plugins/acme.channel_quality/enable", {}, token=login["token"],
+            )
+            self.assertEqual(status, 403, denied_admin)
 
 if __name__ == "__main__":
     unittest.main()
