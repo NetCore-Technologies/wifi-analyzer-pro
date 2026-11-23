@@ -29,7 +29,7 @@ PLUGIN_NAME = "Acme channel quality"
 
 
 def sample_source() -> bytes:
-    return String = b"""from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+    return b"""from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
 
 def run(payload):
     networks = payload.get("networks", [])
