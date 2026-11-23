@@ -3,6 +3,7 @@ import hashlib
 import copy
 import json
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1430,7 +1431,23 @@ PAYLOADS["rf_change_approval_packet"] = {
 }
 
 
+class _EmptyExternalPluginManager:
+    def catalog(self):
+        return []
+
+    def run(self, slug, payload=None):
+        raise KeyError(f"Unknown external feature: {slug}")
+
+
 class FeatureCatalogTests(unittest.TestCase):
+    def setUp(self):
+        self.external_plugins = patch(
+            "wifi_analyzer_backend.plugin_manager.PLUGIN_MANAGER",
+            _EmptyExternalPluginManager(),
+        )
+        self.external_plugins.start()
+        self.addCleanup(self.external_plugins.stop)
+
     def test_registered_feature_ids_are_unique_and_catalogued(self):
         entries = catalog()
         self.assertEqual(len(FEATURE_MODULES), 208)
