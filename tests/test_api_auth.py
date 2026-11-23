@@ -4352,7 +4352,10 @@ class AuthenticatedApiTests(unittest.TestCase):
         plugin_directory.mkdir(mode=0o700)
         package_directory = plugin_directory / "acme.channel_quality"
         package_directory.mkdir(mode=0o700)
-        source = b"""from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+        source = b"""try:
+    from wifi_analyzer_backend.plugin_sdk import FeaturePlugin
+except ModuleNotFoundError:
+    from plugin_sdk import FeaturePlugin
 
 def run(payload):
     networks = payload.get("networks", [])
