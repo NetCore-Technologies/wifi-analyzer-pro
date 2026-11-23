@@ -172,14 +172,12 @@ export default function FleetOverviewPanel() {
       const age = row ? ageSeconds(row.minute_utc, now) : null;
       const fresh = age !== null && age <= MAX_AGE_SECONDS;
       const siteAgents = agentRows.filter((agent) => agent.site_id === siteId);
-      const activeAgents = siteAgents.filter((agent) => ["healthy", "degraded", "unhealthy"].includes(agent.health_status));
       return {
         siteId,
         row,
         age,
         fresh,
         siteAgents,
-        activeAgents,
       };
     });
   }, [sites, telemetryBySite, agentRows, now]);
@@ -274,7 +272,7 @@ export default function FleetOverviewPanel() {
                 </tr>
               </thead>
               <tbody>
-                {siteStats.map(({ siteId, row, age, fresh, activeAgents: siteAgentList }) => (
+                {siteStats.map(({ siteId, row, age, fresh, siteAgents: siteAgentList }) => (
                   <tr key={siteId}>
                     <td style={{ padding:"10px 9px", borderBottom:"1px solid #1b2940", color:"#e2e8f0", fontSize:11, fontWeight:700 }}>{siteId}</td>
                     <td style={{ padding:"10px 9px", borderBottom:"1px solid #1b2940" }}>
