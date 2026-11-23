@@ -67,9 +67,15 @@ an administrator-controlled cross-origin exception.
 
 For LAN or reverse-proxy deployments, add each exact browser-facing hostname
 or IP to the Host allowlist, keep the API behind a firewall and VPN/authenticated
-TLS proxy, and configure only the specific portal origins required. Wildcard
-Host or CORS entries are not supported. Reverse proxies should preserve the
-external Host header; forwarded-host headers are not trusted by the application.
+TLS proxy, and configure only the specific portal origins required. The Vite
+development UI on port 5173 and API on port 199 are different origins; add the
+full UI origin (scheme, hostname and port) to `WIFI_ANALYZER_CORS_ORIGINS` as
+well as the hostname to `WIFI_ANALYZER_ALLOWED_HOSTS`. Compose forwards both
+settings; the systemd unit accepts overrides in its root-owned
+`/etc/wifi-analyzer-pro/server.env`. CORS entries must be exact HTTP(S) origins
+without paths, credentials, query strings or wildcards. Reverse proxies should
+preserve the external Host header; forwarded-host headers are not trusted by
+the application.
 
 ## Authenticated live-stream transport
 
