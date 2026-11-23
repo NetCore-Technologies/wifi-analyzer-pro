@@ -21,13 +21,20 @@ address bar to the protected `.env` file, for example:
 
     WIFI_ANALYZER_BIND_ADDRESS=0.0.0.0
     WIFI_ANALYZER_ALLOWED_HOSTS=localhost,127.0.0.1,::1,analyzer.lan,192.168.1.20
+    WIFI_ANALYZER_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://analyzer.lan:5173,http://192.168.1.20:5173
+
+The API's Host allowlist and the browser's CORS-origin allowlist are separate
+controls. The Vite development UI at port 5173 is a different origin from the
+API at port 199, so add its exact full origin (including scheme and port) to
+`WIFI_ANALYZER_CORS_ORIGINS`. For a production portal, use the exact HTTPS
+origin such as `https://analyzer.example.com`. Origins must not include paths,
+wildcards, credentials or query strings. Compose passes both settings to the
+API; the systemd unit accepts overrides in its root-owned
+`/etc/wifi-analyzer-pro/server.env` file.
 
 Do not use wildcards. Keep the API behind a host firewall and authenticated
 TLS reverse proxy/VPN. The reverse proxy should preserve the external Host
-header and forward an explicit configured Origin only when required. For a
-team portal on a separate origin, configure the exact full origin in
-`WIFI_ANALYZER_CORS_ORIGINS`; do not use a wildcard or reflect arbitrary
-origins. The Host allowlist and CORS origin allowlist are separate controls.
+header; forwarded-host headers are not trusted by the application.
 
 Enable the durable multi-subscription dispatcher when webhook delivery is required:
 
