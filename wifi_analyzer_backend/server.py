@@ -6,7 +6,7 @@ Run:  sudo python3 server.py
 Then open:  http://<pi-ip>:199
 """
 
-import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib, hmac, ipaddress, socket
+import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib, hmac, ipaddress, socket, base64, select, struct
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
 from datetime import datetime, timezone, timedelta
@@ -41,6 +41,7 @@ if __package__:
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .telemetry_store import WiFiTelemetryStore
+    from .live_stream import LIVE_STREAMS, LiveStreamCapacityError
     from .prometheus_exporter import render_prometheus_metrics
     from .trusted_ap_store import TrustedAccessPointStore
     from .rf_survey_store import RfSurveyHistoryStore
@@ -86,6 +87,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from telemetry_store import WiFiTelemetryStore
+    from live_stream import LIVE_STREAMS, LiveStreamCapacityError
     from prometheus_exporter import render_prometheus_metrics
     from trusted_ap_store import TrustedAccessPointStore
     from rf_survey_store import RfSurveyHistoryStore
@@ -976,6 +978,171 @@ class Handler(BaseHTTPRequestHandler):
             return
         self.send_text(metrics)
 
+    def send_websocket_frame(self, opcode, payload=b""):
+        if isinstance(payload, str):
+            payload = payload.encode("utf-8")
+        if not isinstance(payload, bytes) or len(payload) > 16 * 1024:
+            raise ValueError("WebSocket frame is too large")
+        first = bytes((0x80 | (opcode & 0x0f),))
+        length = len(payload)
+        if length < 126:
+            header = first + bytes((length,))
+        elif length <= 0xFFFF:
+            header = first + bytes((126,)) + struct.pack("!H", length)
+        else:
+            header = first + bytes((127,)) + struct.pack("!Q", length)
+        self.connection.sendall(header + payload)
+
+    def read_websocket_control_frame(self):
+        def read_exact(size):
+            chunks = []
+            remaining = size
+            while remaining:
+                part = self.connection.recv(remaining)
+                if not part:
+                    raise ConnectionError("WebSocket peer disconnected")
+                chunks.append(part)
+                remaining -= len(part)
+            return b"".join(chunks)
+
+        header = read_exact(2)
+        first, second = header
+        final = bool(first & 0x80)
+        opcode = first & 0x0f
+        masked = bool(second & 0x80)
+        length = second & 0x7f
+        if not final or first & 0x70 or not masked or opcode not in {0x8, 0x9, 0xA}:
+            raise ValueError("Only masked, final WebSocket control frames are accepted")
+        if length == 126:
+            length = struct.unpack("!H", read_exact(2))[0]
+        elif length == 127:
+            length = struct.unpack("!Q", read_exact(8))[0]
+        if length > 125:
+            raise ValueError("WebSocket control frame exceeds 125 bytes")
+        mask = read_exact(4)
+        payload = read_exact(length)
+        return opcode, bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+
+    def websocket_close(self, code=1000):
+        try:
+            self.send_websocket_frame(0x8, struct.pack("!H", code))
+        except (OSError, ValueError):
+            pass
+
+    def handle_live_websocket(self, request_url):
+        if not self.origin_allowed():
+            self.send_json({"error": "Origin is not allowed"}, 403)
+            return
+        if self.headers.get("Upgrade", "").lower() != "websocket":
+            self.send_json({"error": "WebSocket upgrade required"}, 426, headers={"Upgrade": "websocket"})
+            return
+        connection_tokens = {
+            item.strip().lower()
+            for item in self.headers.get("Connection", "").split(",")
+            if item.strip()
+        }
+        if "upgrade" not in connection_tokens or self.headers.get("Sec-WebSocket-Version") != "13":
+            self.send_json({"error": "Unsupported WebSocket handshake"}, 400)
+            return
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        try:
+            decoded_key = base64.b64decode(key, validate=True)
+        except (ValueError, TypeError):
+            decoded_key = b""
+        if len(decoded_key) != 16:
+            self.send_json({"error": "Invalid WebSocket key"}, 400)
+            return
+        parameters = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=2)
+        ticket_values = parameters.get("ticket", [])
+        if len(ticket_values) != 1 or not ticket_values[0]:
+            self.send_json({"error": "A one-use WebSocket ticket is required"}, 401)
+            return
+        ticket = LIVE_STREAMS.consume_ticket(ticket_values[0])
+        if ticket is None:
+            self.send_json({"error": "WebSocket ticket is invalid, expired or already used"}, 401)
+            return
+        identity = AUTH.identity(ticket.session_token)
+        scope = AUTH.site_access(ticket.session_token)
+        if (
+            identity is None
+            or identity.get("id") != ticket.user_id
+            or scope is None
+            or (not scope["all_sites"] and not ticket.site_ids.issubset(set(scope["site_ids"])))
+        ):
+            self.send_json({"error": "The authenticated session or site scope has changed"}, 401)
+            return
+        try:
+            client_id, client = LIVE_STREAMS.register(ticket)
+        except LiveStreamCapacityError as error:
+            self.send_json({"error": str(error)}, 503)
+            return
+
+        accept_value = base64.b64encode(
+            hashlib.sha1(
+                (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
+            ).digest()
+        ).decode("ascii")
+        self.send_response(101, "Switching Protocols")
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept_value)
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.flush()
+        self.close_connection = True
+
+        self.connection.settimeout(2.0)
+        last_ping = time.monotonic()
+        awaiting_pong_since = None
+        try:
+            while not client.closed.is_set():
+                if not AUTH.validate(client.session_token):
+                    self.websocket_close(1008)
+                    break
+                try:
+                    event = client.events.get(timeout=0.5)
+                except __import__("queue").Empty:
+                    event = None
+                if event is not None:
+                    if not AUTH.validate(client.session_token):
+                        self.websocket_close(1008)
+                        break
+                    self.send_websocket_frame(0x1, event)
+                now = time.monotonic()
+                if awaiting_pong_since is not None and now - awaiting_pong_since > 40:
+                    self.websocket_close(1001)
+                    break
+                if awaiting_pong_since is None and now - last_ping >= 20:
+                    self.send_websocket_frame(0x9, b"wfa")
+                    awaiting_pong_since = now
+                    last_ping = now
+                ready, _, _ = select.select([self.connection], [], [], 0)
+                if ready:
+                    opcode, payload = self.read_websocket_control_frame()
+                    if opcode == 0x8:
+                        self.websocket_close()
+                        break
+                    if opcode == 0x9:
+                        self.send_websocket_frame(0xA, payload)
+                    elif opcode == 0xA and payload == b"wfa":
+                        awaiting_pong_since = None
+        except (OSError, ConnectionError, TimeoutError):
+            pass
+        except ValueError:
+            self.websocket_close(1002)
+        finally:
+            LIVE_STREAMS.unregister(client_id)
+            try:
+                self.connection.settimeout(None)
+            except OSError:
+                pass
+
+    def publish_live_event(self, event_type, site_id, data):
+        try:
+            LIVE_STREAMS.publish(event_type, site_id, data)
+        except (TypeError, ValueError):
+            print(f"[LIVE STREAM ERROR] Could not publish {event_type}")
+
     def bearer_token(self):
         value = self.headers.get("Authorization", "")
         scheme, separator, token = value.partition(" ")
@@ -1029,6 +1196,13 @@ class Handler(BaseHTTPRequestHandler):
                 )
             except Exception:
                 print("[ALERT ENGINE ERROR] Scan metrics could not be evaluated")
+        self.publish_live_event("scan.updated", LOCAL_SITE_ID, {
+            "timestamp": sampled_at,
+            "network_count": len(networks) if networks else None,
+            "interface": interface,
+            "source": source,
+            "telemetry_status": telemetry_status,
+        })
         return {
             "networks": networks,
             "congestion": channel_congestion(networks),
@@ -1049,6 +1223,14 @@ class Handler(BaseHTTPRequestHandler):
                 ALERT_RULES.evaluate(LOCAL_SITE_ID, diagnostic_observations(diagnostics))
             except Exception:
                 print("[ALERT ENGINE ERROR] Diagnostic metrics could not be evaluated")
+            self.publish_live_event("diagnostics.updated", LOCAL_SITE_ID, {
+                "gateway_probe_status": diagnostics.get("gateway_probe_status"),
+                "dns_resolution_status": diagnostics.get("dns_resolution_status"),
+                "latency_ms": diagnostics.get("latency_ms"),
+                "jitter_ms": diagnostics.get("jitter_ms"),
+                "packet_loss_pct": diagnostics.get("packet_loss_pct"),
+                "dns_resolution_ms": diagnostics.get("dns_resolution_ms"),
+            })
         return diagnostics
 
     def speedtest_response(self):
@@ -1268,6 +1450,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         request_url = urlparse(self.path)
         path = request_url.path
+        if path == "/ws/live":
+            self.handle_live_websocket(request_url)
+            return
         if path == "/metrics":
             self.handle_prometheus_metrics()
             return
