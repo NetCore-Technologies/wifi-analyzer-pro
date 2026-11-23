@@ -1,0 +1,44 @@
+[Unit]
+Description=WiFi Analyzer Pro Home Assistant MQTT discovery publisher
+Documentation=https://github.com/NetCore-Technologies/wifi-analyzer-pro/blob/main/wifi_analyzer_backend/HOME_ASSISTANT_MQTT.md
+After=network-online.target wifi-analyzer-pro.service
+Wants=network-online.target
+Requires=wifi-analyzer-pro.service
+
+[Service]
+Type=simple
+User=wifi-analyzer
+Group=wifi-analyzer
+WorkingDirectory=/opt/wifi-analyzer-pro/current
+Environment=HOME=/var/lib/wifi-analyzer-pro
+Environment=XDG_STATE_HOME=/var/lib
+Environment=WIFI_ANALYZER_LOCAL_SITE_ID=local
+Environment=WIFI_ANALYZER_HA_MQTT_TLS=true
+Environment=WIFI_ANALYZER_HA_MQTT_PORT=8883
+Environment=WIFI_ANALYZER_HA_MQTT_POLL_SECONDS=60
+EnvironmentFile=-/etc/wifi-analyzer-pro/homeassistant-mqtt.env
+StateDirectory=wifi-analyzer-pro
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/opt/wifi-analyzer-pro/venv/bin/python -m wifi_analyzer_backend.homeassistant_mqtt_worker
+Restart=on-failure
+RestartSec=10s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+ReadWritePaths=/var/lib/wifi-analyzer-pro
+
+[Install]
+WantedBy=multi-user.target
