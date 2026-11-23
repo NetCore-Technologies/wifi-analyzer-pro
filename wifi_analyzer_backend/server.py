@@ -1126,6 +1126,8 @@ class Handler(BaseHTTPRequestHandler):
                     event = client.events.get(timeout=0.5)
                 except __import__("queue").Empty:
                     event = None
+                if client.closed.is_set():
+                    break
                 if event is not None:
                     current_scope = AUTH.site_access(client.session_token)
                     if (
