@@ -1,10 +1,13 @@
 """HTTP integration tests for the local account gate and feature API."""
 from __future__ import annotations
 
+import base64
 import concurrent.futures
 import hashlib
 import hmac
 import json
+import socket
+import struct
 import time
 import tempfile
 import threading
@@ -16,6 +19,7 @@ from unittest.mock import Mock, patch
 
 from wifi_analyzer_backend import server
 from wifi_analyzer_backend.auth import AuthManager
+from wifi_analyzer_backend.live_stream import LiveStreamHub
 from wifi_analyzer_backend.audit_checkpoint import verify_signed_checkpoint
 from wifi_analyzer_backend.rate_limit import TokenBucketRateLimiter, DEFAULT_POLICIES
 from wifi_analyzer_backend.router_adapters.health_store import RouterAgentHealthStore
@@ -39,6 +43,8 @@ class AuthenticatedApiTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.previous_auth = server.AUTH
+        self.previous_live_streams = server.LIVE_STREAMS
+        server.LIVE_STREAMS = LiveStreamHub()
         self.previous_history = server.HISTORY
         self.previous_telemetry = server.TELEMETRY
         self.previous_trusted_aps = server.TRUSTED_APS
@@ -121,6 +127,7 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.httpd.server_close()
         self.thread.join(timeout=2)
         server.AUTH = self.previous_auth
+        server.LIVE_STREAMS = self.previous_live_streams
         server.HISTORY = self.previous_history
         server.TELEMETRY = self.previous_telemetry
         server.TRUSTED_APS = self.previous_trusted_aps
@@ -4221,6 +4228,101 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertTrue(removed["deleted"])
         self.assertEqual(server.ALERT_RULES.list_events("local")[0]["status"], "resolved")
         self.assertTrue(server.AUDIT.verify_chain()["valid"])
+
+    def test_live_websocket_uses_one_time_site_scoped_ticket_and_closes_on_logout(self):
+        _, setup = self.request("POST", "/api/auth/setup", {
+            "password": "live stream owner secure password",
+        })
+        token = setup["token"]
+        status, ticket = self.request("POST", "/api/live/ticket", {
+            "site_ids": ["local"],
+        }, token=token)
+        self.assertEqual(status, 201, ticket)
+        self.assertEqual(ticket["site_ids"], ["local"])
+        self.assertEqual(ticket["expires_in_seconds"], 30)
+        self.assertNotIn(token, ticket["websocket_url"])
+        self.assertEqual(server.LIVE_STREAMS.ticket_count, 1)
+
+        connection = socket.create_connection(("127.0.0.1", self.port), timeout=4)
+        connection.settimeout(4)
+        key = base64.b64encode(b"0123456789abcdef").decode("ascii")
+        request = (
+            f"GET {ticket['websocket_url']} HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{self.port}\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Version: 13\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Origin: http://127.0.0.1:{self.port}\r\n\r\n"
+        )
+        connection.sendall(request.encode("ascii"))
+
+        def read_headers(sock):
+            data = bytearray()
+            while b"\r\n\r\n" not in data and len(data) < 16384:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                data.extend(chunk)
+            return bytes(data)
+
+        handshake = read_headers(connection)
+        self.assertIn(b"101 Switching Protocols", handshake)
+        expected_accept = base64.b64encode(
+            hashlib.sha1(
+                (key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").encode("ascii")
+            ).digest()
+        )
+        self.assertIn(b"Sec-WebSocket-Accept: " + expected_accept, handshake)
+
+        queued = server.LIVE_STREAMS.publish("scan.updated", "local", {
+            "network_count": 9,
+            "source": "live",
+        })
+        self.assertEqual(queued["queued_count"], 1)
+
+        def read_exact(sock, size):
+            result = bytearray()
+            while len(result) < size:
+                chunk = sock.recv(size - len(result))
+                if not chunk:
+                    raise ConnectionError("WebSocket closed before the event arrived")
+                result.extend(chunk)
+            return bytes(result)
+
+        first, second = read_exact(connection, 2)
+        self.assertEqual(first & 0x0f, 0x1)
+        length = second & 0x7f
+        if length == 126:
+            length = struct.unpack("!H", read_exact(connection, 2))[0]
+        elif length == 127:
+            length = struct.unpack("!Q", read_exact(connection, 8))[0]
+        event = json.loads(read_exact(connection, length).decode("utf-8"))
+        self.assertEqual(event["type"], "scan.updated")
+        self.assertEqual(event["site_id"], "local")
+        self.assertEqual(event["data"]["network_count"], 9)
+        self.assertNotIn(token, json.dumps(event))
+
+        status, second_ticket = self.request("POST", "/api/live/ticket", {
+            "site_ids": ["local"],
+        }, token=token)
+        self.assertEqual(status, 201, second_ticket)
+        reused = socket.create_connection(("127.0.0.1", self.port), timeout=4)
+        reused.settimeout(4)
+        reused.sendall(request.replace(ticket["ticket"], second_ticket["ticket"]).encode("ascii"))
+        reused_response = read_headers(reused)
+        self.assertIn(b"401", reused_response)
+        reused.close()
+
+        self.request("POST", "/api/auth/logout", token=token)
+        try:
+            close_header = read_exact(connection, 2)
+            self.assertEqual(close_header[0] & 0x0f, 0x8)
+            close_length = close_header[1] & 0x7f
+            close_payload = read_exact(connection, close_length)
+            self.assertEqual(struct.unpack("!H", close_payload[:2])[0], 1008)
+        finally:
+            connection.close()
 
 if __name__ == "__main__":
     unittest.main()
