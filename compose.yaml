@@ -54,6 +54,49 @@ services:
       start_period: 10s
       retries: 3
 
+  homeassistant-mqtt:
+    image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wifi-analyzer-homeassistant-mqtt
+    profiles:
+      - home-assistant
+    command:
+      - python
+      - -m
+      - wifi_analyzer_backend.homeassistant_mqtt_worker
+    restart: unless-stopped
+    init: true
+    environment:
+      HOME: /home/wifi-analyzer
+      XDG_STATE_HOME: /home/wifi-analyzer/.local/state
+      WIFI_ANALYZER_LOCAL_SITE_ID: ${WIFI_ANALYZER_LOCAL_SITE_ID:-local}
+      WIFI_ANALYZER_HA_MQTT_HOST: ${WIFI_ANALYZER_HA_MQTT_HOST:-}
+      WIFI_ANALYZER_HA_DEVICE_ID: ${WIFI_ANALYZER_HA_DEVICE_ID:-}
+      WIFI_ANALYZER_HA_MQTT_PORT: ${WIFI_ANALYZER_HA_MQTT_PORT:-8883}
+      WIFI_ANALYZER_HA_MQTT_USERNAME: ${WIFI_ANALYZER_HA_MQTT_USERNAME:-}
+      WIFI_ANALYZER_HA_MQTT_PASSWORD_FILE: ${WIFI_ANALYZER_HA_MQTT_PASSWORD_FILE:+/run/secrets/mqtt-password}
+      WIFI_ANALYZER_HA_MQTT_TLS: ${WIFI_ANALYZER_HA_MQTT_TLS:-true}
+      WIFI_ANALYZER_HA_MQTT_DISCOVERY_PREFIX: ${WIFI_ANALYZER_HA_MQTT_DISCOVERY_PREFIX:-homeassistant}
+      WIFI_ANALYZER_HA_MQTT_POLL_SECONDS: ${WIFI_ANALYZER_HA_MQTT_POLL_SECONDS:-60}
+    volumes:
+      - state:/home/wifi-analyzer/.local/state
+      - ${WIFI_ANALYZER_HA_MQTT_PASSWORD_FILE:-/dev/null}:/run/secrets/mqtt-password:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
+
   webhook-dispatcher:
     image: ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local}
     build:
