@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import queue
 import re
 import secrets
@@ -109,7 +110,7 @@ class LiveStreamHub:
             raise ValueError("an authenticated session token is required")
         sites = self._sites(site_ids)
         moment = time.time() if now is None else now
-        if isinstance(moment, bool) or not isinstance(moment, (int, float)):
+        if isinstance(moment, bool) or not isinstance(moment, (int, float)) or not math.isfinite(float(moment)):
             raise ValueError("now must be a finite timestamp")
         with self._lock:
             self._prune_tickets(float(moment))
@@ -204,7 +205,7 @@ class LiveStreamHub:
                 event, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
                 allow_nan=False,
             )
-        except (TypeError, ValueError) as error:
+        except (TypeError, ValueError, RecursionError) as error:
             raise ValueError("event must contain finite JSON-compatible values") from error
         if len(encoded.encode("utf-8")) > MAX_EVENT_BYTES:
             raise ValueError(f"event exceeds the {MAX_EVENT_BYTES}-byte live event limit")
