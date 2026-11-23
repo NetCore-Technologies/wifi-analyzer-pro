@@ -213,9 +213,12 @@ class AlertWebhookBridgeWorker:
         moment = self._now()
         pending = self.alert_store.pending_notifications(limit=limit, now=moment.isoformat())
         if not pending:
-            return {"processed_count": 0, "queued_count": 0, "not_configured_count": 0, "retry_count": 0}
+            return {
+                "processed_count": 0, "queued_count": 0, "not_configured_count": 0,
+                "suppressed_count": 0, "retry_count": 0,
+            }
 
-        queued = skipped = retried = 0
+        queued = skipped = suppressed = retried = 0
         try:
             subscriptions = self.subscription_store.list_subscriptions(include_disabled=False)
         except Exception:
@@ -226,6 +229,11 @@ class AlertWebhookBridgeWorker:
             try:
                 if subscriptions is None:
                     raise AlertWebhookBridgeError("subscription_store_unavailable")
+                event = notification.get("event")
+                if isinstance(event, dict) and event.get("quiet_hours_active") is True:
+                    self.alert_store.mark_notification_processed(notification_id, "suppressed")
+                    suppressed += 1
+                    continue
                 if not subscriptions:
                     self.alert_store.mark_notification_processed(notification_id, "not_configured")
                     skipped += 1
@@ -255,6 +263,7 @@ class AlertWebhookBridgeWorker:
             "processed_count": len(pending),
             "queued_count": queued,
             "not_configured_count": skipped,
+            "suppressed_count": suppressed,
             "retry_count": retried,
         }
 
@@ -292,6 +301,7 @@ def main() -> int:
                     f"{result['processed_count']} transition(s): "
                     f"{result['queued_count']} queued, "
                     f"{result['not_configured_count']} not configured, "
+                    f"{result['suppressed_count']} suppressed by quiet hours, "
                     f"{result['retry_count']} retrying."
                 )
             else:
