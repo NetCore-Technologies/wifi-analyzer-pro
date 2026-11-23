@@ -1127,6 +1127,7 @@ class Handler(BaseHTTPRequestHandler):
                 except __import__("queue").Empty:
                     event = None
                 if client.closed.is_set():
+                    self.websocket_close(1013)
                     break
                 if event is not None:
                     current_scope = AUTH.site_access(client.session_token)
