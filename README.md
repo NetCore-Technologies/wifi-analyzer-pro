@@ -224,6 +224,7 @@ The local HTTP service exposes:
 | [Webhook dispatch worker](wifi_analyzer_backend/WEBHOOK_DISPATCH_WORKER.md) | Durable multi-subscription signed webhook delivery with leases, retries, dead letters and fresh pinned-TLS egress checks |
 | [Deployment and operations](deploy/README.md) | Hardened Compose and systemd deployment, shared state, upgrades, backup and rollback |
 | [Prometheus and Grafana integration](PROMETHEUS.md) | Secure scrape setup, metric definitions and bundled dashboard |
+| [Home Assistant MQTT discovery](wifi_analyzer_backend/HOME_ASSISTANT_MQTT.md) | Retained telemetry sensors, availability, TLS and MQTT broker setup |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
