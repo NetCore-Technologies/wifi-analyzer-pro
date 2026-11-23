@@ -169,8 +169,8 @@ def validate_manifest_shape(value: object) -> dict[str, Any]:
     if (
         not isinstance(permissions, list)
         or len(permissions) > len(PERMISSIONS)
-        or len(permissions) != len(set(permissions))
         or any(not isinstance(item, str) or item not in PERMISSIONS for item in permissions)
+        or len(permissions) != len(set(permissions))
     ):
         raise PluginValidationError("plugin permissions contain an unsupported or duplicate permission")
     signature = value.get("signature")
