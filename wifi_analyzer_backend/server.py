@@ -2219,10 +2219,12 @@ class Handler(BaseHTTPRequestHandler):
             requested_sites = payload.get("site_ids")
             if requested_sites is None:
                 if scope["all_sites"]:
-                    site_ids = self.managed_site_ids()
-                    if LOCAL_SITE_ID not in site_ids:
-                        site_ids.append(LOCAL_SITE_ID)
-                    site_ids = sorted(set(site_ids))[:100]
+                    site_ids = sorted(set(self.managed_site_ids()) | {LOCAL_SITE_ID})
+                    if len(site_ids) > 100:
+                        self.send_json({
+                            "error": "A live stream may subscribe to no more than 100 sites; request an explicit site_ids subset",
+                        }, 400)
+                        return
                 else:
                     site_ids = list(scope["site_ids"])
             else:
@@ -2248,6 +2250,15 @@ class Handler(BaseHTTPRequestHandler):
             if identity is None:
                 self.send_json({"error": "Authentication required"}, 401)
                 return
+            audit = self.audit_event(
+                "live_stream.ticket.requested",
+                target_type="live_stream",
+                target_id=identity["id"],
+                metadata={"site_count": len(site_ids)},
+            )
+            if audit is None:
+                self.send_json({"error": "The security audit ledger is unavailable; no live-stream ticket was issued"}, 503)
+                return
             try:
                 ticket = LIVE_STREAMS.issue_ticket(
                     user_id=identity["id"],
@@ -2260,12 +2271,6 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self.send_json({"error": str(error)}, 400)
                 return
-            self.audit_event(
-                "live_stream.ticket.issued",
-                target_type="live_stream",
-                target_id=identity["id"],
-                metadata={"site_count": len(site_ids), "ticket_ttl_seconds": ticket["expires_in_seconds"]},
-            )
             self.send_json(ticket, 201)
             return
 
