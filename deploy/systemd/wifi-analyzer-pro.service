@@ -12,6 +12,9 @@ WorkingDirectory=/opt/wifi-analyzer-pro/current/wifi_analyzer_backend
 Environment=HOME=/var/lib/wifi-analyzer-pro
 Environment=XDG_STATE_HOME=/var/lib
 Environment=WIFI_ANALYZER_AUTH_FILE=/var/lib/wifi-analyzer-pro/auth.json
+Environment=WIFI_ANALYZER_PLUGIN_DIR=/var/lib/wifi-analyzer-pro/plugins
+Environment=WIFI_ANALYZER_PLUGIN_STATE_DB=/var/lib/wifi-analyzer-pro/plugin-registry.sqlite3
+Environment=WIFI_ANALYZER_PLUGIN_TRUST_KEYS_FILE=/etc/wifi-analyzer-pro/plugin-trust-keys.json
 Environment=WIFI_ANALYZER_HOST=127.0.0.1
 Environment=WIFI_ANALYZER_PORT=199
 EnvironmentFile=-/etc/wifi-analyzer-pro/server.env
