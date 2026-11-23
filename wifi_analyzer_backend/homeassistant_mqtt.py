@@ -66,8 +66,20 @@ def build_home_assistant_snapshot(
     if any(not isinstance(row, dict) for row in rollups):
         raise ValueError("each telemetry rollup must be an object")
     moment = _aware_now(now)
-    rows = sorted(rollups, key=lambda row: row.get("minute_utc", ""))
-    latest = rows[-1] if rows else None
+    dated_rows: list[tuple[datetime, dict[str, Any]]] = []
+    for row in rollups:
+        raw_minute = row.get("minute_utc")
+        if not isinstance(raw_minute, str) or not raw_minute.strip():
+            raise ValueError("each telemetry minute must be a timezone-aware timestamp")
+        try:
+            parsed_minute = datetime.fromisoformat(raw_minute.replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ValueError("each telemetry minute must be a timezone-aware timestamp") from error
+        if parsed_minute.tzinfo is None or parsed_minute.utcoffset() is None:
+            raise ValueError("each telemetry minute must include a timezone offset")
+        dated_rows.append((parsed_minute.astimezone(timezone.utc), row))
+    dated_rows.sort(key=lambda item: item[0])
+    latest_minute, latest = dated_rows[-1] if dated_rows else (None, None)
 
     snapshot: dict[str, Any] = {
         "telemetry_available": latest is not None,
@@ -80,16 +92,7 @@ def build_home_assistant_snapshot(
     if latest is None:
         return snapshot
 
-    minute_raw = latest.get("minute_utc")
-    if not isinstance(minute_raw, str):
-        raise ValueError("latest telemetry minute must be a timezone-aware timestamp")
-    try:
-        minute = datetime.fromisoformat(minute_raw.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ValueError("latest telemetry minute must be a timezone-aware timestamp") from error
-    if minute.tzinfo is None or minute.utcoffset() is None:
-        raise ValueError("latest telemetry minute must include a timezone offset")
-    age = (moment - minute.astimezone(timezone.utc)).total_seconds()
+    age = (moment - latest_minute).total_seconds()
     snapshot["telemetry_age_seconds"] = round(age, 1)
     snapshot["telemetry_fresh"] = 0 <= age <= TELEMETRY_FRESHNESS_SECONDS
 
