@@ -34,6 +34,27 @@ class SecurityAuditStoreTests(unittest.TestCase):
         self.assertEqual(self.store.list_events(before_id=second["id"])[0]["id"],first["id"])
         self.assertEqual(self.store.list_events(outcome="failure")[0]["id"],second["id"])
         with self.assertRaises(ValueError): self.store.list_events(limit=201)
+    def test_ordered_export_cursor_returns_only_new_events_in_source_order(self):
+        first = self.store.record("auth.login.succeeded", actor=OWNER)
+        second = self.store.record("auth.login.failed", actor=OWNER, outcome="failure")
+        third = self.store.record("user.created", actor=OWNER)
+
+        self.assertEqual(
+            [event["id"] for event in self.store.list_events_after(after_id=0, limit=2)],
+            [first["id"], second["id"]],
+        )
+        self.assertEqual(
+            [event["id"] for event in self.store.list_events_after(after_id=second["id"], limit=10)],
+            [third["id"]],
+        )
+        self.assertEqual(self.store.list_events_after(after_id=third["id"]), [])
+        for after_id in (-1, True, "2"):
+            with self.assertRaises(ValueError):
+                self.store.list_events_after(after_id=after_id)
+        for limit in (0, 201, True):
+            with self.assertRaises(ValueError):
+                self.store.list_events_after(limit=limit)
+
     def test_rejects_invalid_action_actor_and_naive_timestamp(self):
         with self.assertRaises(ValueError): self.store.record("Bad Action")
         with self.assertRaises(ValueError): self.store.record("valid.action",actor={"username":"not valid"})
