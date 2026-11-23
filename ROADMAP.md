@@ -58,9 +58,9 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Owner/admin billing console with Free, Pro, Business and Enterprise entitlements. Server-side limits cover users, managed router agents, managed sites, saved webhook subscriptions and UTC-month diagnostic runs; usage is persisted in SQLite and tested against concurrent quota consumption. This is one billed workspace per installation, not pooled multi-tenant SaaS.
 
 ### Remaining v1.1.0 scope
-- 📋 External plugin SDK with a stable manifest, version checks, permissions and lifecycle hooks.
-- 📋 Enable/disable and safe reload for third-party plugins.
-- 📋 Example plugin and developer guide.
+- ✅ External plugin SDK with signed manifests, API-version checks, declared permissions, source integrity and a documented trust boundary.
+- ✅ Owner/admin enable, disable and reload lifecycle with persistent state and audit-first API operations.
+- ✅ Example plugin contract and developer guide with Ed25519 publisher signing and trust-store operations.
 - ✅ Explicit interface selection for local tcpdump/libpcap capture with fixed filter profiles, operator confirmation, duration/packet/snaplen/file-size bounds, stop control and PCAP download into the offline analyzer.
 - ✅ Per-site authorization is enforced across sites, agents, reports and feature inputs. Full tenant isolation (separate tenant identities, storage boundaries, billing and cross-tenant operational controls) remains planned.
 - 📋 Enterprise identity: OIDC/SAML SSO, WebAuthn and SCIM provisioning, external SIEM forwarding and centralised retention; local TOTP authenticator-app MFA is implemented.
@@ -72,6 +72,14 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ---
 
 
+
+### Signed third-party feature plugins delivered
+
+- ✅ A versioned Python plugin SDK defines deterministic feature metadata, bounded JSON input/output, permissions and an Ed25519-signed manifest containing the exact source digest.
+- ✅ A local publisher trust store controls accepted signing keys. The manager rejects invalid signatures, incompatible API versions, source tampering, symlinked/writable package files and oversized packages.
+- ✅ Owner/admin lifecycle endpoints list, enable, disable and reload signed packages. Enabled extensions join the live feature catalogue and run through the existing permission, site-scope and monthly-usage controls.
+- ✅ Package storage and lifecycle state persist outside the source tree; Compose and systemd deployment paths are documented. No package-upload endpoint is exposed.
+- ⚠️ Plugins execute as trusted Python code inside the API process. Signatures prove publisher/integrity but do not sandbox code; untrusted-code isolation remains separate work.
 
 ### Authenticated live streaming delivered
 
