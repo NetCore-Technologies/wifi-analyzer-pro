@@ -4240,7 +4240,9 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 201, ticket)
         self.assertEqual(ticket["site_ids"], ["local"])
         self.assertEqual(ticket["expires_in_seconds"], 30)
-        self.assertNotIn(token, ticket["websocket_url"])
+        self.assertEqual(ticket["websocket_url"], "/ws/live")
+        self.assertTrue(ticket["websocket_protocol"].startswith("wfa-ticket."))
+        self.assertNotIn(token, ticket["websocket_protocol"])
         self.assertEqual(server.LIVE_STREAMS.ticket_count, 1)
 
         connection = socket.create_connection(("127.0.0.1", self.port), timeout=4)
@@ -4253,7 +4255,8 @@ class AuthenticatedApiTests(unittest.TestCase):
             "Connection: Upgrade\r\n"
             "Sec-WebSocket-Version: 13\r\n"
             f"Sec-WebSocket-Key: {key}\r\n"
-            f"Origin: http://127.0.0.1:{self.port}\r\n\r\n"
+            f"Origin: http://127.0.0.1:{self.port}\r\n"
+            f"Sec-WebSocket-Protocol: {ticket['websocket_protocol']}\r\n\r\n"
         )
         connection.sendall(request.encode("ascii"))
 
@@ -4274,6 +4277,10 @@ class AuthenticatedApiTests(unittest.TestCase):
             ).digest()
         )
         self.assertIn(b"Sec-WebSocket-Accept: " + expected_accept, handshake)
+        self.assertIn(
+            b"Sec-WebSocket-Protocol: " + ticket["websocket_protocol"].encode("ascii"),
+            handshake,
+        )
 
         queued = server.LIVE_STREAMS.publish("scan.updated", "local", {
             "network_count": 9,
@@ -4309,7 +4316,9 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(status, 201, second_ticket)
         reused = socket.create_connection(("127.0.0.1", self.port), timeout=4)
         reused.settimeout(4)
-        reused.sendall(request.replace(ticket["ticket"], second_ticket["ticket"]).encode("ascii"))
+        reused.sendall(
+            request.replace(ticket["websocket_protocol"], second_ticket["websocket_protocol"]).encode("ascii")
+        )
         reused_response = read_headers(reused)
         self.assertIn(b"401", reused_response)
         reused.close()
