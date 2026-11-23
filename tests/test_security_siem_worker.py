@@ -151,7 +151,7 @@ class SecuritySiemWorkerTests(unittest.TestCase):
         self.assertEqual(result["delivered_count"], 0)
         self.assertEqual(result["failed_count"], 1)
         self.assertEqual(self.connections, [])
-        self.assertEqual(self.store.list_events(status="retry_wait")[0]["last_error_code"], "egress_policy_blocked")
+        self.assertEqual(self.store.list_events(status="retry_wait")[0]["last_error_code"], "dns_policy_blocked")
 
     def test_redirect_response_is_refused_and_retried(self):
         self.record()
