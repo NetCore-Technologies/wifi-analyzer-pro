@@ -251,7 +251,7 @@ def catalog():
 def run(slug: str, payload: dict | None = None):
     feature = _modules().get(slug)
     if feature is None:
-        return _external_manager().run(slug, payload or {})
+        return _external_manager().run(slug, {} if payload is None else payload)
     result = feature["run"](payload or {})
     return {"feature": feature["id"], "slug": slug, "result": result}
 
