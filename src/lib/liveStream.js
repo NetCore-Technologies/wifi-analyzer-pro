@@ -157,7 +157,7 @@ export function createLiveStream({
         target.pathname !== "/ws/live" ||
         target.search ||
         target.hash ||
-        !/^wfa-ticket\\.[A-Za-z0-9_-]{32,80}$/.test(ticket.websocket_protocol)
+        !/^wfa-ticket\.[A-Za-z0-9_-]{32,80}$/.test(ticket.websocket_protocol)
       ) {
         throw new Error("The live-stream endpoint or one-use protocol is invalid");
       }
