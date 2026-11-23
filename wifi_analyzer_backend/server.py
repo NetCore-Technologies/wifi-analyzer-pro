@@ -1674,7 +1674,7 @@ class Handler(BaseHTTPRequestHandler):
                 "count": len(feature_catalog()),
                 "features": feature_catalog(),
             },
-            "/api/plugins": PLUGIN_MANAGER.list_plugins,
+            "/api/plugins": lambda: PLUGIN_MANAGER.list_plugins(),
             "/api/adapters": lambda: {
                 "count": len(router_adapter_manifests()),
                 "adapters": router_adapter_manifests(),
