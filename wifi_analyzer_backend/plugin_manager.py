@@ -37,6 +37,7 @@ from .plugin_sdk import (
 MAX_MANIFEST_BYTES = 16 * 1024
 MAX_TRUST_FILE_BYTES = 16 * 1024
 MAX_TRUSTED_KEYS = 100
+MAX_PLUGIN_PACKAGES = 100
 PLUGIN_DIRECTORY_NAME = re.compile(r"^[a-z][a-z0-9_-]{1,31}\.[a-z][a-z0-9_-]{1,63}$")
 PLUGIN_MODULE_PREFIX = "_wifi_analyzer_external_"
 
@@ -181,7 +182,19 @@ class PluginManager:
 
     def _trusted_keys(self) -> dict[str, bytes]:
         if self._trusted_keys_override is not None:
-            return dict(self._trusted_keys_override)
+            if not isinstance(self._trusted_keys_override, dict) or len(self._trusted_keys_override) > MAX_TRUSTED_KEYS:
+                raise PluginManagerError("plugin trust key override is invalid")
+            result = {}
+            for key_id, public_key in self._trusted_keys_override.items():
+                if (
+                    not isinstance(key_id, str)
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}", key_id)
+                    or not isinstance(public_key, bytes)
+                    or len(public_key) != 32
+                ):
+                    raise PluginManagerError("plugin trust key override is invalid")
+                result[key_id] = public_key
+            return result
         if self.trust_keys_file is None:
             return {}
         try:
@@ -275,6 +288,9 @@ class PluginManager:
             "permissions": list(manifest["permissions"]),
             "source": source,
             "source_sha256": manifest["source_sha256"],
+            "manifest_fingerprint": hashlib.sha256(
+                manifest_signing_payload(manifest) + manifest["signature"].encode("ascii")
+            ).hexdigest(),
             "directory": directory,
             "manifest": manifest,
         }
@@ -287,6 +303,16 @@ class PluginManager:
             directories = sorted(self.plugin_directory.iterdir(), key=lambda item: item.name)
         except OSError:
             return [], [{"plugin_id": "", "status": "rejected", "error_code": "plugin_directory_unavailable"}]
+        package_directories = [
+            item for item in directories
+            if not item.name.startswith(".") and item.is_dir() and not item.is_symlink()
+        ]
+        if len(package_directories) > MAX_PLUGIN_PACKAGES:
+            return [], [{
+                "plugin_id": "",
+                "status": "rejected",
+                "error_code": "plugin_package_limit_exceeded",
+            }]
         for directory in directories:
             if directory.name.startswith("."):
                 continue
@@ -389,7 +415,7 @@ class PluginManager:
             if isinstance(error, PluginValidationError):
                 raise PluginManagerError(str(error)) from None
             raise PluginManagerError("plugin entrypoint failed validation or import") from None
-        self._loaded[item["plugin_id"]] = (item["source_sha256"], feature, module)
+        self._loaded[item["plugin_id"]] = (item["manifest_fingerprint"], feature, module)
         return feature
 
     def enable(self, plugin_id: str) -> dict:
@@ -444,7 +470,7 @@ class PluginManager:
             if item is None:
                 raise KeyError(f"Unknown or disabled feature: {slug}")
             loaded = self._loaded.get(item["plugin_id"])
-            if loaded is None or loaded[0] != item["source_sha256"]:
+            if loaded is None or loaded[0] != item["manifest_fingerprint"]:
                 feature = self._load(item)
             else:
                 feature = loaded[1]
