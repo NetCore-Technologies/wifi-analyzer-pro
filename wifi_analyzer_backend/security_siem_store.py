@@ -12,7 +12,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .site_history import default_history_path
+if __package__:
+    from .site_history import default_history_path
+else:
+    from site_history import default_history_path
 
 MAX_INGEST_BATCH = 200
 MAX_DELIVERY_BATCH = 5
@@ -68,7 +71,8 @@ def _timestamp(value: object, field: str) -> datetime:
 
 
 def _now_text(value: object = None) -> str:
-    return _timestamp(value or datetime.now(timezone.utc), "now").isoformat(timespec="seconds")
+    moment = datetime.now(timezone.utc) if value is None else value
+    return _timestamp(moment, "now").isoformat(timespec="seconds")
 
 
 def default_siem_path() -> Path:
@@ -443,16 +447,21 @@ class SecuritySiemStore:
         return {"id": event_row_id, "lease_id": lease_id, "lease_expires_at": updated}
 
     def complete(self, event_row_id: int, lease_id: str, *, http_status: int, now: object = None) -> dict:
+        if isinstance(event_row_id, bool) or not isinstance(event_row_id, int) or event_row_id < 1:
+            raise ValueError("event_row_id must be a positive integer")
+        if not isinstance(lease_id, str) or not re.fullmatch(r"[a-f0-9]{32}", lease_id):
+            raise ValueError("lease_id must be a 32-character hexadecimal value")
         if isinstance(http_status, bool) or not isinstance(http_status, int) or not 200 <= http_status < 300:
             raise ValueError("http_status must be a successful 2xx code")
-        moment = _now_text(now)
+        moment = _timestamp(now, "now") if now is not None else datetime.now(timezone.utc)
+        moment_text = moment.isoformat(timespec="seconds")
         with self._db() as db:
             result = db.execute("""
                 UPDATE security_siem_outbox
                 SET status='delivered', delivered_at=?, http_status=?, lease_id=NULL,
                     lease_expires_at=NULL, last_error_code=NULL
-                WHERE id=? AND status='sending' AND lease_id=?
-            """, (moment, http_status, event_row_id, lease_id))
+                WHERE id=? AND status='sending' AND lease_id=? AND lease_expires_at > ?
+            """, (moment_text, http_status, event_row_id, lease_id, moment_text))
             if result.rowcount != 1:
                 raise SiemDeliveryNotFoundError(event_row_id)
             row = db.execute(
@@ -463,6 +472,10 @@ class SecuritySiemStore:
         return dict(row)
 
     def fail(self, event_row_id: int, lease_id: str, error_code: str, *, now: object = None) -> dict:
+        if isinstance(event_row_id, bool) or not isinstance(event_row_id, int) or event_row_id < 1:
+            raise ValueError("event_row_id must be a positive integer")
+        if not isinstance(lease_id, str) or not re.fullmatch(r"[a-f0-9]{32}", lease_id):
+            raise ValueError("lease_id must be a 32-character hexadecimal value")
         if error_code not in ERROR_CODES:
             raise ValueError("unsupported SIEM delivery error code")
         moment = _timestamp(now, "now") if now is not None else datetime.now(timezone.utc)
@@ -470,8 +483,8 @@ class SecuritySiemStore:
         with self._db() as db:
             row = db.execute("""
                 SELECT attempts FROM security_siem_outbox
-                WHERE id=? AND status='sending' AND lease_id=?
-            """, (event_row_id, lease_id)).fetchone()
+                WHERE id=? AND status='sending' AND lease_id=? AND lease_expires_at > ?
+            """, (event_row_id, lease_id, now_text)).fetchone()
             if row is None:
                 raise SiemDeliveryNotFoundError(event_row_id)
             attempts = int(row["attempts"])
