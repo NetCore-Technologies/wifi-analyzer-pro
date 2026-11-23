@@ -1027,13 +1027,37 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("Only masked, final WebSocket control frames are accepted")
         if length == 126:
             length = struct.unpack("!H", read_exact(2))[0]
+            if length < 126:
+                raise ValueError("WebSocket frame length encoding is not canonical")
         elif length == 127:
             length = struct.unpack("!Q", read_exact(8))[0]
+            if length < 65536 or length & (1 << 63):
+                raise ValueError("WebSocket frame length encoding is not canonical")
         if length > 125:
             raise ValueError("WebSocket control frame exceeds 125 bytes")
         mask = read_exact(4)
-        payload = read_exact(length)
-        return opcode, bytes(value ^ mask[index % 4] for index, value in enumerate(payload))
+        masked_payload = read_exact(length)
+        payload = bytes(
+            value ^ mask[index % 4]
+            for index, value in enumerate(masked_payload)
+        )
+        if opcode == 0x8:
+            if len(payload) == 1:
+                raise ValueError("WebSocket close frame cannot contain a one-byte payload")
+            if len(payload) >= 2:
+                close_code = struct.unpack("!H", payload[:2])[0]
+                if (
+                    close_code < 1000
+                    or close_code >= 5000
+                    or close_code in {1004, 1005, 1006, 1015}
+                    or 1016 <= close_code < 3000
+                ):
+                    raise ValueError("WebSocket close code is reserved or invalid")
+                try:
+                    payload[2:].decode("utf-8", errors="strict")
+                except UnicodeDecodeError:
+                    raise ValueError("WebSocket close reason must be valid UTF-8") from None
+        return opcode, payload
 
     def websocket_close(self, code=1000):
         try:
