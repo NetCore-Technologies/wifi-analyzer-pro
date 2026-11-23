@@ -157,6 +157,21 @@ class PluginManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(KeyError, "Unknown or disabled"):
             self.manager.run(PLUGIN_SLUG, {"networks": []})
 
+    def test_integrity_failure_revokes_enabled_state_until_admin_reenables(self):
+        self.manager.enable(PLUGIN_ID)
+        source_path = self.plugin_dir / PLUGIN_ID / "plugin.py"
+        original_source = source_path.read_bytes()
+        source_path.write_bytes(original_source + b"\\n# tampered\\n")
+        rejected = self.manager.list_plugins()
+        self.assertEqual(rejected["plugins"][0]["status"], "rejected")
+        self.assertTrue(rejected["plugins"][0]["previously_enabled"])
+        self.assertEqual(rejected["enabled_count"], 0)
+
+        source_path.write_bytes(original_source)
+        self.assertEqual(self.manager.catalog(), [])
+        self.assertTrue(self.manager.enable(PLUGIN_ID)["enabled"])
+        self.assertEqual(len(self.manager.catalog()), 1)
+
     def test_untrusted_publisher_signature_is_rejected(self):
         other_key = Ed25519PrivateKey.generate()
         source = sample_source()
