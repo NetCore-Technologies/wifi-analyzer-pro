@@ -900,7 +900,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         request_line = str(args[0]) if args else ""
-        request_line = re.sub(r"([?&]ticket=)[^&\\s]+", r"\\1[redacted]", request_line)
+        request_line = re.sub(r"([?&]ticket=)[^&\s]+", r"\1[redacted]", request_line)
         print(f"  {self.address_string()} {request_line} {args[1] if len(args) > 1 else ''}")
 
     def add_common_headers(self):
