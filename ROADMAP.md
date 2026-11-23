@@ -64,7 +64,7 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Explicit interface selection for local tcpdump/libpcap capture with fixed filter profiles, operator confirmation, duration/packet/snaplen/file-size bounds, stop control and PCAP download into the offline analyzer.
 - ✅ Per-site authorization is enforced across sites, agents, reports and feature inputs. Full tenant isolation (separate tenant identities, storage boundaries, billing and cross-tenant operational controls) remains planned.
 - 📋 Enterprise identity: OIDC/SAML SSO, WebAuthn and SCIM provisioning, external SIEM forwarding and centralised retention; local TOTP authenticator-app MFA is implemented.
-- 📋 Multi-site dashboards for distributed local agents.
+- ✅ Multi-site Fleet Overview with latest-per-site aggregate telemetry, five-minute freshness classification and scoped router-agent health/snapshot summaries.
 - ✅ Bounded token-bucket API rate limits for setup/login, scans, speed tests, feature execution, site audits, capture startup, report enqueue and webhook enqueue; authenticated limits are per account and return HTTP 429 with Retry-After.
 - ✅ Authenticated, site-scoped WebSocket streaming with single-use tickets, session/scope revocation and bounded clients.
 - 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
@@ -72,6 +72,13 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 ---
 
 
+
+### Multi-site Fleet Overview delivered
+
+- ✅ The authenticated site directory is joined to one latest persisted telemetry row per site through a bounded latest-per-site query; high-volume sites cannot starve quieter sites from the 100-site dashboard result.
+- ✅ Fleet status distinguishes fresh, stale and missing telemetry; unknown measurements stay unavailable rather than being shown as zero.
+- ✅ Visible router-agent health is classified from server-recorded heartbeat times and joined to the latest site-scoped snapshot. Unassigned agents remain visible as unassigned; no site is inferred.
+- ✅ The dashboard refreshes every 30 seconds and reports partial-source errors independently. Historical analysis remains in the dedicated Telemetry History and Site History views.
 
 ### Signed third-party feature plugins delivered
 
