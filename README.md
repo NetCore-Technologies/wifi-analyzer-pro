@@ -186,6 +186,8 @@ The local HTTP service exposes:
 | `POST /api/auth/login` | Create a short-lived bearer session |
 | `POST /api/auth/logout` | Revoke the current bearer session |
 | `GET /api/features` | Authenticated catalogue of the 208 built-in tools |
+| `GET /api/plugins` | Owner/admin listing of signed third-party plugin packages and lifecycle state; requires `plugins.manage` |
+| `POST /api/plugins/{plugin_id}/enable`, `/disable`, `/reload` | Audited owner/admin plugin lifecycle operations; package upload is not supported |
 | `GET /api/users`, `POST /api/users`, `POST /api/users/{id}/update` | Owner/administrator user directory, account creation, role updates, site-scope assignment and disable/enable controls |
 | `GET /api/sites` | List saved sites visible to the current user's site scope |
 | `GET /api/telemetry/history` | Read minute-level historical scan/diagnostic aggregates within the caller's site scope |
@@ -229,6 +231,7 @@ The local HTTP service exposes:
 | [Home Assistant MQTT discovery](wifi_analyzer_backend/HOME_ASSISTANT_MQTT.md) | Retained telemetry sensors, availability, TLS and MQTT broker setup |
 | [Node-RED integration](integrations/node-red/README.md) | Installable flow nodes for scans, features, telemetry, alerts and catalogue discovery |
 | [Authenticated live stream](wifi_analyzer_backend/LIVE_STREAM.md) | One-use WebSocket tickets, site-scoped events, reconnects and resource limits |
+| [Third-party plugin SDK](wifi_analyzer_backend/PLUGIN_SDK.md) | Ed25519-signed Python plugins, publisher trust, API compatibility and admin lifecycle |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
