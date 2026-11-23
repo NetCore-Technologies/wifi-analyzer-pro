@@ -12,6 +12,23 @@ Requirements: Docker Engine with Docker Compose v2. Copy the example environment
 
 The default published bind address is 127.0.0.1:199. This is deliberate. Put a TLS reverse proxy or VPN in front of the service for team access. To publish on a trusted LAN, set WIFI_ANALYZER_BIND_ADDRESS=0.0.0.0 only after configuring host firewall rules and an authenticated TLS reverse proxy.
 
+The API also validates same-origin Host headers against
+`WIFI_ANALYZER_ALLOWED_HOSTS` to prevent DNS-rebinding origins from being
+treated as trusted merely because their Origin header matches Host. The
+default is loopback only: `localhost,127.0.0.1,::1`. When deliberately serving
+the UI from a LAN hostname or IP, add the exact hostname/IP used in the browser
+address bar to the protected `.env` file, for example:
+
+    WIFI_ANALYZER_BIND_ADDRESS=0.0.0.0
+    WIFI_ANALYZER_ALLOWED_HOSTS=localhost,127.0.0.1,::1,analyzer.lan,192.168.1.20
+
+Do not use wildcards. Keep the API behind a host firewall and authenticated
+TLS reverse proxy/VPN. The reverse proxy should preserve the external Host
+header and forward an explicit configured Origin only when required. For a
+team portal on a separate origin, configure the exact full origin in
+`WIFI_ANALYZER_CORS_ORIGINS`; do not use a wildcard or reflect arbitrary
+origins. The Host allowlist and CORS origin allowlist are separate controls.
+
 Enable the durable multi-subscription dispatcher when webhook delivery is required:
 
     docker compose --profile webhook-dispatcher up -d
