@@ -123,6 +123,19 @@ class SecurityAuditStore:
         with self._db() as db: rows=db.execute("SELECT * FROM security_audit_events"+where+" ORDER BY id DESC LIMIT ?",(*values,limit)).fetchall()
         return [self._row(row) for row in rows]
 
+    def list_events_after(self, *, after_id=0, limit=100):
+        """Return audit events in source order for durable external exporters."""
+        if isinstance(after_id, bool) or not isinstance(after_id, int) or after_id < 0:
+            raise ValueError("after_id must be a non-negative integer")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_AUDIT_LIMIT:
+            raise ValueError("limit must be between 1 and 200")
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT * FROM security_audit_events WHERE id > ? ORDER BY id ASC LIMIT ?",
+                (after_id, limit),
+            ).fetchall()
+        return [self._row(row) for row in rows]
+
     def verify_chain(self):
         with self._db() as db: rows=db.execute("SELECT * FROM security_audit_events ORDER BY id").fetchall()
         previous=ZERO_HASH; verified=0
