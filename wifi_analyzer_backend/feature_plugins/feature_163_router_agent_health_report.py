@@ -61,6 +61,7 @@ def run(payload: dict) -> dict:
         results.append({
             "agent_id": agent_id,
             "adapter_id": agent.get("adapter_id"),
+            "site_id": agent.get("site_id"),
             "agent_version": agent.get("agent_version"),
             "reported_status": reported,
             "health_status": effective,
