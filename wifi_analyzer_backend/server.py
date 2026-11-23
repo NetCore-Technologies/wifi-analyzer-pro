@@ -112,7 +112,15 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
 OS = platform.system()
 APP_VERSION = "1.0.7"
 DEMO_MODE = os.getenv("WIFI_ANALYZER_DEMO", "").strip().lower() in {"1", "true", "yes", "on"}
-DEFAULT_CORS_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173"}
+DEFAULT_CORS_ORIGINS = {
+ALLOWED_HOSTS = {
+    item.strip().strip("[]").lower()
+    for item in os.getenv(
+        "WIFI_ANALYZER_ALLOWED_HOSTS",
+        "localhost,127.0.0.1,::1",
+    ).split(",")
+    if item.strip()
+}"http://localhost:5173", "http://127.0.0.1:5173"}
 CORS_ORIGINS = {
     origin.strip()
     for origin in os.getenv("WIFI_ANALYZER_CORS_ORIGINS", "").split(",")
@@ -1191,10 +1199,34 @@ class Handler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin")
         if not origin or origin in CORS_ORIGINS:
             return True
-        parsed = urlparse(origin)
-        # Same-origin desktop/self-hosted deployments may use a LAN hostname
-        # instead of localhost; allow only an exact Host match in that case.
-        return parsed.scheme in {"http", "https"} and parsed.netloc == self.headers.get("Host")
+        try:
+            parsed = urlparse(origin)
+            host_header = self.headers.get("Host", "").strip()
+            request_host = urlparse("//" + host_header)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path not in {"", "/"}
+                or parsed.params
+                or parsed.query
+                or parsed.fragment
+                or not host_header
+                or request_host.username is not None
+                or request_host.password is not None
+                or parsed.hostname is None
+                or request_host.hostname is None
+            ):
+                return False
+            origin_port = parsed.port
+            request_port = request_host.port
+        except ValueError:
+            return False
+        return (
+            parsed.hostname.lower() == request_host.hostname.lower()
+            and origin_port == request_port
+            and parsed.hostname.lower() in ALLOWED_HOSTS
+        )
 
     def audit_event(self, action, *, actor=None, target_type=None, target_id=None, outcome="success", metadata=None):
         if actor is None:
