@@ -35,6 +35,8 @@ def _read_password_file(path_value: str | None) -> str | None:
     if path_value is None or not path_value.strip():
         return None
     path = Path(path_value).expanduser()
+    if path.is_symlink():
+        raise ValueError("MQTT password file must not be a symbolic link")
     try:
         descriptor = os.open(str(path), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     except OSError:
