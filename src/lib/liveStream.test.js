@@ -117,6 +117,7 @@ test("reconnects with a fresh one-use ticket after an unexpected close", async (
   FakeWebSocket.instances[0].disconnect(1006);
   await new Promise((resolve) => setTimeout(resolve, 140));
   await tick();
+  await tick();
   assert.equal(requests, 2);
   assert.equal(FakeWebSocket.instances.length, 2);
   assert.equal(stream.status, "connected");
