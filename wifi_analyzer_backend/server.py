@@ -1899,6 +1899,8 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/sites":
                 scope = AUTH.site_access(self.bearer_token())
                 discovered = set(HISTORY.site_ids(limit=100))
+                if scope is not None and not scope["all_sites"]:
+                    discovered.update(scope["site_ids"])
                 discovered.update(TELEMETRY.site_ids(limit=100))
                 discovered.update(TRUSTED_APS.site_ids(limit=100))
                 discovered.update(RF_SURVEYS.site_ids(limit=100))
