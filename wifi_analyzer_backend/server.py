@@ -1052,12 +1052,20 @@ class Handler(BaseHTTPRequestHandler):
         if len(decoded_key) != 16:
             self.send_json({"error": "Invalid WebSocket key"}, 400)
             return
-        parameters = parse_qs(request_url.query, keep_blank_values=True, max_num_fields=2)
-        ticket_values = parameters.get("ticket", [])
-        if len(ticket_values) != 1 or not ticket_values[0]:
-            self.send_json({"error": "A one-use WebSocket ticket is required"}, 401)
+        protocols = [
+            item.strip()
+            for item in self.headers.get("Sec-WebSocket-Protocol", "").split(",")
+            if item.strip()
+        ]
+        ticket_protocols = [
+            item for item in protocols
+            if item.startswith("wfa-ticket.") and len(item) <= 128
+        ]
+        if len(ticket_protocols) != 1 or len(protocols) != 1:
+            self.send_json({"error": "A one-use WebSocket ticket subprotocol is required"}, 401)
             return
-        ticket = LIVE_STREAMS.consume_ticket(ticket_values[0])
+        ticket_token = ticket_protocols[0][len("wfa-ticket."):]
+        ticket = LIVE_STREAMS.consume_ticket(ticket_token)
         if ticket is None:
             self.send_json({"error": "WebSocket ticket is invalid, expired or already used"}, 401)
             return
@@ -1086,6 +1094,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Upgrade", "websocket")
         self.send_header("Connection", "Upgrade")
         self.send_header("Sec-WebSocket-Accept", accept_value)
+        self.send_header("Sec-WebSocket-Protocol", ticket_protocols[0])
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.flush()
