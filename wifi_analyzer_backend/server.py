@@ -6,7 +6,7 @@ Run:  sudo python3 server.py
 Then open:  http://<pi-ip>:199
 """
 
-import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib, ipaddress, socket
+import sys, os, json, platform, subprocess, re, time, mimetypes, math, hashlib, hmac, ipaddress, socket
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, unquote, parse_qs
 from datetime import datetime, timezone, timedelta
@@ -41,6 +41,7 @@ if __package__:
     from .feature_plugins import catalog as feature_catalog, run as run_feature
     from .site_history import DuplicateSnapshotError, SiteHistoryStore
     from .telemetry_store import WiFiTelemetryStore
+    from .prometheus_exporter import render_prometheus_metrics
     from .trusted_ap_store import TrustedAccessPointStore
     from .rf_survey_store import RfSurveyHistoryStore
     from .alert_rule_store import AlertRuleStore, METRICS as ALERT_METRICS, scan_observations, diagnostic_observations
@@ -85,6 +86,7 @@ else:  # Direct execution: python wifi_analyzer_backend/server.py
     from feature_plugins import catalog as feature_catalog, run as run_feature
     from site_history import DuplicateSnapshotError, SiteHistoryStore
     from telemetry_store import WiFiTelemetryStore
+    from prometheus_exporter import render_prometheus_metrics
     from trusted_ap_store import TrustedAccessPointStore
     from rf_survey_store import RfSurveyHistoryStore
     from alert_rule_store import AlertRuleStore, METRICS as ALERT_METRICS, scan_observations, diagnostic_observations
@@ -930,6 +932,50 @@ class Handler(BaseHTTPRequestHandler):
             while chunk := capture_file.read(64 * 1024):
                 self.wfile.write(chunk)
 
+    def send_text(self, data, status=200, content_type="text/plain; version=0.0.4; charset=utf-8", headers=None):
+        body = data.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        for header_name, header_value in (headers or {}).items():
+            self.send_header(header_name, str(header_value))
+        self.add_common_headers()
+        self.end_headers()
+        self.wfile.write(body)
+
+    def handle_prometheus_metrics(self):
+        expected_token = os.getenv("WIFI_ANALYZER_PROMETHEUS_TOKEN", "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9._~-]{32,256}", expected_token):
+            self.send_text("Not found\n", 404, content_type="text/plain; charset=utf-8")
+            return
+
+        supplied_token = self.bearer_token()
+        if (
+            not supplied_token
+            or not re.fullmatch(r"[A-Za-z0-9._~-]{32,256}", supplied_token)
+            or not hmac.compare_digest(supplied_token, expected_token)
+        ):
+            self.send_text(
+                "Unauthorized\n",
+                401,
+                content_type="text/plain; charset=utf-8",
+                headers={"WWW-Authenticate": 'Bearer realm="WiFi Analyzer Pro metrics"'},
+            )
+            return
+
+        try:
+            rollups = TELEMETRY.history(site_ids=[LOCAL_SITE_ID], days=1, limit=1440)
+            metrics = render_prometheus_metrics(rollups)
+        except Exception as error:
+            print(f"[PROMETHEUS EXPORTER ERROR] {type(error).__name__}")
+            self.send_text(
+                "Metrics temporarily unavailable\n",
+                503,
+                content_type="text/plain; charset=utf-8",
+            )
+            return
+        self.send_text(metrics)
+
     def bearer_token(self):
         value = self.headers.get("Authorization", "")
         scheme, separator, token = value.partition(" ")
@@ -1222,6 +1268,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         request_url = urlparse(self.path)
         path = request_url.path
+        if path == "/metrics":
+            self.handle_prometheus_metrics()
+            return
         if path == "/api/auth/status":
             self.send_json(AUTH.status(self.bearer_token()))
             return
