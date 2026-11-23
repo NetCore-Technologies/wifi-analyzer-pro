@@ -117,8 +117,8 @@ class WiFiTelemetryStoreTests(unittest.TestCase):
             self.store.latest(site_ids=["office", "office"])
         with self.assertRaisesRegex(ValueError, "1 and 100"):
             self.store.latest(limit=101)
-        with self.assertRaisesRegex(ValueError, "between 1 and 7"):
-            self.store.latest(days=8)
+        with self.assertRaisesRegex(ValueError, "between 1 and 90"):
+            self.store.latest(days=91)
 
     def test_history_is_durable_across_store_recreation(self):
         self.store.record_scan("office", [{"rssi": -64}], sampled_at=self.timestamp())
