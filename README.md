@@ -225,6 +225,7 @@ The local HTTP service exposes:
 | [Deployment and operations](deploy/README.md) | Hardened Compose and systemd deployment, shared state, upgrades, backup and rollback |
 | [Prometheus and Grafana integration](PROMETHEUS.md) | Secure scrape setup, metric definitions and bundled dashboard |
 | [Home Assistant MQTT discovery](wifi_analyzer_backend/HOME_ASSISTANT_MQTT.md) | Retained telemetry sensors, availability, TLS and MQTT broker setup |
+| [Node-RED integration](integrations/node-red/README.md) | Installable flow nodes for scans, features, telemetry, alerts and catalogue discovery |
 | `POST /api/sites/history` | Validate and persist a site AP/topology snapshot locally |
 | `GET /api/sites/history` | List snapshots with optional site filter and `limit` / `before_id` pagination |
 | `GET /api/sites/history/{id}` | Read one saved site snapshot |
