@@ -20,6 +20,47 @@ The API and dispatcher share the application state volume. The dispatcher is a n
 
     docker compose --profile webhook-dispatcher --profile alert-webhooks up -d
 
+### Third-party feature plugins
+
+The API stores enabled/disabled plugin lifecycle state in its persistent state
+volume and discovers packages from
+`/home/wifi-analyzer/.local/state/wifi-analyzer-pro/plugins`. Configure the
+public Ed25519 publisher trust store with
+`WIFI_ANALYZER_PLUGIN_TRUST_KEYS_FILE` in `.env`; its contents are mounted as
+a read-only Compose secret. The trust store is public verification material,
+not a signing secret. Do not put publisher private keys on customer systems.
+
+Create the host trust directory and file before starting the API:
+
+    sudo install -d -o root -g root -m 0755 /etc/wifi-analyzer-pro
+    sudo install -o root -g root -m 0644 plugin-trust-keys.json /etc/wifi-analyzer-pro/plugin-trust-keys.json
+
+Set:
+
+    WIFI_ANALYZER_PLUGIN_TRUST_KEYS_FILE=/etc/wifi-analyzer-pro/plugin-trust-keys.json
+
+To install a signed package into the named state volume, stage the package
+directory using a one-shot helper container that mounts the same state volume.
+Run the helper as root only for the copy, then make the package owned by
+UID/GID 10001 and owner-only:
+
+    docker volume ls
+    docker run --rm --user 0:0 \
+      -v <compose-project>_state:/state \
+      -v /secure/path/acme.channel_quality:/package:ro \
+      --entrypoint sh ${WIFI_ANALYZER_IMAGE:-wifi-analyzer-pro:local} -c '
+        install -d -o 10001 -g 10001 -m 0700 /state/wifi-analyzer-pro/plugins/acme.channel_quality &&
+        install -o 10001 -g 10001 -m 0600 /package/manifest.json /state/wifi-analyzer-pro/plugins/acme.channel_quality/manifest.json &&
+        install -o 10001 -g 10001 -m 0600 /package/plugin.py /state/wifi-analyzer-pro/plugins/acme.channel_quality/plugin.py
+      '
+
+Use the actual Compose project state volume name shown by `docker volume ls`.
+After staging, an owner/admin can inspect `GET /api/plugins` and enable,
+reload or disable the signed package through the audited lifecycle API. The
+HTTP API does not accept plugin uploads. See
+`wifi_analyzer_backend/PLUGIN_SDK.md` for the package format and signing
+process.
+
 The bridge prepares and queues signed event notifications without network access; the dispatcher transmits them. The report worker is configured separately because it requires a destination URL, exact DNS allowlist and HMAC signing secret. Do not put those values in the repository or a committed Compose file.
 
 Useful operations:
@@ -56,6 +97,30 @@ Install the service units:
     sudo systemctl enable --now wifi-analyzer-pro.service
 
 The API binds to loopback. Create /etc/wifi-analyzer-pro/server.env as root-owned mode 0600 only when overriding defaults. For remote access, use a VPN or authenticated TLS reverse proxy and firewall; do not publish the API directly to the public internet.
+
+### Third-party feature plugins
+
+The systemd unit configures a persistent plugin directory at
+`/var/lib/wifi-analyzer-pro/plugins` and plugin lifecycle state in
+`/var/lib/wifi-analyzer-pro/plugin-registry.sqlite3`. Install the public
+Ed25519 trust store as a root-controlled, service-readable file:
+
+    sudo install -o root -g wifi-analyzer -m 0640 plugin-trust-keys.json /etc/wifi-analyzer-pro/plugin-trust-keys.json
+
+The trust store contains public verification keys only. Stage each reviewed,
+signed plugin package under `/var/lib/wifi-analyzer-pro/plugins/<publisher.plugin>/`
+with ownership `wifi-analyzer:wifi-analyzer`, directory mode 0700 and
+manifest/source mode 0600. For example:
+
+    sudo install -d -o wifi-analyzer -g wifi-analyzer -m 0700 /var/lib/wifi-analyzer-pro/plugins/acme.channel_quality
+    sudo install -o wifi-analyzer -g wifi-analyzer -m 0600 manifest.json /var/lib/wifi-analyzer-pro/plugins/acme.channel_quality/manifest.json
+    sudo install -o wifi-analyzer -g wifi-analyzer -m 0600 plugin.py /var/lib/wifi-analyzer-pro/plugins/acme.channel_quality/plugin.py
+
+After staging the package, an owner/admin can verify it with `GET /api/plugins`
+and enable, reload or disable it using the audited lifecycle API. The API
+does not accept plugin uploads. See
+`wifi_analyzer_backend/PLUGIN_SDK.md` for the signed package contract and
+trusted publisher key rotation process.
 
 The webhook dispatcher can be enabled independently:
 
