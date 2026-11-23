@@ -68,6 +68,9 @@ function requestJson(serverConfig, method, pathname, body, timeoutMs = DEFAULT_T
   }
   const transport = target.protocol === "https:" ? https : http;
   const encodedBody = body === undefined ? null : Buffer.from(JSON.stringify(body), "utf8");
+  if (encodedBody && encodedBody.length > 2 * 1024 * 1024) {
+    return Promise.reject(new Error("WiFi Analyzer Pro request exceeded the 2 MiB limit"));
+  }
 
   return new Promise((resolve, reject) => {
     const headers = {
@@ -80,7 +83,7 @@ function requestJson(serverConfig, method, pathname, body, timeoutMs = DEFAULT_T
     }
     const request = transport.request({
       protocol: target.protocol,
-      hostname: target.hostname,
+      hostname: target.hostname.replace(/^\[|\]$/g, ""),
       port: target.port || undefined,
       method,
       path: target.pathname + target.search,
@@ -209,8 +212,9 @@ module.exports = function register(RED) {
       throw new Error("A valid WiFi Analyzer Pro feature slug must be configured");
     }
     const payload = msg.payload === undefined ? {} : msg.payload;
-    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-      throw new Error("Feature input msg.payload must be a JSON object");
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(payload))) {
+      throw new Error("Feature input msg.payload must be a plain JSON object");
     }
     return await requestJson(
       node.server,
