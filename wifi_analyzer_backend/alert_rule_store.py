@@ -7,6 +7,7 @@ is still retained. This module does not send notifications.
 """
 from __future__ import annotations
 
+import json
 import math
 import os
 import re
@@ -29,6 +30,7 @@ MAX_EVALUATION_GAP_SECONDS = 300
 MAX_HOLD_SECONDS = 3600
 MIN_DEDUPE_SECONDS = 60
 MAX_DEDUPE_SECONDS = 86_400
+MAX_PENDING_NOTIFICATIONS = 100_000
 
 METRICS = {
     "minimum_rssi_dbm": {"unit": "dBm", "minimum": -127.0, "maximum": 0.0, "description": "Weakest measured RSSI in the scan"},
@@ -285,6 +287,31 @@ class AlertRuleStore:
             CREATE INDEX IF NOT EXISTS idx_alert_events_site_status
             ON alert_events(site_id, status, last_seen_at DESC)
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS alert_notification_outbox (
+                notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                transition TEXT NOT NULL CHECK (transition IN ('opened', 'acknowledged', 'resolved')),
+                event_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'queued', 'not_configured')),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                available_at TEXT NOT NULL,
+                last_error_code TEXT,
+                processed_at TEXT,
+                UNIQUE (event_id, transition)
+            )
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_alert_notification_due
+            ON alert_notification_outbox(status, available_at, notification_id)
+        """)
+        db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_alert_notification_event
+            ON alert_notification_outbox(event_id, notification_id DESC)
+        """)
         try:
             yield db
             db.commit()
@@ -308,11 +335,37 @@ class AlertRuleStore:
         return result
 
     @staticmethod
-    def _event_dict(row: sqlite3.Row) -> dict:
+    def _event_dict(row: sqlite3.Row, delivery_status: str = "not_configured") -> dict:
         result = dict(row)
         result["quiet_hours_active"] = bool(result["quiet_hours_active"])
-        result["delivery_status"] = "not_configured"
+        result["delivery_status"] = delivery_status
         return result
+
+    @staticmethod
+    def _queue_notification(db: sqlite3.Connection, event_id: str, transition: str, occurred_at: str) -> None:
+        if transition not in {"opened", "acknowledged", "resolved"}:
+            raise ValueError("notification transition is invalid")
+        row = db.execute(
+            "SELECT * FROM alert_events WHERE event_id=?",
+            (event_id,),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("alert notification references a missing incident")
+        event = AlertRuleStore._event_dict(row)
+        event.pop("delivery_status", None)
+        encoded = json.dumps(
+            event, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+        )
+        db.execute("""
+            INSERT OR IGNORE INTO alert_notification_outbox (
+                site_id, event_id, transition, event_json, created_at, available_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        """, (row["site_id"], event_id, transition, encoded, occurred_at, occurred_at))
+        pending = db.execute(
+            "SELECT COUNT(*) FROM alert_notification_outbox WHERE status='pending'"
+        ).fetchone()[0]
+        if pending > MAX_PENDING_NOTIFICATIONS:
+            raise RuntimeError("alert notification outbox is full; no new incident transition was discarded")
 
     def list_rules(self, site_id: str) -> list[dict]:
         site_id = _site_id(site_id)
@@ -340,7 +393,20 @@ class AlertRuleStore:
                     "SELECT * FROM alert_events WHERE site_id = ? ORDER BY last_seen_at DESC LIMIT ?",
                     (site_id, limit),
                 ).fetchall()
-        return [self._event_dict(row) for row in rows]
+            delivery_statuses = {}
+            if rows:
+                event_ids = [row["event_id"] for row in rows]
+                placeholders = ",".join("?" for _ in event_ids)
+                notifications = db.execute(
+                    "SELECT event_id, status FROM alert_notification_outbox "
+                    f"WHERE event_id IN ({placeholders}) ORDER BY notification_id",
+                    event_ids,
+                ).fetchall()
+                delivery_statuses = {item["event_id"]: item["status"] for item in notifications}
+        return [
+            self._event_dict(row, delivery_statuses.get(row["event_id"], "not_configured"))
+            for row in rows
+        ]
 
     def save_rule(self, site_id: str, rule: dict, *, rule_id: str | None = None) -> dict:
         site_id = _site_id(site_id)
@@ -381,10 +447,17 @@ class AlertRuleStore:
                     for field in semantic_fields
                 )
                 if changed:
+                    active_events = db.execute(
+                        "SELECT event_id FROM alert_events WHERE site_id=? AND rule_id=? "
+                        "AND status IN ('active','acknowledged')",
+                        (site_id, rule_id),
+                    ).fetchall()
                     db.execute("""
                         UPDATE alert_events SET status='resolved', resolved_at=?, last_seen_at=?
                         WHERE site_id=? AND rule_id=? AND status IN ('active','acknowledged')
                     """, (now, now, site_id, rule_id))
+                    for event in active_events:
+                        self._queue_notification(db, event["event_id"], "resolved", now)
                     db.execute(
                         "DELETE FROM alert_rule_state WHERE site_id=? AND rule_id=?",
                         (site_id, rule_id),
@@ -410,10 +483,18 @@ class AlertRuleStore:
                 clean["quiet_start"], clean["quiet_end"], clean["timezone"], created_at, now,
             ))
             if existing and not clean["enabled"]:
+                # A semantic change above may already have closed these incidents.
+                active_events = db.execute(
+                    "SELECT event_id FROM alert_events WHERE site_id=? AND rule_id=? "
+                    "AND status IN ('active','acknowledged')",
+                    (site_id, rule_id),
+                ).fetchall()
                 db.execute("""
-                    UPDATE alert_events SET status='resolved', resolved_at=?
+                    UPDATE alert_events SET status='resolved', resolved_at=?, last_seen_at=?
                     WHERE site_id=? AND rule_id=? AND status IN ('active','acknowledged')
-                """, (now, site_id, rule_id))
+                """, (now, now, site_id, rule_id))
+                for event in active_events:
+                    self._queue_notification(db, event["event_id"], "resolved", now)
                 db.execute("DELETE FROM alert_rule_state WHERE site_id=? AND rule_id=?", (site_id, rule_id))
             row = db.execute("SELECT * FROM alert_rules WHERE rule_id=?", (rule_id,)).fetchone()
             return self._rule_dict(row)
@@ -429,10 +510,17 @@ class AlertRuleStore:
             db.execute("BEGIN IMMEDIATE")
             cursor = db.execute("DELETE FROM alert_rules WHERE site_id=? AND rule_id=?", (site_id, rule_id))
             if cursor.rowcount:
+                active_events = db.execute(
+                    "SELECT event_id FROM alert_events WHERE site_id=? AND rule_id=? "
+                    "AND status IN ('active','acknowledged')",
+                    (site_id, rule_id),
+                ).fetchall()
                 db.execute("""
-                    UPDATE alert_events SET status='resolved', resolved_at=?
+                    UPDATE alert_events SET status='resolved', resolved_at=?, last_seen_at=?
                     WHERE site_id=? AND rule_id=? AND status IN ('active','acknowledged')
-                """, (now, site_id, rule_id))
+                """, (now, now, site_id, rule_id))
+                for event in active_events:
+                    self._queue_notification(db, event["event_id"], "resolved", now)
                 db.execute("DELETE FROM alert_rule_state WHERE site_id=? AND rule_id=?", (site_id, rule_id))
             return cursor.rowcount == 1
 
@@ -446,11 +534,12 @@ class AlertRuleStore:
             raise ValueError("event_id must be a valid UUID") from error
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
-            db.execute("""
+            acknowledged_at = _iso()
+            cursor = db.execute("""
                 UPDATE alert_events
                 SET status='acknowledged', acknowledged_at=?, acknowledged_by=?
                 WHERE site_id=? AND event_id=? AND status='active'
-            """, (_iso(), actor.strip(), site_id, event_id))
+            """, (acknowledged_at, actor.strip(), site_id, event_id))
             row = db.execute(
                 "SELECT * FROM alert_events WHERE site_id=? AND event_id=?",
                 (site_id, event_id),
@@ -459,7 +548,9 @@ class AlertRuleStore:
                 return None
             if row["status"] == "resolved":
                 raise ValueError("only active alerts can be acknowledged")
-            return self._event_dict(row)
+            if cursor.rowcount:
+                self._queue_notification(db, event_id, "acknowledged", acknowledged_at)
+            return self._event_dict(row, "pending" if cursor.rowcount else "not_configured")
 
     @staticmethod
     def _breached(rule: dict, value: float, *, active: bool) -> bool:
@@ -496,6 +587,11 @@ class AlertRuleStore:
             cutoff = _iso(moment - timedelta(days=MAX_EVENT_AGE_DAYS))
             db.execute(
                 "DELETE FROM alert_events WHERE site_id=? AND status='resolved' AND last_seen_at < ?",
+                (site_id, cutoff),
+            )
+            db.execute(
+                "DELETE FROM alert_notification_outbox WHERE site_id=? "
+                "AND status!='pending' AND created_at < ?",
                 (site_id, cutoff),
             )
             rules = db.execute(
@@ -586,6 +682,7 @@ class AlertRuleStore:
                             moment_text, int(quiet),
                         ))
                         created.append(event_id)
+                        self._queue_notification(db, event_id, "opened", moment_text)
                     db.execute("""
                         INSERT INTO alert_rule_state(site_id,rule_id,first_breach_at,last_value,last_observed_at,current_event_id)
                         VALUES(?,?,?,?,?,?)
@@ -599,6 +696,7 @@ class AlertRuleStore:
                         WHERE site_id=? AND event_id=?
                     """, (moment_text, moment_text, site_id, current_event["event_id"]))
                     db.execute("DELETE FROM alert_rule_state WHERE site_id=? AND rule_id=?", (site_id, rule["rule_id"]))
+                    self._queue_notification(db, current_event["event_id"], "resolved", moment_text)
                     resolved.append(current_event["event_id"])
                 elif state:
                     db.execute("DELETE FROM alert_rule_state WHERE site_id=? AND rule_id=?", (site_id, rule["rule_id"]))
@@ -612,6 +710,75 @@ class AlertRuleStore:
             "evaluated_rule_count": len(rules),
             "measured_metric_count": len(safe_values),
         }
+
+    def pending_notifications(self, *, limit: int = 100, now: object | None = None) -> list[dict]:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 1_000:
+            raise ValueError("limit must be an integer from 1 to 1000")
+        moment = _timestamp(now)
+        with self._db() as db:
+            rows = db.execute("""
+                SELECT * FROM alert_notification_outbox
+                WHERE status='pending' AND available_at <= ?
+                ORDER BY notification_id LIMIT ?
+            """, (_iso(moment), limit)).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["event"] = json.loads(item.pop("event_json"))
+            result.append(item)
+        return result
+
+    def mark_notification_processed(self, notification_id: int, status: str) -> dict | None:
+        if isinstance(notification_id, bool) or not isinstance(notification_id, int) or notification_id < 1:
+            raise ValueError("notification_id must be a positive integer")
+        if status not in {"queued", "not_configured"}:
+            raise ValueError("notification status must be queued or not_configured")
+        processed_at = _iso()
+        with self._db() as db:
+            db.execute("""
+                UPDATE alert_notification_outbox
+                SET status=?, processed_at=?, last_error_code=NULL
+                WHERE notification_id=? AND status='pending'
+            """, (status, processed_at, notification_id))
+            row = db.execute(
+                "SELECT * FROM alert_notification_outbox WHERE notification_id=?",
+                (notification_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def retry_notification(
+        self,
+        notification_id: int,
+        error_code: str,
+        *,
+        now: object | None = None,
+    ) -> dict | None:
+        if isinstance(notification_id, bool) or not isinstance(notification_id, int) or notification_id < 1:
+            raise ValueError("notification_id must be a positive integer")
+        if not isinstance(error_code, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", error_code):
+            raise ValueError("error_code must be a lowercase operational code")
+        moment = _timestamp(now)
+        with self._db() as db:
+            row = db.execute(
+                "SELECT attempts FROM alert_notification_outbox "
+                "WHERE notification_id=? AND status='pending'",
+                (notification_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            attempts = int(row["attempts"]) + 1
+            delay = min(3_600, 5 * (2 ** min(attempts - 1, 9)))
+            available_at = _iso(moment + timedelta(seconds=delay))
+            db.execute("""
+                UPDATE alert_notification_outbox
+                SET attempts=?, available_at=?, last_error_code=?
+                WHERE notification_id=? AND status='pending'
+            """, (attempts, available_at, error_code, notification_id))
+            updated = db.execute(
+                "SELECT * FROM alert_notification_outbox WHERE notification_id=?",
+                (notification_id,),
+            ).fetchone()
+        return dict(updated) if updated else None
 
     def site_ids(self, *, limit: int = 100) -> list[str]:
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
