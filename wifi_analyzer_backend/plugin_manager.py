@@ -208,6 +208,11 @@ class PluginManager:
             return result
         if self.trust_keys_file is None:
             return {}
+        parent = self.trust_keys_file.parent
+        if parent.is_symlink() or not parent.is_dir():
+            raise PluginManagerError("plugin trust store directory must be a regular non-symbolic-link directory")
+        if os.name != "nt" and stat.S_IMODE(parent.stat().st_mode) & 0o022:
+            raise PluginManagerError("plugin trust store directory must not be writable by group or other users")
         try:
             raw = _read_regular_file(
                 self.trust_keys_file,
