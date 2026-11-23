@@ -143,6 +143,10 @@ function createOutputNode(RED, type, label, execute) {
     const node = this;
     node.server = RED.nodes.getNode(config.server);
     node.timeoutMs = Number(config.timeoutMs || DEFAULT_TIMEOUT_MS);
+    node.featureSlug = config.slug;
+    node.siteId = config.siteId;
+    node.days = config.days;
+    node.limit = config.limit;
 
     node.on("input", async function (msg, send, done) {
       send = send || node.send.bind(node);
@@ -152,7 +156,8 @@ function createOutputNode(RED, type, label, execute) {
       if (!node.server) {
         const error = new Error("A WiFi Analyzer Pro connection must be configured");
         node.status({fill:"red",shape:"ring",text:"configuration missing"});
-        complete(error);
+        if (typeof done === "function") complete(error);
+        else node.error(error, msg);
         return;
       }
       try {
@@ -168,8 +173,8 @@ function createOutputNode(RED, type, label, execute) {
         complete();
       } catch (error) {
         node.status({fill:"red",shape:"ring",text:"request failed"});
-        node.error(error, msg);
-        complete(error);
+        if (typeof done === "function") complete(error);
+        else node.error(error, msg);
       }
     });
 
@@ -199,9 +204,7 @@ module.exports = function register(RED) {
   });
 
   createOutputNode(RED, "wifi-analyzer-feature", "WiFi Analyzer Pro Feature", async (node, msg) => {
-    const slug = String(node.context().get("featureSlug") || node.featureSlug || "");
-    const configuredSlug = node._config && node._config.slug;
-    const featureSlug = configuredSlug || node.featureSlug || slug;
+    const featureSlug = node.featureSlug;
     if (!FEATURE_SLUG.test(featureSlug)) {
       throw new Error("A valid WiFi Analyzer Pro feature slug must be configured");
     }
