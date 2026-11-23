@@ -54,6 +54,28 @@ For multi-worker or horizontally scaled deployments, enforce aggregate limits
 at the gateway as well; these local buckets do not coordinate between processes.
 
 
+
+## Authenticated live-stream transport
+
+The live WebSocket endpoint does not accept long-lived bearer session tokens in
+its URL. A client first requests a random, one-use ticket over the authenticated
+REST API. The ticket is short-lived, bound to the authenticated user/session and
+an explicit site set, and passed in the WebSocket subprotocol header rather
+than a query string. Ticket issuance is permission-checked, rate-limited and
+requires a successful security-audit write.
+
+The server revalidates the session, `sites.read` permission and site assignments
+while the connection is open. Logout, expiry or loss of any subscribed site
+closes the stream. Tickets are held in memory and consumed once. The stream
+is read-only and accepts no application commands.
+
+The event hub has bounded connection and queue limits, caps event size, closes
+slow consumers, and uses WebSocket ping/pong timeouts. Event summaries omit
+SSIDs, BSSIDs, client/MAC identifiers, IP addresses and raw scan payloads.
+The stream is process-local and is not a durable log or a shared multi-replica
+message bus; clients must refresh REST snapshots after reconnecting.
+
+
 ## Session lifecycle and memory bounds
 
 Bearer sessions are process-local and expire after the configured session TTL. The local account directory is limited to 100 users, and each account may hold at most 16 concurrent sessions. On a new successful login at that limit, the oldest session for that same account is revoked; another user's sessions are never evicted to make room. Expired or malformed session records are pruned when a new session is issued. This places a hard upper bound of 1,600 entries on the in-memory session table. Users should sign out of unused devices and sign in again if an older session is displaced.
