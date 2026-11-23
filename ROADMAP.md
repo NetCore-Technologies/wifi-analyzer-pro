@@ -67,11 +67,19 @@ Goal: keep the existing dashboard dependable and make shipped functionality veri
 - ✅ Multi-site Fleet Overview with latest-per-site aggregate telemetry, five-minute freshness classification and scoped router-agent health/snapshot summaries.
 - ✅ Bounded token-bucket API rate limits for setup/login, scans, speed tests, feature execution, site audits, capture startup, report enqueue and webhook enqueue; authenticated limits are per account and return HTTP 429 with Retry-After.
 - ✅ Authenticated, site-scoped WebSocket streaming with single-use tickets, session/scope revocation and bounded clients.
-- 📋 Security review of LAN deployment, session lifecycle and cross-origin development settings.
+- ✅ LAN/session/CORS security review: allowlisted Host checks on GET/POST/OPTIONS/WebSocket, DNS-rebinding regression tests, exact-origin CORS validation, role-change session revocation, bounded bearer-token inputs and strict WebSocket control-frame parsing. This is targeted hardening, not a third-party penetration-test attestation.
 
 ---
 
 
+
+### LAN, session and cross-origin hardening delivered
+
+- ✅ Same-origin browser requests are validated against an explicit Host allowlist on GET, POST, OPTIONS and WebSocket upgrades; arbitrary attacker-controlled matching Origin/Host pairs are rejected.
+- ✅ CORS configuration accepts only exact HTTP(S) origins without paths, userinfo, query strings or wildcards. Compose and systemd pass the explicit origin list independently from the Host allowlist.
+- ✅ Role changes revoke existing bearer sessions so old tokens cannot silently inherit upgraded permissions. Session input is bounded and non-string/oversized token values fail closed.
+- ✅ WebSocket control frames require masked, final, bounded, canonical frames; malformed close codes and invalid UTF-8 close reasons are rejected.
+- ✅ Regression tests cover DNS rebinding, trusted LAN hosts, CORS preflight/configuration, malformed bearer tokens, role-change revocation and WebSocket control-frame validation. These checks are not a substitute for an independent penetration test.
 
 ### Multi-site Fleet Overview delivered
 
