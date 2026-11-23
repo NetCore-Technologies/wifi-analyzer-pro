@@ -36,7 +36,9 @@ Incidents transition through active, acknowledged and resolved. Acknowledgements
 - Rules are limited to 100 per site. Resolved incident history is retained for up to 365 days and bounded to 20,000 events per site; active incidents are not discarded to satisfy the history limit.
 - SQLite state is stored outside the repository with owner-only permissions on POSIX systems. Override the database path with `WIFI_ANALYZER_ALERT_DB`.
 
-External email, Slack, Discord and MQTT delivery are not configured by this feature. `quiet_hours_active` is currently a persisted suppression indicator, not proof that an external notification was sent or withheld.
+External notifications use the optional alert-to-webhook bridge documented in `ALERT_WEBHOOK_BRIDGE.md`. Incident transitions are written to a durable SQLite outbox with the incident change. The bridge applies the saved subscription's event, severity and site filters, signs matching events using a protected external key file and enqueues them into the existing DNS-pinned HTTPS delivery queue. Email, Slack, Discord and MQTT transports are not built into the alert engine itself.
+
+When the incident snapshot has `quiet_hours_active=true`, the bridge marks its transition `suppressed` and does not enqueue it. The incident remains visible and can still be acknowledged or resolved. Other delivery failures remain retryable in the notification outbox; `queued` means prepared for the dispatcher, not accepted by the destination. The Webhook Delivery Center reports the actual HTTP delivery outcome separately.
 
 ## Privacy and interpretation
 
