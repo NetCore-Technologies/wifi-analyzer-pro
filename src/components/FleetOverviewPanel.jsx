@@ -161,7 +161,7 @@ export default function FleetOverviewPanel() {
     const snapshot = snapshotByAgent.get(agent.agent_id);
     return {
       ...agent,
-      site_id: snapshot?.site_id || null,
+      site_id: snapshot?.site_id || agent.site_id || null,
       snapshot,
     };
   }), [agents, snapshotByAgent]);
