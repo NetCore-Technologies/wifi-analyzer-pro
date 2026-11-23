@@ -105,7 +105,7 @@ class AlertWebhookWorkerTests(unittest.TestCase):
         )
         self.assertEqual(recovered["resolved_event_ids"], [event_id])
 
-        transitions = self.alerts.pending_notifications(now=(self.now + timedelta(minutes=10)).isoformat())
+        transitions = self.alerts.pending_notifications(now=(self.now + timedelta(minutes=4)).isoformat())
         self.assertEqual([item["transition"] for item in transitions], [
             "opened", "acknowledged", "resolved",
         ])
