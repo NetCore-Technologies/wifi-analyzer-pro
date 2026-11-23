@@ -58,6 +58,20 @@ jobs:
       - run: npm run build
       - run: test -s dist/index.html
 
+  node-red:
+    name: Node-RED integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check Node-RED contribution
+        run: node --check integrations/node-red/wifi-analyzer.js
+      - name: Test Node-RED API client and node registration
+        working-directory: integrations/node-red
+        run: npm test
+
   backend:
     name: Python backend tests
     runs-on: ubuntu-latest
