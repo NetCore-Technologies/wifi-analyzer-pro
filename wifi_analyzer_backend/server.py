@@ -899,7 +899,9 @@ class Handler(BaseHTTPRequestHandler):
     MAX_JSON_BODY = 1024 * 1024
 
     def log_message(self, fmt, *args):
-        print(f"  {self.address_string()} {args[0]} {args[1]}")
+        request_line = str(args[0]) if args else ""
+        request_line = re.sub(r"([?&]ticket=)[^&\\s]+", r"\\1[redacted]", request_line)
+        print(f"  {self.address_string()} {request_line} {args[1] if len(args) > 1 else ''}")
 
     def add_common_headers(self):
         origin = self.headers.get("Origin")
@@ -1030,6 +1032,9 @@ class Handler(BaseHTTPRequestHandler):
             pass
 
     def handle_live_websocket(self, request_url):
+        if request_url.query or request_url.fragment:
+            self.send_json({"error": "WebSocket credentials are accepted only in the one-use subprotocol header"}, 400)
+            return
         if not self.origin_allowed():
             self.send_json({"error": "Origin is not allowed"}, 403)
             return
@@ -1105,7 +1110,16 @@ class Handler(BaseHTTPRequestHandler):
         awaiting_pong_since = None
         try:
             while not client.closed.is_set():
-                if not AUTH.validate(client.session_token):
+                current_scope = AUTH.site_access(client.session_token)
+                if (
+                    not AUTH.validate(client.session_token)
+                    or not AUTH.has_permission(client.session_token, "sites.read")
+                    or current_scope is None
+                    or (
+                        not current_scope["all_sites"]
+                        and not client.site_ids.issubset(set(current_scope["site_ids"]))
+                    )
+                ):
                     self.websocket_close(1008)
                     break
                 try:
@@ -1113,7 +1127,16 @@ class Handler(BaseHTTPRequestHandler):
                 except __import__("queue").Empty:
                     event = None
                 if event is not None:
-                    if not AUTH.validate(client.session_token):
+                    current_scope = AUTH.site_access(client.session_token)
+                    if (
+                        not AUTH.validate(client.session_token)
+                        or not AUTH.has_permission(client.session_token, "sites.read")
+                        or current_scope is None
+                        or (
+                            not current_scope["all_sites"]
+                            and not client.site_ids.issubset(set(current_scope["site_ids"]))
+                        )
+                    ):
                         self.websocket_close(1008)
                         break
                     self.send_websocket_frame(0x1, event)
