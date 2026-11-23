@@ -43,7 +43,7 @@ ROLE_PERMISSIONS = {
     "owner": frozenset({
         "users.manage", "billing.manage", "agents.manage", "agents.read",
         "reports.manage", "reports.read",
-        "webhooks.manage", "webhooks.read",
+        "webhooks.manage", "webhooks.read", "plugins.manage",
         "sites.manage", "sites.read",
         "diagnostics.run", "diagnostics.read",
     }),
@@ -731,7 +731,7 @@ class AuthManager:
     def has_permission(self, token: str | None, permission: str) -> bool:
         if permission not in {
             "users.manage", "billing.manage", "agents.manage", "agents.read",
-            "reports.manage", "reports.read", "webhooks.manage", "webhooks.read",
+            "reports.manage", "reports.read", "webhooks.manage", "webhooks.read", "plugins.manage",
             "sites.manage", "sites.read",
             "diagnostics.run", "diagnostics.read",
         }:
