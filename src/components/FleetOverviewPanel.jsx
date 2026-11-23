@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiBase, apiFetch } from "../lib/api.js";
-import { Activity, AlertTriangle, Clock3, RadioTower, RefreshCw, Router, Wifi, WifiOff } from "lucide-react";
+import { AlertTriangle, Clock3, RadioTower, RefreshCw, Router, Wifi } from "lucide-react";
 
 const panel = { background:"#0c1120", border:"1px solid #1e2d47", borderRadius:10, padding:15 };
 const muted = "#94a3b8";
@@ -98,6 +98,16 @@ export default function FleetOverviewPanel() {
             message: result.error?.message || "Data source is unavailable",
             status: result.error?.status || null,
           });
+          if (result.key === "sites") {
+            setSites([]);
+            setAllSites(false);
+          } else if (result.key === "telemetry") {
+            setRollups([]);
+          } else if (result.key === "agents") {
+            setAgents([]);
+          } else if (result.key === "snapshots") {
+            setSnapshots([]);
+          }
           continue;
         }
         if (result.key === "sites") {
