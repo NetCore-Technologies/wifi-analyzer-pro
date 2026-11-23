@@ -1,0 +1,33 @@
+{
+  "name": "node-red-contrib-wifi-analyzer-pro",
+  "version": "1.0.0",
+  "description": "Node-RED nodes for WiFi Analyzer Pro scans, feature execution, telemetry and site alerts",
+  "license": "MIT",
+  "author": "NetCore Technologies",
+  "homepage": "https://github.com/NetCore-Technologies/wifi-analyzer-pro",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NetCore-Technologies/wifi-analyzer-pro.git",
+    "directory": "integrations/node-red"
+  },
+  "keywords": [
+    "node-red",
+    "wifi",
+    "wireless",
+    "network",
+    "analyzer",
+    "diagnostics",
+    "home-automation"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "node-red": {
+    "nodes": {
+      "wifi-analyzer-pro": "wifi-analyzer.js"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
+  }
+}
