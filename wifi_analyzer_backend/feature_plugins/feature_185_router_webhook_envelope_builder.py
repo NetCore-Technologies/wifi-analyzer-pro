@@ -15,6 +15,7 @@ MAX_EVENTS = 500
 MAX_ALLOWED_HOSTS = 50
 MAX_ATTRIBUTES = 16
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+SITE_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 EVENT_TYPE = re.compile(r"^[a-z][a-z0-9_.-]{0,79}$")
 HOST_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 ATTRIBUTE_KEYS = {
@@ -28,6 +29,12 @@ ATTRIBUTE_KEYS = {
 def _id(value: object, field: str) -> str:
     if not isinstance(value, str) or not IDENTIFIER.fullmatch(value):
         raise ValueError(f"{field} must be a 1 to 64 character identifier")
+    return value
+
+
+def _site_identifier(value: object, field: str) -> str:
+    if not isinstance(value, str) or not SITE_IDENTIFIER.fullmatch(value):
+        raise ValueError(f"{field} must be a 1 to 128 character site identifier")
     return value
 
 
@@ -131,7 +138,7 @@ def _event(value: object, index: int) -> dict:
     occurred_at = _timestamp(value.get("occurred_at"), f"{field}.occurred_at")
     site_id = value.get("site_id")
     if site_id is not None:
-        site_id = _id(site_id, f"{field}.site_id")
+        site_id = _site_identifier(site_id, f"{field}.site_id")
     router_id = value.get("router_id")
     if router_id is not None:
         router_id = _id(router_id, f"{field}.router_id")
