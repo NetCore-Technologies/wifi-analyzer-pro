@@ -1143,6 +1143,33 @@ export default function App() {
     return()=>{disposed=true;clearInterval(intervalId);};
   },[preferences.refreshIntervalSeconds]);
 
+  useEffect(()=>{
+    if(!liveMode){
+      setLiveStreamStatus("idle");
+      return;
+    }
+    let disposed=false;
+    const stream=createLiveStream({
+      onStatus:status=>{
+        if(!disposed)setLiveStreamStatus(status.status);
+      },
+      onEvent:event=>{
+        if(disposed)return;
+        const eventTime=Date.parse(event.occurred_at);
+        if(Number.isFinite(eventTime))setLastUpdated(eventTime);
+        if(event.site_id==="local" && event.type==="diagnostics.updated"){
+          setLiveDiag(previous=>({...previous,...event.data}));
+        }
+        window.dispatchEvent(new CustomEvent("wifi-analyzer:live-event",{detail:event}));
+      },
+      onError:()=>{},
+    });
+    return()=>{
+      disposed=true;
+      stream.close();
+    };
+  },[liveMode]);
+
   const observationSource=liveMode?"live":"demo";
   const networks=selectObservationRows({
     source:observationSource,
