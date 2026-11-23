@@ -1,0 +1,220 @@
+<script type="text/javascript">
+RED.nodes.registerType('wifi-analyzer-config', {
+  category: 'config',
+  defaults: {
+    name: { value: '' },
+    baseUrl: { value: 'http://127.0.0.1:199', required: true }
+  },
+  credentials: {
+    bearerToken: { type: 'password' }
+  },
+  label: function () { return this.name || this.baseUrl || 'WiFi Analyzer Pro'; }
+});
+
+RED.nodes.registerType('wifi-analyzer-scan', {
+  category: 'network',
+  color: '#b8d8e8',
+  defaults: {
+    name: { value: '' },
+    server: { value: '', type: 'wifi-analyzer-config', required: true },
+    timeoutMs: { value: 15000, validate: RED.validators.number() }
+  },
+  inputs: 1,
+  outputs: 1,
+  icon: 'font-awesome/fa-wifi',
+  label: function () { return this.name || 'WiFi Analyzer Pro Scan'; }
+});
+
+RED.nodes.registerType('wifi-analyzer-feature', {
+  category: 'network',
+  color: '#b8d8e8',
+  defaults: {
+    name: { value: '' },
+    server: { value: '', type: 'wifi-analyzer-config', required: true },
+    slug: { value: '', required: true },
+    timeoutMs: { value: 15000, validate: RED.validators.number() }
+  },
+  inputs: 1,
+  outputs: 1,
+  icon: 'font-awesome/fa-cogs',
+  label: function () { return this.name || 'WiFi Analyzer Pro Feature'; }
+});
+
+RED.nodes.registerType('wifi-analyzer-telemetry', {
+  category: 'network',
+  color: '#b8d8e8',
+  defaults: {
+    name: { value: '' },
+    server: { value: '', type: 'wifi-analyzer-config', required: true },
+    siteId: { value: '' },
+    days: { value: 7, validate: RED.validators.number() },
+    limit: { value: 5000, validate: RED.validators.number() },
+    timeoutMs: { value: 15000, validate: RED.validators.number() }
+  },
+  inputs: 1,
+  outputs: 1,
+  icon: 'font-awesome/fa-line-chart',
+  label: function () { return this.name || 'WiFi Analyzer Pro Telemetry'; }
+});
+
+RED.nodes.registerType('wifi-analyzer-alerts', {
+  category: 'network',
+  color: '#b8d8e8',
+  defaults: {
+    name: { value: '' },
+    server: { value: '', type: 'wifi-analyzer-config', required: true },
+    siteId: { value: '', required: true },
+    timeoutMs: { value: 15000, validate: RED.validators.number() }
+  },
+  inputs: 1,
+  outputs: 1,
+  icon: 'font-awesome/fa-bell',
+  label: function () { return this.name || 'WiFi Analyzer Pro Alerts'; }
+});
+
+RED.nodes.registerType('wifi-analyzer-catalog', {
+  category: 'network',
+  color: '#b8d8e8',
+  defaults: {
+    name: { value: '' },
+    server: { value: '', type: 'wifi-analyzer-config', required: true },
+    timeoutMs: { value: 15000, validate: RED.validators.number() }
+  },
+  inputs: 1,
+  outputs: 1,
+  icon: 'font-awesome/fa-list',
+  label: function () { return this.name || 'WiFi Analyzer Pro Feature Catalog'; }
+});
+</script>
+
+<script type="text/html" data-template-name="wifi-analyzer-config">
+  <div class="form-row">
+    <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+    <input type="text" id="node-config-input-name" placeholder="WiFi Analyzer Pro">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-baseUrl"><i class="fa fa-globe"></i> Base URL</label>
+    <input type="text" id="node-config-input-baseUrl" placeholder="https://wifi-analyzer.example.internal">
+  </div>
+  <div class="form-row">
+    <label for="node-config-input-bearerToken"><i class="fa fa-key"></i> API token</label>
+    <input type="password" id="node-config-input-bearerToken" autocomplete="new-password">
+  </div>
+  <div class="form-tips">
+    Use HTTPS for remote endpoints. Plain HTTP is accepted only for a loopback API on the same host.
+    The token is stored as a Node-RED credential and is never placed in a flow message.
+  </div>
+</script>
+<script type="text/html" data-help-name="wifi-analyzer-config">
+  <p>Shared, credential-protected connection to WiFi Analyzer Pro.</p>
+</script>
+
+<script type="text/html" data-template-name="wifi-analyzer-scan">
+  <div class="form-row">
+    <label for="node-input-name">Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-server">Connection</label>
+    <input type="text" id="node-input-server">
+  </div>
+  <div class="form-row">
+    <label for="node-input-timeoutMs">Timeout (ms)</label>
+    <input type="number" id="node-input-timeoutMs" min="1000" max="60000">
+  </div>
+</script>
+<script type="text/html" data-help-name="wifi-analyzer-scan">
+  <p>Run an authenticated live scan using <code>GET /api/scan</code>. The output payload contains the scan response and network records.</p>
+</script>
+
+<script type="text/html" data-template-name="wifi-analyzer-feature">
+  <div class="form-row">
+    <label for="node-input-name">Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-server">Connection</label>
+    <input type="text" id="node-input-server">
+  </div>
+  <div class="form-row">
+    <label for="node-input-slug">Feature slug</label>
+    <input type="text" id="node-input-slug" placeholder="channel_congestion">
+  </div>
+  <div class="form-row">
+    <label for="node-input-timeoutMs">Timeout (ms)</label>
+    <input type="number" id="node-input-timeoutMs" min="1000" max="60000">
+  </div>
+</script>
+<script type="text/html" data-help-name="wifi-analyzer-feature">
+  <p>Execute one registered read-only feature. Supply the feature's JSON parameters in <code>msg.payload</code>; the API validates the feature contract and permissions.</p>
+</script>
+
+<script type="text/html" data-template-name="wifi-analyzer-telemetry">
+  <div class="form-row">
+    <label for="node-input-name">Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-server">Connection</label>
+    <input type="text" id="node-input-server">
+  </div>
+  <div class="form-row">
+    <label for="node-input-siteId">Site ID (optional)</label>
+    <input type="text" id="node-input-siteId">
+  </div>
+  <div class="form-row">
+    <label for="node-input-days">History days</label>
+    <input type="number" id="node-input-days" min="1" max="365">
+  </div>
+  <div class="form-row">
+    <label for="node-input-limit">Maximum records</label>
+    <input type="number" id="node-input-limit" min="1" max="5000">
+  </div>
+  <div class="form-row">
+    <label for="node-input-timeoutMs">Timeout (ms)</label>
+    <input type="number" id="node-input-timeoutMs" min="1000" max="60000">
+  </div>
+</script>
+<script type="text/html" data-help-name="wifi-analyzer-telemetry">
+  <p>Fetch privacy-preserving minute-level aggregate telemetry. When Site ID is blank, the API returns only sites assigned to the API token's account.</p>
+</script>
+
+<script type="text/html" data-template-name="wifi-analyzer-alerts">
+  <div class="form-row">
+    <label for="node-input-name">Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-server">Connection</label>
+    <input type="text" id="node-input-server">
+  </div>
+  <div class="form-row">
+    <label for="node-input-siteId">Site ID</label>
+    <input type="text" id="node-input-siteId" required>
+  </div>
+  <div class="form-row">
+    <label for="node-input-timeoutMs">Timeout (ms)</label>
+    <input type="number" id="node-input-timeoutMs" min="1000" max="60000">
+  </div>
+</script>
+<script type="text/html" data-help-name="wifi-analyzer-alerts">
+  <p>Read site-scoped alert rules, incident history and notification-preparation status. Requires explicit site access.</p>
+</script>
+
+<script type="text/html" data-template-name="wifi-analyzer-catalog">
+  <div class="form-row">
+    <label for="node-input-name">Name</label>
+    <input type="text" id="node-input-name">
+  </div>
+  <div class="form-row">
+    <label for="node-input-server">Connection</label>
+    <input type="text" id="node-input-server">
+  </div>
+  <div class="form-row">
+    <label for="node-input-timeoutMs">Timeout (ms)</label>
+    <input type="number" id="node-input-timeoutMs" min="1000" max="60000">
+  </div>
+</script>
+<script type="text/html" data-help-name="wifi-analyzer-catalog">
+  <p>Fetch the live, authenticated catalogue of registered WiFi Analyzer Pro feature slugs and parameter descriptions.</p>
+</script>
