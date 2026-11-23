@@ -201,6 +201,33 @@ class AuthManagerTests(unittest.TestCase):
             self.auth.create_user(admin_token, "admin3", "third admin password", "admin")
         self.assertEqual(admin["role"], "admin")
 
+    def test_role_changes_revoke_existing_sessions_before_new_permissions_apply(self):
+        owner_token = self.auth.setup("correct horse battery staple")
+        analyst = self.auth.create_user(
+            owner_token,
+            "role.change",
+            "role change secure password",
+            "viewer",
+        )
+        old_token = self.auth.login("role change secure password", "role.change")
+        self.assertTrue(self.auth.has_permission(old_token, "diagnostics.read"))
+        self.assertFalse(self.auth.has_permission(old_token, "diagnostics.run"))
+
+        self.auth.update_user(owner_token, analyst["id"], role="analyst")
+        self.assertFalse(self.auth.validate(old_token))
+        self.assertFalse(self.auth.has_permission(old_token, "diagnostics.run"))
+
+        new_token = self.auth.login("role change secure password", "role.change")
+        self.assertTrue(self.auth.has_permission(new_token, "diagnostics.run"))
+        self.assertTrue(self.auth.validate(new_token))
+
+    def test_non_string_and_oversized_session_tokens_fail_closed(self):
+        self.auth.setup("correct horse battery staple")
+        for value in (0, object(), [], "x" * 257):
+            self.assertFalse(self.auth.validate(value))
+            self.assertIsNone(self.auth.identity(value))
+            self.assertFalse(self.auth.logout(value))
+
     def test_owner_cannot_be_disabled_or_demoted_by_an_administrator(self):
         owner = self.auth.setup("owner passphrase is secure")
         admin = self.auth.create_user(owner, "admin2", "second admin password", "admin")
