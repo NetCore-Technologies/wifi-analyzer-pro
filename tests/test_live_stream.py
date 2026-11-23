@@ -29,8 +29,9 @@ class LiveStreamHubTests(unittest.TestCase):
         created = self.ticket()
         self.assertEqual(created["expires_in_seconds"], 10)
         self.assertEqual(created["site_ids"], ["office"])
-        self.assertTrue(created["websocket_url"].startswith("/ws/live?ticket="))
-        self.assertNotIn("session-secret", created["ticket"])
+        self.assertEqual(created["websocket_url"], "/ws/live")
+        self.assertTrue(created["websocket_protocol"].startswith("wfa-ticket."))
+        self.assertNotIn("session-secret", created["websocket_protocol"])
         self.assertIsNotNone(self.hub.consume_ticket(created["ticket"], now=109.9))
         self.assertIsNone(self.hub.consume_ticket(created["ticket"], now=109.9))
 
