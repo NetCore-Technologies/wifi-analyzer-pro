@@ -76,6 +76,31 @@ The stream is process-local and is not a durable log or a shared multi-replica
 message bus; clients must refresh REST snapshots after reconnecting.
 
 
+
+## Third-party feature plugins
+
+External feature packages are disabled until explicitly enabled by an owner or
+administrator. The host verifies an Ed25519 publisher signature, the signed
+manifest and exact source SHA-256, API compatibility, package layout and
+file/directory write permissions before importing a plugin. A local trust
+store controls which publisher keys are accepted. Plugin lifecycle changes
+are rate limited and audit-first.
+
+**A valid signature does not sandbox Python.** An enabled plugin executes in
+the API process with the service account's OS permissions and can access
+resources that process can access. The current plugin API has no separate
+process, syscall, network, memory or execution-time isolation. Only install
+reviewed code from trusted publishers. Do not add a publisher key merely
+because a package is signed, and do not enable untrusted or user-uploaded
+Python code. Plugin manifest permission declarations are enforced for normal
+API invocation but are not a security boundary against malicious plugin code.
+
+The plugin directory and trust store must not be writable by untrusted users.
+Symlinked and group/world-writable package files are rejected. Package and
+source sizes are bounded. The API intentionally provides no remote plugin
+upload/install route.
+
+
 ## Session lifecycle and memory bounds
 
 Bearer sessions are process-local and expire after the configured session TTL. The local account directory is limited to 100 users, and each account may hold at most 16 concurrent sessions. On a new successful login at that limit, the oldest session for that same account is revoked; another user's sessions are never evicted to make room. Expired or malformed session records are pruned when a new session is issued. This places a hard upper bound of 1,600 entries on the in-memory session table. Users should sign out of unused devices and sign in again if an older session is displaced.
