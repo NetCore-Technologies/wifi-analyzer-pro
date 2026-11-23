@@ -167,7 +167,7 @@ export function createLiveStream({
 
       candidate.onopen = () => {
         if (!active || socket !== candidate) {
-          try { candidate.close(1000, "stream no longer active"); } catch {}
+          try { candidate.close(1000, "stream no longer active"); } catch { /* Ignore a close race during cleanup. */ }
           return;
         }
         retryAttempt = 0;
@@ -228,7 +228,7 @@ export function createLiveStream({
       const current = socket;
       socket = null;
       if (current && current.readyState < 2) {
-        try { current.close(1000, "client closed"); } catch {}
+        try { current.close(1000, "client closed"); } catch { /* The peer may have disconnected already. */ }
       }
       setStatus("stopped");
     },
