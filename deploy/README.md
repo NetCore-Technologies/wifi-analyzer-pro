@@ -16,7 +16,11 @@ Enable the durable multi-subscription dispatcher when webhook delivery is requir
 
     docker compose --profile webhook-dispatcher up -d
 
-The API and dispatcher share the application state volume. The dispatcher is a non-root sidecar with no listening port and does not receive signing secrets. The report worker is configured separately because it requires a destination URL, exact DNS allowlist and HMAC signing secret. Do not put those values in the repository or a committed Compose file.
+The API and dispatcher share the application state volume. The dispatcher is a non-root sidecar with no listening port and does not receive signing secrets. Site-alert notification preparation is a separate optional bridge; it requires an external protected signing-key file and starts with the `alert-webhooks` profile. To run both the bridge and dispatcher, use:
+
+    docker compose --profile webhook-dispatcher --profile alert-webhooks up -d
+
+The bridge prepares and queues signed event notifications without network access; the dispatcher transmits them. The report worker is configured separately because it requires a destination URL, exact DNS allowlist and HMAC signing secret. Do not put those values in the repository or a committed Compose file.
 
 Useful operations:
 
@@ -56,6 +60,13 @@ The API binds to loopback. Create /etc/wifi-analyzer-pro/server.env as root-owne
 The webhook dispatcher can be enabled independently:
 
     sudo systemctl enable --now wifi-analyzer-webhook-dispatcher.service
+
+The alert notification bridge is optional and needs a protected
+`/etc/wifi-analyzer-pro/webhook-signing-keys.json` file before it is enabled:
+
+    sudo install -m 0644 deploy/systemd/wifi-analyzer-alert-webhook-bridge.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now wifi-analyzer-alert-webhook-bridge.service
 
 The scheduled report worker remains disabled until its protected environment file exists:
 
