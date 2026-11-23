@@ -509,3 +509,95 @@ class WiFiTelemetryStore:
                 item.pop(key, None)
             result.append(item)
         return result
+
+    def latest(
+        self,
+        *,
+        site_ids: list[str] | None = None,
+        days: int = 1,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Return at most one latest aggregate minute per site.
+
+        Unlike history(), this is a per-site latest-row query, so a busy site
+        cannot consume the result limit and hide quieter sites.
+        """
+        if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= self.retention_days:
+            raise ValueError(f"days must be an integer between 1 and {self.retention_days}")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
+            raise ValueError("limit must be an integer between 1 and 100")
+        if site_ids is not None:
+            if not isinstance(site_ids, list) or len(site_ids) > 100:
+                raise ValueError("site_ids must contain no more than 100 sites")
+            site_ids = [_site_id(value) for value in site_ids]
+            if len(site_ids) != len(set(site_ids)):
+                raise ValueError("site_ids must be unique")
+            if not site_ids:
+                return []
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        clauses = [
+            "minute_utc >= ?",
+            "minute_utc = (SELECT MAX(latest.minute_utc) FROM wifi_telemetry_minute AS latest "
+            "WHERE latest.site_id=wifi_telemetry_minute.site_id AND latest.minute_utc >= ?)",
+        ]
+        values: list[object] = [cutoff, cutoff]
+        if site_ids is not None:
+            clauses.append("site_id IN (" + ", ".join("?" for _ in site_ids) + ")")
+            values.extend(site_ids)
+        query = """
+            SELECT site_id, minute_utc, scan_count,
+                network_count_sum, network_count_min, network_count_max,
+                open_network_count_sum, band_24_count_sum, band_5_count_sum, band_6_count_sum,
+                rssi_sum, rssi_count, rssi_min, rssi_max,
+                diagnostics_count, latency_sum, latency_count, latency_min, latency_max,
+                jitter_sum, jitter_count, jitter_min, jitter_max,
+                packet_loss_sum, packet_loss_count, packet_loss_min, packet_loss_max,
+                speedtest_count,
+                speedtest_download_sum, speedtest_download_count, speedtest_download_min, speedtest_download_max,
+                speedtest_upload_sum, speedtest_upload_count, speedtest_upload_min, speedtest_upload_max,
+                speedtest_ping_sum, speedtest_ping_count, speedtest_ping_min, speedtest_ping_max,
+                updated_at
+            FROM wifi_telemetry_minute
+            WHERE """ + " AND ".join(clauses) + """
+            ORDER BY site_id ASC
+            LIMIT ?
+        """
+        with self._connection() as db:
+            rows = db.execute(query, (*values, limit)).fetchall()
+
+        result = []
+        for row in rows:
+            item = dict(row)
+            scan_count = item["scan_count"]
+            rssi_count = item["rssi_count"]
+            diagnostic_count = item["diagnostics_count"]
+            item.update({
+                "average_network_count": item["network_count_sum"] / scan_count if scan_count else None,
+                "average_open_network_count": item["open_network_count_sum"] / scan_count if scan_count else None,
+                "average_2_4ghz_network_count": item["band_24_count_sum"] / scan_count if scan_count else None,
+                "average_5ghz_network_count": item["band_5_count_sum"] / scan_count if scan_count else None,
+                "average_6ghz_network_count": item["band_6_count_sum"] / scan_count if scan_count else None,
+                "average_rssi_dbm": item["rssi_sum"] / rssi_count if rssi_count else None,
+                "average_latency_ms": item["latency_sum"] / item["latency_count"] if item["latency_count"] else None,
+                "average_jitter_ms": item["jitter_sum"] / item["jitter_count"] if item["jitter_count"] else None,
+                "average_packet_loss_pct": item["packet_loss_sum"] / item["packet_loss_count"] if item["packet_loss_count"] else None,
+                "average_speedtest_download_mbps": item["speedtest_download_sum"] / item["speedtest_download_count"] if item["speedtest_download_count"] else None,
+                "average_speedtest_upload_mbps": item["speedtest_upload_sum"] / item["speedtest_upload_count"] if item["speedtest_upload_count"] else None,
+                "average_speedtest_ping_ms": item["speedtest_ping_sum"] / item["speedtest_ping_count"] if item["speedtest_ping_count"] else None,
+                "sample_count": scan_count,
+                "diagnostic_sample_count": diagnostic_count,
+                "speedtest_sample_count": item["speedtest_count"],
+            })
+            for key in (
+                "network_count_sum", "open_network_count_sum", "band_24_count_sum",
+                "band_5_count_sum", "band_6_count_sum", "rssi_sum", "rssi_count",
+                "latency_sum", "latency_count", "jitter_sum", "jitter_count",
+                "packet_loss_sum", "packet_loss_count",
+                "speedtest_download_sum", "speedtest_download_count",
+                "speedtest_upload_sum", "speedtest_upload_count",
+                "speedtest_ping_sum", "speedtest_ping_count",
+            ):
+                item.pop(key, None)
+            result.append(item)
+        return result
