@@ -4,4 +4,4 @@ tzdata>=2025.2
 # Windows only (uncomment if needed):
 # pywifi
 # comtypes
-paho-mqtt>=2.1.0,<3
+paho-mqtt>=2.2.0,<3
