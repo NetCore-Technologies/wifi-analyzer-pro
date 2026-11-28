@@ -90,11 +90,18 @@ WIFI_ANALYZER_DEMO=1 python3 wifi_analyzer_backend/server.py
 
 The `wifi-analyzer` CLI is an authenticated client for the same local API used by the dashboard. It uses the installed Wi-Fi Analyzer Pro server and feature registry; it does not create synthetic observations or silently switch to demo measurements.
 
-From the repository root:
+Install the standard console command from a source checkout:
+
+```bash
+python -m pip install .
+wifi-analyzer --help
+```
+
+This registers the `wifi-analyzer` executable and installs the Python backend dependencies plus the feature catalogue. For a source checkout without installing the package, use:
 
 ```bash
 python -m wifi_analyzer_backend.cli --help
-# Or use the launcher:
+# Or use the repository launcher:
 sh ./wifi-analyzer --help
 ```
 
