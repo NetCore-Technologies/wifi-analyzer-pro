@@ -118,6 +118,34 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("\033[", plain)
         self.assertIn("\033[1;38;2;255;131;89m", coloured)
 
+    def test_http_is_restricted_to_loopback_but_https_may_be_remote(self):
+        self.assertEqual(validate_base_url("http://127.0.0.1:199"), "http://127.0.0.1:199")
+        self.assertEqual(validate_base_url("http://[::1]:199"), "http://[::1]:199")
+        self.assertEqual(validate_base_url("https://api.example.test"), "https://api.example.test")
+        with self.assertRaisesRegex(ApiError, "require HTTPS"):
+            validate_base_url("http://192.0.2.20:199")
+        with self.assertRaisesRegex(ApiError, "require HTTPS"):
+            validate_base_url("http://router.example.test")
+
+    def test_cli_registers_sites_telemetry_security_capture_and_inspection(self):
+        self.assertEqual(build_parser().parse_args(["sites"]).command, "sites")
+        telemetry = build_parser().parse_args(["telemetry", "history", "--days", "14", "--site-id", "office"])
+        self.assertEqual(telemetry.telemetry_command, "history")
+        self.assertEqual(telemetry.days, 14)
+        self.assertEqual(telemetry.site_id, "office")
+        security = build_parser().parse_args(["security", "events", "--limit", "20"])
+        self.assertEqual(security.security_command, "events")
+        self.assertEqual(security.limit, 20)
+        self.assertEqual(build_parser().parse_args(["security", "verify"]).security_command, "verify")
+        self.assertEqual(build_parser().parse_args(["plugins"]).command, "plugins")
+        self.assertEqual(build_parser().parse_args(["agents", "health"]).agent_command, "health")
+        self.assertEqual(build_parser().parse_args(["capture", "interfaces"]).capture_command, "interfaces")
+        self.assertEqual(build_parser().parse_args(["inspect", "phy"]).target, "phy")
+
+    def test_query_path_encodes_filter_values_without_losing_site_identifiers(self):
+        self.assertEqual(query_path("/api/telemetry/history", days=7, limit=10, site_id="office west"),
+                         "/api/telemetry/history?days=7&limit=10&site_id=office+west")
+
 
 
 if __name__ == "__main__":

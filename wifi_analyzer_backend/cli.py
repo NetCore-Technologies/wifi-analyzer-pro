@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import csv
 import getpass
+import ipaddress
 import io
 import json
 import os
@@ -86,11 +87,26 @@ def save_token(path: Path, token: str) -> None:
 
 
 def validate_base_url(value: str) -> str:
-    parsed = urllib.parse.urlsplit(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    try:
+        parsed = urllib.parse.urlsplit(value)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError as error:
+        raise ApiError(f"Invalid API URL: {error}") from error
+    if parsed.scheme not in {"http", "https"} or not hostname:
         raise ApiError("API URL must be an absolute http:// or https:// URL.")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ApiError("API URL must not contain credentials, a query string or a fragment.")
+    if parsed.scheme == "http":
+        host = hostname.rstrip(".").casefold()
+        loopback = host == "localhost" or host.endswith(".localhost")
+        if not loopback:
+            try:
+                loopback = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                loopback = False
+        if not loopback:
+            raise ApiError("Remote API connections require HTTPS. Plain HTTP is permitted only for loopback hosts.")
     return value.rstrip("/")
 
 
@@ -255,6 +271,47 @@ def build_parser() -> argparse.ArgumentParser:
     adapters = commands.add_parser("adapters", help="List registered router and platform adapters.")
     add_format_option(adapters)
 
+    sites = commands.add_parser("sites", help="List site identifiers visible to the signed-in account.")
+    add_format_option(sites)
+
+    telemetry = commands.add_parser("telemetry", help="Inspect privacy-preserving aggregate telemetry.")
+    telemetry_commands = telemetry.add_subparsers(dest="telemetry_command", required=True)
+    for action, default_days, default_limit in (("latest", 1, 100), ("history", 7, 5000)):
+        item = telemetry_commands.add_parser(action, help=f"Read {action} aggregate telemetry.")
+        item.add_argument("--days", type=int, default=default_days, help="Look-back window in days.")
+        item.add_argument("--limit", type=int, default=default_limit, help="Maximum rollup records.")
+        item.add_argument("--site-id", help="Restrict results to one authorised site.")
+        add_format_option(item)
+
+    security = commands.add_parser("security", help="Inspect the security audit log and hash-chain integrity.")
+    security_commands = security.add_subparsers(dest="security_command", required=True)
+    security_commands.add_parser("summary", help="Show aggregate audit counters.")
+    events = security_commands.add_parser("events", help="List security audit events.")
+    events.add_argument("--limit", type=int, default=50)
+    events.add_argument("--before-id", type=int)
+    events.add_argument("--action")
+    events.add_argument("--outcome")
+    events.add_argument("--actor")
+    add_format_option(events)
+    security_commands.add_parser("verify", help="Verify the append-only audit hash chain.")
+
+    plugins = commands.add_parser("plugins", help="List installed and available plugins.")
+    add_format_option(plugins)
+
+    agents = commands.add_parser("agents", help="Inspect router-agent health and snapshots.")
+    agent_commands = agents.add_subparsers(dest="agent_command", required=True)
+    agent_commands.add_parser("health", help="Show the server's router-agent health report.")
+    agent_commands.add_parser("snapshots", help="List latest site-scoped agent snapshots.")
+
+    capture = commands.add_parser("capture", help="Inspect packet-capture interfaces and capture state.")
+    capture_commands = capture.add_subparsers(dest="capture_command", required=True)
+    capture_commands.add_parser("interfaces", help="List interfaces available to packet capture.")
+    capture_commands.add_parser("status", help="Show the current packet-capture state.")
+
+    inspect = commands.add_parser("inspect", help="Inspect host system, Wi-Fi PHY and link information.")
+    inspect.add_argument("target", choices=("system", "phy", "link", "wifi"))
+    add_format_option(inspect)
+
     features = commands.add_parser("features", aliases=["tools"], help="Browse and execute the built-in feature catalogue.")
     feature_commands = features.add_subparsers(dest="feature_command", required=True)
     listing = feature_commands.add_parser("list", help="List callable feature tools.")
@@ -285,6 +342,19 @@ def output_json(value: Any, *, pretty: bool = True) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2 if pretty else None, allow_nan=False))
 
 
+def format_records(rows: Any, *, preferred: list[tuple[str, str]] | None = None, color: bool = False) -> str:
+    records = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+    if not records:
+        return "No records returned."
+    columns = preferred or [(key, key.replace("_", " ").upper()) for key in list(records[0])[:7]]
+    return format_table(records, columns, color=color)
+
+
+def query_path(path: str, **parameters: Any) -> str:
+    encoded = urllib.parse.urlencode({key: value for key, value in parameters.items() if value is not None})
+    return f"{path}?{encoded}" if encoded else path
+
+
 def run_command(args: argparse.Namespace, client: ApiClient) -> int:
     command = args.command
     if command == "status":
@@ -305,6 +375,80 @@ def run_command(args: argparse.Namespace, client: ApiClient) -> int:
             columns = [("adapter_id", "ADAPTER"), ("name", "NAME"), ("version", "VERSION"), ("description", "DESCRIPTION")]
             print(format_table([row for row in rows if isinstance(row, dict)], columns, color=terminal_color_enabled(args)))
             print(f"\n{len(rows)} adapter(s)")
+        return 0
+    if command == "sites":
+        data = client.request("GET", "/api/sites")
+        if args.format == "json":
+            output_json(data)
+        else:
+            rows = [{"site_id": value} for value in data.get("site_ids", []) if isinstance(value, str)]
+            print(format_records(rows, preferred=[("site_id", "SITE ID")], color=terminal_color_enabled(args)))
+            print(f"\n{len(rows)} site(s)")
+        return 0
+    if command == "telemetry":
+        endpoint = "/api/telemetry/latest" if args.telemetry_command == "latest" else "/api/telemetry/history"
+        data = client.request("GET", query_path(endpoint, days=args.days, limit=args.limit, site_id=args.site_id))
+        if args.format == "json":
+            output_json(data)
+        else:
+            rows = data.get("rollups", []) if isinstance(data, dict) else []
+            preferred = [
+                ("site_id", "SITE"), ("minute", "MINUTE"), ("timestamp", "TIMESTAMP"),
+                ("scan_count", "SCANS"), ("diagnostic_count", "DIAGNOSTICS"),
+            ]
+            available = [column for column in preferred if any(isinstance(row, dict) and column[0] in row for row in rows)]
+            print(format_records(rows, preferred=available or None, color=terminal_color_enabled(args)))
+            print(f"\n{len(rows)} aggregate rollup(s) · privacy-preserving site metrics")
+        return 0
+    if command == "security":
+        if args.security_command == "summary":
+            output_json(client.request("GET", "/api/security/audit/summary"))
+        elif args.security_command == "verify":
+            output_json(client.request("GET", "/api/security/audit/verify"))
+        else:
+            data = client.request("GET", query_path(
+                "/api/security/audit", limit=args.limit, before_id=args.before_id,
+                action=args.action, outcome=args.outcome, actor_username=args.actor,
+            ))
+            if args.format == "json":
+                output_json(data)
+            else:
+                print(format_records(
+                    data.get("events", []) if isinstance(data, dict) else [],
+                    preferred=[("id", "ID"), ("created_at", "TIME"), ("actor_username", "ACTOR"),
+                               ("action", "ACTION"), ("outcome", "OUTCOME")],
+                    color=terminal_color_enabled(args),
+                ))
+        return 0
+    if command == "plugins":
+        data = client.request("GET", "/api/plugins")
+        if args.format == "json":
+            output_json(data)
+        else:
+            rows = data.get("plugins", []) if isinstance(data, dict) else data
+            print(format_records(rows, color=terminal_color_enabled(args)))
+        return 0
+    if command == "agents":
+        endpoint = "/api/agents/health" if args.agent_command == "health" else "/api/agents/snapshots"
+        output_json(client.request("GET", endpoint))
+        return 0
+    if command == "capture":
+        endpoint = "/api/capture/interfaces" if args.capture_command == "interfaces" else "/api/capture/status"
+        output_json(client.request("GET", endpoint))
+        return 0
+    if command == "inspect":
+        endpoint = {"system": "/api/system", "phy": "/api/phy", "link": "/api/link", "wifi": "/api/has_wifi"}[args.target]
+        data = client.request("GET", endpoint)
+        if args.format == "json":
+            output_json(data)
+        elif isinstance(data, dict):
+            print(format_table(
+                [{"field": key, "value": value} for key, value in data.items()],
+                [("field", "FIELD"), ("value", "VALUE")],
+                color=terminal_color_enabled(args),
+            ))
+        else:
+            output_json(data)
         return 0
     if command in {"setup", "login"}:
         username = getattr(args, "username", "admin")
