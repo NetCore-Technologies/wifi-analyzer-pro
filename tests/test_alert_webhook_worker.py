@@ -31,8 +31,8 @@ class AlertWebhookWorkerTests(unittest.TestCase):
         self.now = datetime.now(timezone.utc).replace(microsecond=0)
         self.secret = "s" * 48
 
-    def rule(self):
-        return {
+    def rule(self, **overrides):
+        value = {
             "name": "Weak Wi-Fi signal",
             "metric": "minimum_rssi_dbm",
             "operator": "lt",
@@ -46,6 +46,8 @@ class AlertWebhookWorkerTests(unittest.TestCase):
             "quiet_end": None,
             "timezone": "UTC",
         }
+        value.update(overrides)
+        return value
 
     def create_incident(self):
         self.alerts.save_rule("office", self.rule())

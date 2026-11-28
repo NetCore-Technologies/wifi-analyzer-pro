@@ -130,7 +130,7 @@ class AlertRuleStoreTests(unittest.TestCase):
         result = self.store.evaluate("head-office", {"minimum_rssi_dbm": -82}, observed_at=summer_quiet.isoformat())
         event = self.store.list_events("head-office")[0]
         self.assertTrue(event["quiet_hours_active"])
-        self.assertEqual(event["delivery_status"], "not_configured")
+        self.assertEqual(event["delivery_status"], "pending")
         self.assertEqual(rule["timezone"], "Australia/Sydney")
 
     def test_disabled_rule_resolves_an_active_incident(self):

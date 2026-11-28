@@ -85,9 +85,9 @@ def build_home_assistant_snapshot(
         "telemetry_available": latest is not None,
         "telemetry_fresh": False,
         "telemetry_age_seconds": None,
-        "scan_samples_24h": sum(_count(row.get("scan_count")) for row in rows),
-        "diagnostic_samples_24h": sum(_count(row.get("diagnostics_count")) for row in rows),
-        "speedtest_samples_24h": sum(_count(row.get("speedtest_count")) for row in rows),
+        "scan_samples_24h": sum(_count(row.get("scan_count")) for row in rollups),
+        "diagnostic_samples_24h": sum(_count(row.get("diagnostics_count")) for row in rollups),
+        "speedtest_samples_24h": sum(_count(row.get("speedtest_count")) for row in rollups),
     }
     if latest is None:
         return snapshot

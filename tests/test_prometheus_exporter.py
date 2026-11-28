@@ -148,7 +148,7 @@ class PrometheusEndpointTests(unittest.TestCase):
         with patch.dict(os.environ, {"WIFI_ANALYZER_PROMETHEUS_TOKEN": "too-short"}, clear=False):
             status, body, _ = self.request()
         self.assertEqual(status, 404)
-        self.assertEqual(body, "Not found\\n")
+        self.assertEqual(body, "Not found\n")
 
     def test_exporter_rejects_missing_wrong_and_query_string_credentials(self):
         token = "test-prometheus-export-token-0123456789abcdef"

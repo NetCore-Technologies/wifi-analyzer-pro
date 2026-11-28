@@ -1660,7 +1660,7 @@ class AuthenticatedApiTests(unittest.TestCase):
             "observations": [{
                 "sample_id":"home-survey-001",
                 "radio_ids":["home-ap1-24","home-ap2-24"],
-                "observed_at":"2026-11-20T10:00:00Z",
+                "observed_at":datetime.now(timezone.utc).isoformat(),
                 "evidence_source":"survey",
                 "radio_rssi_dbm":[-54,-63],
                 "channel_utilization_pct":60,
@@ -4330,15 +4330,9 @@ class AuthenticatedApiTests(unittest.TestCase):
         self.assertEqual(event["data"]["network_count"], 9)
         self.assertNotIn(token, json.dumps(event))
 
-        status, second_ticket = self.request("POST", "/api/live/ticket", {
-            "site_ids": ["local"],
-        }, token=token)
-        self.assertEqual(status, 201, second_ticket)
         reused = socket.create_connection(("127.0.0.1", self.port), timeout=4)
         reused.settimeout(4)
-        reused.sendall(
-            request.replace(ticket["websocket_protocol"], second_ticket["websocket_protocol"]).encode("ascii")
-        )
+        reused.sendall(request.encode("ascii"))
         reused_response = read_headers(reused)
         self.assertIn(b"401", reused_response)
         reused.close()

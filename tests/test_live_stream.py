@@ -62,7 +62,7 @@ class LiveStreamHubTests(unittest.TestCase):
             self.hub.issue_ticket(user_id="u", session_token="secret", site_ids=["office", "office"])
         with self.assertRaisesRegex(ValueError, "valid"):
             self.hub.issue_ticket(user_id="u", session_token="secret", site_ids=["office/../branch"])
-        with self.assertRaisesRegex(ValueError, "no more than"):
+        with self.assertRaisesRegex(ValueError, "from 1 to 100"):
             self.hub.issue_ticket(
                 user_id="u", session_token="secret",
                 site_ids=[f"site-{index}" for index in range(101)],
@@ -101,7 +101,7 @@ class LiveStreamHubTests(unittest.TestCase):
         self.assertIsNone(self.hub.consume_ticket(created["ticket"], now=float("inf")))
 
     def test_event_timestamps_must_include_a_timezone(self):
-        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+        with self.assertRaisesRegex(ValueError, "include a timezone offset"):
             self.hub.publish(
                 "scan.updated", "office", {"network_count": 5},
                 occurred_at="2026-11-23T12:00:00",
