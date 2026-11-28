@@ -304,7 +304,7 @@ def run_command(args: argparse.Namespace, client: ApiClient) -> int:
             rows = data.get("adapters", []) if isinstance(data, dict) else []
             columns = [("adapter_id", "ADAPTER"), ("name", "NAME"), ("version", "VERSION"), ("description", "DESCRIPTION")]
             print(format_table([row for row in rows if isinstance(row, dict)], columns, color=terminal_color_enabled(args)))
-            print(f"\\n{len(rows)} adapter(s)")
+            print(f"\n{len(rows)} adapter(s)")
         return 0
     if command in {"setup", "login"}:
         username = getattr(args, "username", "admin")
@@ -405,7 +405,7 @@ def run_command(args: argparse.Namespace, client: ApiClient) -> int:
                 output_json({"count": len(rows), "features": rows})
             else:
                 columns = [("id", "ID"), ("slug", "SLUG"), ("name", "NAME"), ("category", "CATEGORY")]
-                print(format_table([row for row in rows if isinstance(row, dict)], columns))
+                print(format_table([row for row in rows if isinstance(row, dict)], columns, color=terminal_color_enabled(args)))
                 print(f"\n{len(rows)} tool(s)")
             return 0
         if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,127}", args.slug):

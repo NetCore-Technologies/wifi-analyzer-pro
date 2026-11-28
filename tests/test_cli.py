@@ -115,8 +115,8 @@ class CliTests(unittest.TestCase):
     def test_table_colour_is_opt_in_and_terminal_specific(self):
         plain = format_table([{"name": "Network"}], [("name", "NAME")])
         coloured = format_table([{"name": "Network"}], [("name", "NAME")], color=True)
-        self.assertNotIn("\\033[", plain)
-        self.assertIn("\\033[1;38;2;255;131;89m", coloured)
+        self.assertNotIn("\033[", plain)
+        self.assertIn("\033[1;38;2;255;131;89m", coloured)
 
 
 
