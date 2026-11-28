@@ -159,7 +159,7 @@ def clean_cell(value: Any, limit: int = 38) -> str:
     return text or "—"
 
 
-def format_table(rows: list[dict[str, Any]], columns: list[tuple[str, str]]) -> str:
+def format_table(rows: list[dict[str, Any]], columns: list[tuple[str, str]], *, color: bool = False) -> str:
     if not rows:
         return "No records returned."
     widths = [
@@ -168,6 +168,9 @@ def format_table(rows: list[dict[str, Any]], columns: list[tuple[str, str]]) -> 
     ]
     header = "  ".join(label.ljust(width) for (_, label), width in zip(columns, widths))
     rule = "  ".join("─" * width for width in widths)
+    if color:
+        header = f"\033[1;38;2;255;131;89m{header}\033[0m"
+        rule = f"\033[38;2;113;130;154m{rule}\033[0m"
     body = [
         "  ".join(clean_cell(row.get(key), width).ljust(width) for (key, _), width in zip(columns, widths))
         for row in rows
@@ -226,6 +229,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--token-file", type=Path, default=default_token_path(),
                         help="Session token file (default: per-user config directory).")
     parser.add_argument("--timeout", type=float, default=15.0, help="HTTP timeout in seconds.")
+    parser.add_argument("--no-color", action="store_true", help="Disable ANSI terminal colours.")
     commands = parser.add_subparsers(dest="command")
 
     commands.add_parser("status", help="Show server and account status.")
@@ -243,7 +247,15 @@ def build_parser() -> argparse.ArgumentParser:
     diagnostics = commands.add_parser("diagnostics", help="Run host and network diagnostics.")
     add_format_option(diagnostics)
 
-    features = commands.add_parser("features", help="Browse and execute the built-in feature catalogue.")
+    speedtest = commands.add_parser("speedtest", help="Run the server's rate-limited network speed test.")
+    add_format_option(speedtest)
+
+    commands.add_parser("capabilities", help="Show detected server platform and feature capabilities.")
+
+    adapters = commands.add_parser("adapters", help="List registered router and platform adapters.")
+    add_format_option(adapters)
+
+    features = commands.add_parser("features", aliases=["tools"], help="Browse and execute the built-in feature catalogue.")
     feature_commands = features.add_subparsers(dest="feature_command", required=True)
     listing = feature_commands.add_parser("list", help="List callable feature tools.")
     listing.add_argument("--query", default="", help="Filter by name, slug, category or description.")
@@ -260,6 +272,15 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def terminal_color_enabled(args: argparse.Namespace) -> bool:
+    return (
+        not args.no_color
+        and os.environ.get("NO_COLOR") is None
+        and os.environ.get("TERM", "").lower() != "dumb"
+        and bool(getattr(sys.stdout, "isatty", lambda: False)())
+    )
+
+
 def output_json(value: Any, *, pretty: bool = True) -> None:
     print(json.dumps(value, ensure_ascii=False, indent=2 if pretty else None, allow_nan=False))
 
@@ -267,7 +288,23 @@ def output_json(value: Any, *, pretty: bool = True) -> None:
 def run_command(args: argparse.Namespace, client: ApiClient) -> int:
     command = args.command
     if command == "status":
-        output_json(client.request("GET", "/api/auth/status"))
+        output_json({
+            "server": client.request("GET", "/health"),
+            "account": client.request("GET", "/api/auth/status"),
+        })
+        return 0
+    if command == "capabilities":
+        output_json(client.request("GET", "/api/capabilities"))
+        return 0
+    if command == "adapters":
+        data = client.request("GET", "/api/adapters")
+        if args.format == "json":
+            output_json(data)
+        else:
+            rows = data.get("adapters", []) if isinstance(data, dict) else []
+            columns = [("adapter_id", "ADAPTER"), ("name", "NAME"), ("version", "VERSION"), ("description", "DESCRIPTION")]
+            print(format_table([row for row in rows if isinstance(row, dict)], columns, color=terminal_color_enabled(args)))
+            print(f"\\n{len(rows)} adapter(s)")
         return 0
     if command in {"setup", "login"}:
         username = getattr(args, "username", "admin")
@@ -321,9 +358,19 @@ def run_command(args: argparse.Namespace, client: ApiClient) -> int:
                 ("ssid", "SSID"), ("bssid", "BSSID"), ("band", "BAND"),
                 ("channel", "CH"), ("rssi", "RSSI"), ("security", "SECURITY"),
             ]
-            print(format_table(rows, columns))
+            print(format_table(rows, columns, color=terminal_color_enabled(args)))
             source = data.get("source") if isinstance(data, dict) else None
             print(f"\n{len(rows)} access point(s) · observation source: {source or 'not reported'}")
+        return 0
+    if command == "speedtest":
+        data = client.request("GET", "/api/speedtest")
+        if args.format == "json":
+            output_json(data)
+        elif isinstance(data, dict):
+            rows = [{"metric": key, "value": value} for key, value in data.items()]
+            print(format_table(rows, [("metric", "METRIC"), ("value", "RESULT")], color=terminal_color_enabled(args)))
+        else:
+            output_json(data)
         return 0
     if command == "devices":
         data = client.request("GET", "/api/devices")
@@ -332,7 +379,7 @@ def run_command(args: argparse.Namespace, client: ApiClient) -> int:
         else:
             rows = data.get("devices", []) if isinstance(data, dict) else []
             columns = [("hostname", "HOST"), ("ip", "IP"), ("mac", "MAC"), ("vendor", "VENDOR"), ("online", "ONLINE")]
-            print(format_table([row for row in rows if isinstance(row, dict)], columns))
+            print(format_table([row for row in rows if isinstance(row, dict)], columns, color=terminal_color_enabled(args)))
         return 0
     if command == "diagnostics":
         data = client.request("GET", "/api/diagnostics")
@@ -340,9 +387,9 @@ def run_command(args: argparse.Namespace, client: ApiClient) -> int:
             output_json(data)
         else:
             rows = [{"check": key, "result": value} for key, value in data.items()] if isinstance(data, dict) else []
-            print(format_table(rows, [("check", "CHECK"), ("result", "RESULT")]))
+            print(format_table(rows, [("check", "CHECK"), ("result", "RESULT")], color=terminal_color_enabled(args)))
         return 0
-    if command == "features":
+    if command in {"features", "tools"}:
         if args.feature_command == "list":
             data = client.request("GET", "/api/features")
             rows = data.get("features", []) if isinstance(data, dict) else []

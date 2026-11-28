@@ -103,6 +103,22 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.slug, "signal_quality")
         self.assertEqual(args.input, "-")
 
+    def test_tools_alias_and_operational_commands_are_registered(self):
+        tools = build_parser().parse_args(["tools", "list", "--query", "roaming"])
+        self.assertEqual(tools.command, "tools")
+        self.assertEqual(tools.feature_command, "list")
+        self.assertEqual(tools.query, "roaming")
+        self.assertEqual(build_parser().parse_args(["speedtest"]).command, "speedtest")
+        self.assertEqual(build_parser().parse_args(["capabilities"]).command, "capabilities")
+        self.assertEqual(build_parser().parse_args(["adapters"]).command, "adapters")
+
+    def test_table_colour_is_opt_in_and_terminal_specific(self):
+        plain = format_table([{"name": "Network"}], [("name", "NAME")])
+        coloured = format_table([{"name": "Network"}], [("name", "NAME")], color=True)
+        self.assertNotIn("\\033[", plain)
+        self.assertIn("\\033[1;38;2;255;131;89m", coloured)
+
+
 
 if __name__ == "__main__":
     unittest.main()

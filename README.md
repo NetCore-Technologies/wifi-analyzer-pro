@@ -114,10 +114,15 @@ python -m wifi_analyzer_backend.cli scan
 python -m wifi_analyzer_backend.cli scan --format csv > scan.csv
 python -m wifi_analyzer_backend.cli devices
 python -m wifi_analyzer_backend.cli diagnostics --format json
-python -m wifi_analyzer_backend.cli features list --query roaming
+python -m wifi_analyzer_backend.cli speedtest
+python -m wifi_analyzer_backend.cli capabilities
+python -m wifi_analyzer_backend.cli adapters
+python -m wifi_analyzer_backend.cli tools list --query roaming
 python -m wifi_analyzer_backend.cli features run signal_quality --input signal.json
 python -m wifi_analyzer_backend.cli report --pretty --output report.json
 ```
+
+The `tools` command is an alias for `features`. Tables use the Signal Pulse coral accent in interactive terminals; pass `--no-color` or set `NO_COLOR` for plain output.
 
 Set `WIFI_ANALYZER_URL` when the local API is not at `http://127.0.0.1:199`. For automation, `WIFI_ANALYZER_TOKEN` supplies a bearer token without an interactive login; `WIFI_ANALYZER_TOKEN_FILE` changes the local session file location. Global options `--url`, `--token`, `--token-file` and `--timeout` are also available before the subcommand. Feature runs are authenticated and use the same server-side permissions, rate limits and subscription metering as the GUI.
 
