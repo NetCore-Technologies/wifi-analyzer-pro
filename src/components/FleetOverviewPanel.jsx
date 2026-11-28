@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiBase, apiFetch } from "../lib/api.js";
 import { AlertTriangle, Clock3, RadioTower, RefreshCw, Router, Wifi } from "lucide-react";
 
-const panel = { background:"#0c1120", border:"1px solid #1e2d47", borderRadius:10, padding:15 };
-const muted = "#94a3b8";
+const panel = { background:"#111624", border:"1px solid #29374d", borderRadius:10, padding:15 };
+const muted = "#a8b6ca";
 const sitePattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MAX_AGE_SECONDS = 300;
 
@@ -35,7 +35,7 @@ function metric(value, suffix = "") {
 function Status({ tone, children }) {
   const colors = {
     green: ["#86efac", "rgba(34,197,94,0.10)", "rgba(34,197,94,0.28)"],
-    cyan: ["#67e8f9", "rgba(6,214,240,0.10)", "rgba(6,214,240,0.28)"],
+    cyan: ["#67e8f9", "rgba(255,131,89,0.10)", "rgba(255,131,89,0.28)"],
     amber: ["#fcd34d", "rgba(245,158,11,0.10)", "rgba(245,158,11,0.28)"],
     red: ["#fca5a5", "rgba(239,68,68,0.10)", "rgba(239,68,68,0.28)"],
     grey: [muted, "rgba(148,163,184,0.08)", "rgba(148,163,184,0.18)"],
@@ -191,7 +191,7 @@ export default function FleetOverviewPanel() {
       <section style={panel}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
           <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-            <div style={{ width:36, height:36, borderRadius:9, display:"grid", placeItems:"center", color:"#67e8f9", background:"rgba(6,214,240,0.10)" }}>
+            <div style={{ width:36, height:36, borderRadius:9, display:"grid", placeItems:"center", color:"#67e8f9", background:"rgba(255,131,89,0.10)" }}>
               <RadioTower size={19}/>
             </div>
             <div>
@@ -217,7 +217,7 @@ export default function FleetOverviewPanel() {
             ["Assigned sites", sites.length, "#e2e8f0", "map"],
             ["Fresh telemetry", freshSites, "#86efac", "fresh"],
             ["Stale telemetry", staleSites, "#fcd34d", "stale"],
-            ["No telemetry", missingSites, "#94a3b8", "missing"],
+            ["No telemetry", missingSites, "#a8b6ca", "missing"],
             ["Healthy agents", healthyAgents, "#67e8f9", "healthy"],
             ["Stale agents", staleAgents, "#fcd34d", "agent-stale"],
             ["Unhealthy agents", unhealthyAgents, "#fca5a5", "agent-unhealthy"],
