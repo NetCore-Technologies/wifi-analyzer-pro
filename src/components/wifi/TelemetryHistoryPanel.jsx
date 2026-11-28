@@ -8,8 +8,8 @@ import { buildTelemetryCsv } from '../../lib/telemetryCsv.js';
 import { buildTelemetryChartData, summariseTelemetry } from '../../lib/telemetryChartData.js';
 
 const SITE_COLORS = [
-  '#06d6f0', '#a78bfa', '#34d399', '#fbbf24', '#fb7185',
-  '#60a5fa', '#f97316', '#e879f9', '#a3e635', '#94a3b8',
+  '#ff8359', '#a78bfa', '#34d399', '#fbbf24', '#fb7185',
+  '#60a5fa', '#f97316', '#e879f9', '#a3e635', '#a8b6ca',
 ];
 
 function downloadTelemetryCsv(rows) {
@@ -46,10 +46,10 @@ function MetricChart({ title, metric, unit, description, rollups, domain }) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chart.data} margin={{ top: 8, right: 12, bottom: 8, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.14)" />
-            <XAxis dataKey="minute_utc" tick={{ fontSize: 10, fill: '#94a3b8' }}
+            <XAxis dataKey="minute_utc" tick={{ fontSize: 10, fill: '#a8b6ca' }}
               tickFormatter={value => new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               minTickGap={28} />
-            <YAxis domain={domain || ['auto', 'auto']} tick={{ fontSize: 10, fill: '#94a3b8' }}
+            <YAxis domain={domain || ['auto', 'auto']} tick={{ fontSize: 10, fill: '#a8b6ca' }}
               tickFormatter={value => String(value) + unit} width={58} />
             <Tooltip
               labelFormatter={value => new Date(value).toLocaleString()}

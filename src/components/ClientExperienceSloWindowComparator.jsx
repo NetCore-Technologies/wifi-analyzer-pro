@@ -3,9 +3,9 @@ import { apiFetch, apiBase } from '../lib/api.js';
 import { parseClientExperienceCsv } from '../lib/clientExperienceCsv.js';
 import { Activity, AlertCircle, Play, ShieldCheck } from 'lucide-react';
 
-const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
-const field = { width: '100%', minWidth: 0, boxSizing: 'border-box', background: '#070b14', color: '#e2e8f0', border: '1px solid #263956', borderRadius: 7, padding: '8px 9px', fontSize: 12 };
-const muted = { color: '#94a3b8', fontSize: 11, lineHeight: 1.55 };
+const panel = { background: '#111624', border: '1px solid #29374d', borderRadius: 10, padding: 14 };
+const field = { width: '100%', minWidth: 0, boxSizing: 'border-box', background: '#090c15', color: '#f1f5fb', border: '1px solid #263956', borderRadius: 7, padding: '8px 9px', fontSize: 12 };
+const muted = { color: '#a8b6ca', fontSize: 11, lineHeight: 1.55 };
 const METRICS = [
   ['rssi_dbm', 'RSSI'], ['snr_db', 'SNR'], ['retry_rate_pct', 'TX retries'],
   ['airtime_utilization_pct', 'Airtime'], ['packet_loss_pct', 'Packet loss'],
@@ -14,9 +14,9 @@ const METRICS = [
 const DEFAULT_REQUIRED = ['rssi_dbm', 'packet_loss_pct', 'rtt_ms'];
 
 function Metric({ label, value, detail }) {
-  return <div style={{ background: '#070b14', border: '1px solid #1e2d47', borderRadius: 8, padding: 10 }}>
+  return <div style={{ background: '#090c15', border: '1px solid #29374d', borderRadius: 8, padding: 10 }}>
     <div style={muted}>{label}</div>
-    <div style={{ color: '#e2e8f0', fontSize: 19, fontWeight: 750, marginTop: 4 }}>{value}</div>
+    <div style={{ color: '#f1f5fb', fontSize: 19, fontWeight: 750, marginTop: 4 }}>{value}</div>
     {detail ? <div style={{ ...muted, marginTop: 4 }}>{detail}</div> : null}
   </div>;
 }
@@ -123,14 +123,14 @@ export default function ClientExperienceSloWindowComparator() {
   const status = result?.status || '';
   const statusColor = status === 'regression_detected' || status === 'partial_evidence' ? '#fbbf24'
     : status === 'improvement_detected' ? '#34d399'
-      : status === 'stable' ? '#38bdf8' : '#94a3b8';
+      : status === 'stable' ? '#38bdf8' : '#a8b6ca';
 
   return <div style={{ display: 'grid', gap: 12 }}>
     <section style={{ ...panel, borderColor: '#24506a' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
-        <Activity size={17} color="#06d6f0"/>
-        <strong style={{ color: '#e2e8f0', fontSize: 13 }}>Client experience SLO window comparison</strong>
-        <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: 10 }}>F293 · F292 MODEL</span>
+        <Activity size={17} color="#ff8359"/>
+        <strong style={{ color: '#f1f5fb', fontSize: 13 }}>Client experience SLO window comparison</strong>
+        <span style={{ marginLeft: 'auto', color: '#a8b6ca', fontSize: 10 }}>F293 · F292 MODEL</span>
       </div>
       <p style={{ ...muted, margin: 0 }}>Compare two non-overlapping periods using the same thresholds and sample eligibility rules. This reports sample-weighted attainment and descriptive metric changes—not duration-weighted uptime or statistical confidence.</p>
     </section>
@@ -159,10 +159,10 @@ export default function ClientExperienceSloWindowComparator() {
       <p style={muted}>CSV import follows the F292 observation format. Site IDs and pseudonymous client references are used to aggregate per-site results; no client aliases or sample IDs are returned by F293.</p>
     </section>
     <section style={panel}>
-      <strong style={{ color: '#e2e8f0', fontSize: 12 }}>Shared SLO eligibility and thresholds</strong>
+      <strong style={{ color: '#f1f5fb', fontSize: 12 }}>Shared SLO eligibility and thresholds</strong>
       <div style={{ color: '#cbd5e1', fontSize: 11, margin: '8px 0' }}>Required metrics: samples missing any selected metric are excluded from both denominators.</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8 }}>
-        {METRICS.map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#94a3b8', fontSize: 11 }}>
+        {METRICS.map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#a8b6ca', fontSize: 11 }}>
           <input type="checkbox" checked={requiredMetrics.includes(key)} onChange={event => toggleMetric(key, event.target.checked)}/>{label}
         </label>)}
       </div>
@@ -184,14 +184,14 @@ export default function ClientExperienceSloWindowComparator() {
         <label><span style={muted}>Regression threshold (percentage points)</span><input type="number" min="0.1" max="100" step="0.1" value={regressionThreshold} onChange={event => { setRegressionThreshold(event.target.value); setResult(null); }} style={field}/></label>
       </div>
       {error ? <div role="alert" style={{ ...muted, color: '#fca5a5', marginTop: 10 }}><AlertCircle size={13} style={{ verticalAlign: 'middle', marginRight: 5 }}/>{error}</div> : null}
-      <button type="button" onClick={compare} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 12, border: '1px solid #06d6f0', background: 'rgba(6,214,240,.13)', color: '#06d6f0', borderRadius: 7, padding: '9px 13px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? .5 : 1 }}>
+      <button type="button" onClick={compare} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 12, border: '1px solid #ff8359', background: 'rgba(255,131,89,.13)', color: '#ff8359', borderRadius: 7, padding: '9px 13px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? .5 : 1 }}>
         <Play size={13}/>{busy ? 'Comparing…' : 'Compare SLO windows'}
       </button>
     </section>
     {summary ? <section style={panel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <ShieldCheck size={15} color={statusColor}/>
-        <strong style={{ color: '#e2e8f0', fontSize: 12 }}>SLO comparison report</strong>
+        <strong style={{ color: '#f1f5fb', fontSize: 12 }}>SLO comparison report</strong>
         <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: statusColor }}>{status.replaceAll('_',' ').toUpperCase()}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(125px,1fr))', gap: 8 }}>
@@ -208,7 +208,7 @@ export default function ClientExperienceSloWindowComparator() {
       <div style={{ overflowX: 'auto', marginTop: 12 }}>
         <strong style={{ color: '#cbd5e1', fontSize: 11 }}>Site-level comparison</strong>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, textAlign: 'left', marginTop: 6 }}>
-          <thead><tr>{['Site','Status','Baseline attainment','Comparison attainment','Delta (pp)','Eligible samples'].map(item => <th key={item} style={{ padding: 7, color: '#94a3b8', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
+          <thead><tr>{['Site','Status','Baseline attainment','Comparison attainment','Delta (pp)','Eligible samples'].map(item => <th key={item} style={{ padding: 7, color: '#a8b6ca', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
           <tbody>{result.sites.map(site => {
             const before = site.baseline;
             const after = site.comparison;
@@ -218,20 +218,20 @@ export default function ClientExperienceSloWindowComparator() {
               after?.sla_attainment_pct == null ? 'n/a' : after.sla_attainment_pct + '%',
               site.sla_attainment_delta_pct_points == null ? 'n/a' : site.sla_attainment_delta_pct_points + ' pp',
               (before?.eligible_slo_sample_count ?? 0) + ' / ' + (after?.eligible_slo_sample_count ?? 0),
-            ].map((value,index) => <td key={index} style={{ padding: 7, color: '#cbd5e1', borderBottom: '1px solid #1e2d47', whiteSpace: 'nowrap' }}>{value}</td>)}</tr>;
+            ].map((value,index) => <td key={index} style={{ padding: 7, color: '#cbd5e1', borderBottom: '1px solid #29374d', whiteSpace: 'nowrap' }}>{value}</td>)}</tr>;
           })}</tbody>
         </table>
       </div>
       <div style={{ overflowX: 'auto', marginTop: 12 }}>
         <strong style={{ color: '#cbd5e1', fontSize: 11 }}>Descriptive metric p95 deltas</strong>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, textAlign: 'left', marginTop: 6 }}>
-          <thead><tr>{['Metric','Baseline p95','Comparison p95','Delta','Samples (before / after)'].map(item => <th key={item} style={{ padding: 7, color: '#94a3b8', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
+          <thead><tr>{['Metric','Baseline p95','Comparison p95','Delta','Samples (before / after)'].map(item => <th key={item} style={{ padding: 7, color: '#a8b6ca', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
           <tbody>{Object.entries(result.overall.metric_deltas).map(([name,item]) => <tr key={name}>{[
             name,item.baseline_p95 == null ? '—' : item.baseline_p95,
             item.comparison_p95 == null ? '—' : item.comparison_p95,
             item.p95_delta == null ? '—' : item.p95_delta,
             item.baseline_sample_count + ' / ' + item.comparison_sample_count,
-          ].map((value,index) => <td key={index} style={{ padding: 7, color: '#cbd5e1', borderBottom: '1px solid #1e2d47', whiteSpace: 'nowrap' }}>{value}</td>)}</tr>)}</tbody>
+          ].map((value,index) => <td key={index} style={{ padding: 7, color: '#cbd5e1', borderBottom: '1px solid #29374d', whiteSpace: 'nowrap' }}>{value}</td>)}</tr>)}</tbody>
         </table>
       </div>
       {status === "partial_evidence" ? <p role="status" style={{ ...muted, color: "#fbbf24", marginBottom: 8 }}>Fleet-wide improvement is not declared because one or more sites lack sufficient comparable telemetry. Review the site-level evidence gaps before drawing a fleet conclusion.</p> : null}

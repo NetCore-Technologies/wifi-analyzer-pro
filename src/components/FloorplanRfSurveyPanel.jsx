@@ -10,7 +10,7 @@ import { apiBase, apiFetch } from '../lib/api.js';
 import { buildMeasurementContext, measurementContextFormState } from '../lib/measurementContext.js';
 import RfSurveyAcceptancePanel from './RfSurveyAcceptancePanel.jsx';
 
-const SERIES_COLORS = ['#06d6f0', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#60a5fa', '#f97316'];
+const SERIES_COLORS = ['#ff8359', '#a78bfa', '#34d399', '#fbbf24', '#fb7185', '#60a5fa', '#f97316'];
 const MAX_JSON_BYTES = 900 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -65,9 +65,9 @@ function defaultSurveyPayload() {
 }
 
 function signalColour(rssi) {
-  if (!Number.isFinite(rssi)) return '#94a3b8';
+  if (!Number.isFinite(rssi)) return '#a8b6ca';
   if (rssi >= -55) return '#34d399';
-  if (rssi >= -67) return '#06d6f0';
+  if (rssi >= -67) return '#ff8359';
   if (rssi >= -75) return '#fbbf24';
   return '#fb7185';
 }
@@ -743,8 +743,8 @@ export default function FloorplanRfSurveyPanel() {
                 <ResponsiveContainer width="100%" height="100%">
                   <ScatterChart margin={{ top: 10, right: 20, bottom: 18, left: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.14)" />
-                    <XAxis type="number" dataKey="distance_m" name="AP distance" unit=" m" tick={{ fill: '#94a3b8', fontSize: 11 }} label={{ value: 'Measured planar distance (m)', position: 'insideBottom', offset: -8, fill: '#94a3b8', fontSize: 11 }} />
-                    <YAxis type="number" dataKey="rssi_dbm" name="RSSI" unit=" dBm" domain={[-120, -10]} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                    <XAxis type="number" dataKey="distance_m" name="AP distance" unit=" m" tick={{ fill: '#a8b6ca', fontSize: 11 }} label={{ value: 'Measured planar distance (m)', position: 'insideBottom', offset: -8, fill: '#a8b6ca', fontSize: 11 }} />
+                    <YAxis type="number" dataKey="rssi_dbm" name="RSSI" unit=" dBm" domain={[-120, -10]} tick={{ fill: '#a8b6ca', fontSize: 11 }} />
                     <Tooltip cursor={{ strokeDasharray: '3 3' }} formatter={(value, name) => [Number(value).toFixed(1), name]} />
                     {chartData.map(([apId, values], index) => (
                       <Scatter key={apId} name={apId} data={values} fill={SERIES_COLORS[index % SERIES_COLORS.length]} />

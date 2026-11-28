@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "../lib/api.js";
 
 const API_BASE = window.location.protocol + "//" + window.location.hostname + ":199";
-const panel = { background: "#0c1120", border: "1px solid #1e2d47", borderRadius: 10, padding: 15, minWidth: 0 };
-const muted = { color: "#94a3b8", fontSize: 11, lineHeight: 1.6 };
-const input = { boxSizing: "border-box", width: "100%", minWidth: 0, resize: "vertical", background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: 10, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 10, lineHeight: 1.55 };
-const button = { border: "1px solid #06d6f0", borderRadius: 7, background: "rgba(6,214,240,.1)", color: "#06d6f0", padding: "9px 12px", fontWeight: 700, fontSize: 11, cursor: "pointer" };
+const panel = { background: "#111624", border: "1px solid #29374d", borderRadius: 10, padding: 15, minWidth: 0 };
+const muted = { color: "#a8b6ca", fontSize: 11, lineHeight: 1.6 };
+const input = { boxSizing: "border-box", width: "100%", minWidth: 0, resize: "vertical", background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: 10, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 10, lineHeight: 1.55 };
+const button = { border: "1px solid #ff8359", borderRadius: 7, background: "rgba(255,131,89,.1)", color: "#ff8359", padding: "9px 12px", fontWeight: 700, fontSize: 11, cursor: "pointer" };
 
 function emptySubscriptionDraft() {
   return {
@@ -483,25 +483,25 @@ export default function WebhookDeliveryPanel() {
   const prepared = result && Array.isArray(result.prepared_deliveries) ? result.prepared_deliveries : [];
   const blocked = result && Array.isArray(result.blocked_deliveries) ? result.blocked_deliveries : [];
   const metric = (label, value, hint, color) => (
-    <div key={label} style={{ background: "#070b14", border: "1px solid #1e2d47", borderRadius: 8, padding: 12 }}>
-      <div style={{ color: "#94a3b8", fontSize: 10 }}>{label}</div>
-      <div style={{ color: color || "#e2e8f0", fontSize: 22, fontWeight: 800, marginTop: 4, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      <div style={{ color: "#64748b", fontSize: 9, marginTop: 3 }}>{hint}</div>
+    <div key={label} style={{ background: "#090c15", border: "1px solid #29374d", borderRadius: 8, padding: 12 }}>
+      <div style={{ color: "#a8b6ca", fontSize: 10 }}>{label}</div>
+      <div style={{ color: color || "#f1f5fb", fontSize: 22, fontWeight: 800, marginTop: 4, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ color: "#71829a", fontSize: 9, marginTop: 3 }}>{hint}</div>
     </div>
   );
 
   return (
-    <div style={{ color: "#e2e8f0", display: "grid", gap: 14, minWidth: 0 }}>
-      <style>{".webhook-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.webhook-table{width:100%;border-collapse:collapse;font-size:10px}.webhook-table th,.webhook-table td{padding:9px 8px;text-align:left;vertical-align:top;border-bottom:1px solid #1e2d47;overflow-wrap:anywhere}.webhook-table th{color:#94a3b8;font-weight:700}@media(max-width:760px){.webhook-grid{grid-template-columns:1fr}}"}</style>
+    <div style={{ color: "#f1f5fb", display: "grid", gap: 14, minWidth: 0 }}>
+      <style>{".webhook-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.webhook-table{width:100%;border-collapse:collapse;font-size:10px}.webhook-table th,.webhook-table td{padding:9px 8px;text-align:left;vertical-align:top;border-bottom:1px solid #29374d;overflow-wrap:anywhere}.webhook-table th{color:#a8b6ca;font-weight:700}@media(max-width:760px){.webhook-grid{grid-template-columns:1fr}}"}</style>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 800 }}>Webhook Delivery Center</div>
           <div style={{ ...muted, marginTop: 4 }}>Prepare independently signed deliveries for multiple router-event subscriptions.</div>
         </div>
-        <span style={{ color: "#06d6f0", background: "rgba(6,214,240,.07)", border: "1px solid rgba(6,214,240,.35)", borderRadius: 99, padding: "5px 9px", fontSize: 9, fontWeight: 800 }}>F190 + F185 + F187 + F192</span>
+        <span style={{ color: "#ff8359", background: "rgba(255,131,89,.07)", border: "1px solid rgba(255,131,89,.35)", borderRadius: 99, padding: "5px 9px", fontSize: 9, fontWeight: 800 }}>F190 + F185 + F187 + F192</span>
       </div>
 
-      <section style={{ ...panel, borderColor: "rgba(245,158,11,.35)" }}>
+      <section style={{ ...panel, borderColor: "rgba(242,195,107,.35)" }}>
         <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
           <span style={{ color: "#fbbf24", fontSize: 15, fontWeight: 900 }}>!</span>
           <div style={muted}>
@@ -607,14 +607,14 @@ export default function WebhookDeliveryPanel() {
             </button>
           </div>
         </form>
-        <div style={{ marginTop: 13, borderTop: "1px solid #1e2d47", paddingTop: 12 }}>
+        <div style={{ marginTop: 13, borderTop: "1px solid #29374d", paddingTop: 12 }}>
           <div style={{ fontSize: 11, fontWeight: 750, marginBottom: 8 }}>Saved subscriptions ({subscriptions.length}/100)</div>
           {!subscriptions.length ? (
             <div style={muted}>{subscriptionsBusy ? "Loading…" : "No saved subscriptions. Add one above; signing secrets are entered separately for each preparation run."}</div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
               {subscriptions.map(item => (
-                <div key={item.subscription_id} style={{ border: "1px solid #1e2d47", borderRadius: 8, background: "#070b14", padding: 10, display: "grid", gap: 9 }}>
+                <div key={item.subscription_id} style={{ border: "1px solid #29374d", borderRadius: 8, background: "#090c15", padding: 10, display: "grid", gap: 9 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -628,7 +628,7 @@ export default function WebhookDeliveryPanel() {
                     </div>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <button type="button" style={{ ...button, padding: "6px 8px" }} onClick={() => editSubscription(item)}>Edit</button>
-                      <button type="button" style={{ ...button, padding: "6px 8px", background: "rgba(6,214,240,.08)" }}
+                      <button type="button" style={{ ...button, padding: "6px 8px", background: "rgba(255,131,89,.08)" }}
                         disabled={!item.enabled || probingSubscriptionId === item.subscription_id}
                         onClick={() => probeSubscription(item)}>
                         {probingSubscriptionId === item.subscription_id ? "Testing…" : "Test TLS"}
@@ -642,7 +642,7 @@ export default function WebhookDeliveryPanel() {
                   {probeResults[item.subscription_id] ? (
                     <div role="status" style={{
                       color: probeResults[item.subscription_id].status === "approved" ? "#4ade80" :
-                        probeResults[item.subscription_id].status === "checking" ? "#06d6f0" : "#fbbf24",
+                        probeResults[item.subscription_id].status === "checking" ? "#ff8359" : "#fbbf24",
                       fontSize: 10,
                     }}>
                       Endpoint probe · {probeResults[item.subscription_id].message}
@@ -700,7 +700,7 @@ export default function WebhookDeliveryPanel() {
           {metric("Subscriptions", result.summary.subscription_count, "configured")}
           {metric("Planned batches", result.summary.planned_batch_count, "F190 matched batches")}
           {metric("Prepared", result.summary.prepared_delivery_count, "signed and egress-approved", "#4ade80")}
-          {metric("Blocked", result.summary.blocked_delivery_count, "not eligible for dispatch", blocked.length ? "#fbbf24" : "#e2e8f0")}
+          {metric("Blocked", result.summary.blocked_delivery_count, "not eligible for dispatch", blocked.length ? "#fbbf24" : "#f1f5fb")}
         </div>
 
         {prepared.length ? <section style={panel}>
@@ -711,7 +711,7 @@ export default function WebhookDeliveryPanel() {
               <tbody>{prepared.map(item => (
                 <tr key={item.batch_id}>
                   <td style={{ fontWeight: 700 }}>{item.subscription_id}<div style={{ color: "#4ade80", marginTop: 3 }}>Prepared</div></td>
-                  <td style={{ fontFamily: "monospace", color: "#94a3b8" }}>{item.batch_id.slice(0, 16)}…</td>
+                  <td style={{ fontFamily: "monospace", color: "#a8b6ca" }}>{item.batch_id.slice(0, 16)}…</td>
                   <td>{item.event_count}</td>
                   <td>{item.endpoint}</td>
                   <td>{(item.egress && item.egress.connected_peer_ip) || "—"} · {(item.egress && item.egress.tls_version) || "—"}</td>
@@ -725,7 +725,7 @@ export default function WebhookDeliveryPanel() {
           <div style={{ fontSize: 12, fontWeight: 750 }}>Blocked deliveries</div>
           <div style={{ display: "grid", gap: 8 }}>
             {blocked.map(item => (
-              <div key={item.batch_id} style={{ border: "1px solid rgba(245,158,11,.3)", borderRadius: 7, padding: 10, background: "rgba(245,158,11,.04)" }}>
+              <div key={item.batch_id} style={{ border: "1px solid rgba(242,195,107,.3)", borderRadius: 7, padding: 10, background: "rgba(242,195,107,.04)" }}>
                 <div style={{ fontSize: 11, fontWeight: 700 }}>{item.subscription_id} · {item.event_count} event(s)</div>
                 <div style={{ color: "#fbbf24", fontSize: 10, marginTop: 5 }}>{item.reasons.join(" · ")}</div>
               </div>
@@ -755,7 +755,7 @@ export default function WebhookDeliveryPanel() {
           {metric("Sending", queueSummary?.counts_by_status?.sending ?? 0, "leased")}
           {metric("Retry wait", queueSummary?.counts_by_status?.retry_wait ?? 0, "backoff scheduled", "#fbbf24")}
           {metric("Delivered", queueSummary?.counts_by_status?.delivered ?? 0, "2xx confirmed", "#4ade80")}
-          {metric("Dead letter", queueSummary?.counts_by_status?.dead_letter ?? 0, "manual recovery", queueSummary?.counts_by_status?.dead_letter ? "#f87171" : "#e2e8f0")}
+          {metric("Dead letter", queueSummary?.counts_by_status?.dead_letter ?? 0, "manual recovery", queueSummary?.counts_by_status?.dead_letter ? "#f87171" : "#f1f5fb")}
         </div>
         {!queue.length ? (
           <div style={{ ...muted, marginTop: 12 }}>{queueBusy ? "Loading delivery state…" : "No visible webhook deliveries are queued."}</div>
@@ -766,19 +766,19 @@ export default function WebhookDeliveryPanel() {
               <tbody>
                 {queue.map(item => (
                   <tr key={item.id}>
-                    <td style={{ fontFamily: "monospace" }}>#{item.id}<div style={{ color: "#64748b", marginTop: 3 }}>{item.batch_id.slice(0, 12)}…</div></td>
-                    <td>{item.subscription_id}<div style={{ color: "#64748b", marginTop: 3 }}>{item.endpoint}</div></td>
+                    <td style={{ fontFamily: "monospace" }}>#{item.id}<div style={{ color: "#71829a", marginTop: 3 }}>{item.batch_id.slice(0, 12)}…</div></td>
+                    <td>{item.subscription_id}<div style={{ color: "#71829a", marginTop: 3 }}>{item.endpoint}</div></td>
                     <td>{item.has_unscoped_events ? "Unscoped" : (item.site_ids || []).join(", ") || "—"}</td>
                     <td>{item.event_count}</td>
                     <td style={{
                       color: item.status === "delivered" ? "#4ade80" :
                         item.status === "dead_letter" ? "#f87171" :
                         item.status === "retry_wait" ? "#fbbf24" :
-                        item.status === "sending" ? "#06d6f0" : "#cbd5e1",
+                        item.status === "sending" ? "#ff8359" : "#cbd5e1",
                       fontWeight: 750,
                     }}>{item.status.replace("_", " ")}</td>
                     <td>{item.attempts}/{item.max_attempts}</td>
-                    <td style={{ color: item.last_error_code ? "#fbbf24" : "#64748b" }}>{item.last_error_code || "—"}</td>
+                    <td style={{ color: item.last_error_code ? "#fbbf24" : "#71829a" }}>{item.last_error_code || "—"}</td>
                     <td>
                       {item.status === "dead_letter" || item.status === "cancelled" ? (
                         <button type="button" style={button} disabled={queueBusy} onClick={() => updateDelivery(item.id, "retry")}>Retry</button>
