@@ -4,17 +4,17 @@ import { CreditCard, RefreshCw, ExternalLink, ShieldCheck, AlertCircle, KeyRound
 
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
 const panel = {
-  background: "#0c1120", border: "1px solid #1e2d47", borderRadius: 10,
-  padding: 16, color: "#e2e8f0",
+  background: "#111624", border: "1px solid #29374d", borderRadius: 10,
+  padding: 16, color: "#f1f5fb",
 };
 const button = {
   display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
-  border: "1px solid #06d6f0", borderRadius: 7, padding: "9px 13px",
-  background: "rgba(6,214,240,.12)", color: "#06d6f0",
+  border: "1px solid #ff8359", borderRadius: 7, padding: "9px 13px",
+  background: "rgba(255,131,89,.12)", color: "#ff8359",
   fontSize: 12, fontWeight: 700, cursor: "pointer",
 };
 const quietButton = {
-  ...button, border: "1px solid #263956", background: "#111827",
+  ...button, border: "1px solid #263956", background: "#182235",
   color: "#cbd5e1",
 };
 const formatDate = value => {
@@ -197,12 +197,12 @@ export default function BillingPanel() {
       <section style={panel}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 9, display: "grid", placeItems: "center", background: "rgba(6,214,240,.10)", border: "1px solid rgba(6,214,240,.28)" }}>
-              <CreditCard size={18} color="#06d6f0"/>
+            <div style={{ width: 38, height: 38, borderRadius: 9, display: "grid", placeItems: "center", background: "rgba(255,131,89,.10)", border: "1px solid rgba(255,131,89,.28)" }}>
+              <CreditCard size={18} color="#ff8359"/>
             </div>
             <div>
               <div style={{ fontSize: 16, fontWeight: 750 }}>Plans & licensing</div>
-              <div style={{ color: "#64748b", fontSize: 11 }}>Vendor product licence and optional workspace billing</div>
+              <div style={{ color: "#71829a", fontSize: 11 }}>Vendor product licence and optional workspace billing</div>
             </div>
           </div>
           <button type="button" onClick={load} disabled={loading || !!busy} style={quietButton}>
@@ -218,19 +218,19 @@ export default function BillingPanel() {
         <>
           <section style={panel}>
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
-              <KeyRound size={16} color="#06d6f0"/>
+              <KeyRound size={16} color="#ff8359"/>
               <div style={{ fontSize: 13, fontWeight: 750 }}>NetCore product licence</div>
               <span style={{ marginLeft: "auto", color: productLicense.active ? "#86efac" : "#fbbf24", fontSize: 10, fontWeight: 700 }}>
                 {productLicense.active ? (productLicense.grace_period ? "OFFLINE GRACE" : "ACTIVE") : productLicense.installed ? "INVALID / EXPIRED" : "NOT ACTIVATED"}
               </span>
             </div>
             {productLicense.active ? (
-              <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 10 }}>
+              <div style={{ color: "#a8b6ca", fontSize: 11, marginBottom: 10 }}>
                 {productLicense.plan_label} licence · expires {formatDate(new Date(productLicense.expires_at * 1000).toISOString())}
                 {productLicense.grace_period ? " · reconnect to renew" : ""}
               </div>
             ) : (
-              <div style={{ color: "#94a3b8", fontSize: 11, marginBottom: 10 }}>
+              <div style={{ color: "#a8b6ca", fontSize: 11, marginBottom: 10 }}>
                 {productLicense.error || "Paste the signed product licence supplied by NetCore to unlock your purchased plan."}
               </div>
             )}
@@ -241,10 +241,10 @@ export default function BillingPanel() {
               aria-label="Vendor product licence token"
               rows={3}
               spellCheck={false}
-              style={{ width: "100%", boxSizing: "border-box", resize: "vertical", background: "#080d18", border: "1px solid #263956", borderRadius: 7, padding: 10, color: "#e2e8f0", fontSize: 11, fontFamily: "monospace" }}
+              style={{ width: "100%", boxSizing: "border-box", resize: "vertical", background: "#080d18", border: "1px solid #263956", borderRadius: 7, padding: 10, color: "#f1f5fb", fontSize: 11, fontFamily: "monospace" }}
             />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: 9 }}>
-              <span style={{ color: "#64748b", fontSize: 10 }}>
+              <span style={{ color: "#71829a", fontSize: 10 }}>
                 The installation stores the signed token and renewal credential locally; vendor payment secrets remain on the licensing service.
               </span>
               {productLicense.active && productLicense.renewal_configured ? (
@@ -272,32 +272,32 @@ export default function BillingPanel() {
 
           <section style={{ ...panel, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
             <div>
-              <div style={{ color: "#64748b", fontSize: 10, letterSpacing: 1 }}>CURRENT PLAN</div>
+              <div style={{ color: "#71829a", fontSize: 10, letterSpacing: 1 }}>CURRENT PLAN</div>
               <div style={{ fontSize: 22, fontWeight: 800, marginTop: 5 }}>{billing.plan_label}</div>
               <div style={{ color: active ? "#86efac" : "#fbbf24", fontSize: 11, marginTop: 4 }}>
                 {productLicense.active ? (productLicense.grace_period ? "Vendor licence offline grace" : "Vendor product licence") : active ? (billing.grace_period ? "Payment grace period" : billing.subscription_status) : "Free plan"}
               </div>
             </div>
             <div>
-              <div style={{ color: "#64748b", fontSize: 10, letterSpacing: 1 }}>NEXT BILLING DATE / ACCESS END</div>
+              <div style={{ color: "#71829a", fontSize: 10, letterSpacing: 1 }}>NEXT BILLING DATE / ACCESS END</div>
               <div style={{ fontSize: 13, fontWeight: 650, marginTop: 9 }}>{formatDate(billing.current_period_end)}</div>
-              <div style={{ color: "#64748b", fontSize: 10, marginTop: 4 }}>
+              <div style={{ color: "#71829a", fontSize: 10, marginTop: 4 }}>
                 {billing.cancel_at_period_end ? "Cancellation is scheduled at period end" : billing.grace_period ? `Grace ends ${formatDate(billing.grace_period_ends_at)}` : "Subscription status is synchronized by Stripe"}
               </div>
             </div>
             <div>
-              <div style={{ color: "#64748b", fontSize: 10, letterSpacing: 1 }}>BILLING CONNECTION</div>
+              <div style={{ color: "#71829a", fontSize: 10, letterSpacing: 1 }}>BILLING CONNECTION</div>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 9, fontSize: 12 }}>
                 <ShieldCheck size={15} color={billing.billing_configured && billing.webhook_configured ? "#86efac" : "#fbbf24"}/>
                 {billing.billing_configured && billing.webhook_configured ? "Stripe connected" : "Stripe setup required"}
               </div>
-              <div style={{ color: "#64748b", fontSize: 10, marginTop: 4 }}>Payment secrets remain on the server</div>
+              <div style={{ color: "#71829a", fontSize: 10, marginTop: 4 }}>Payment secrets remain on the server</div>
             </div>
           </section>
 
           <section style={panel}>
             <div style={{ fontSize: 13, fontWeight: 750, marginBottom: 4 }}>Plan usage</div>
-            <div style={{ color: "#64748b", fontSize: 10, marginBottom: 10 }}>Diagnostic allowance resets monthly in UTC · {billing.usage_period || "current period"}</div>
+            <div style={{ color: "#71829a", fontSize: 10, marginBottom: 10 }}>Diagnostic allowance resets monthly in UTC · {billing.usage_period || "current period"}</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
               {[
                 ["Users", "users"],
@@ -310,11 +310,11 @@ export default function BillingPanel() {
                 const limit = Number(limits[key] || 0);
                 const pct = limit > 0 ? Math.min(100, used / limit * 100) : 0;
                 return (
-                  <div key={key} style={{ background: "#080d18", border: "1px solid #1e2d47", borderRadius: 8, padding: 11 }}>
-                    <div style={{ color: "#94a3b8", fontSize: 11 }}>{label}</div>
-                    <div style={{ fontSize: 18, fontWeight: 750, marginTop: 5 }}>{used} <span style={{ color: "#64748b", fontSize: 11, fontWeight: 500 }}>/ {limit}</span></div>
-                    <div style={{ height: 4, background: "#1e2d47", borderRadius: 5, marginTop: 9, overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: pct >= 100 ? "#f59e0b" : "#06d6f0" }}/>
+                  <div key={key} style={{ background: "#080d18", border: "1px solid #29374d", borderRadius: 8, padding: 11 }}>
+                    <div style={{ color: "#a8b6ca", fontSize: 11 }}>{label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 750, marginTop: 5 }}>{used} <span style={{ color: "#71829a", fontSize: 11, fontWeight: 500 }}>/ {limit}</span></div>
+                    <div style={{ height: 4, background: "#29374d", borderRadius: 5, marginTop: 9, overflow: "hidden" }}>
+                      <div style={{ width: `${pct}%`, height: "100%", background: pct >= 100 ? "#f2c36b" : "#ff8359" }}/>
                     </div>
                   </div>
                 );
@@ -326,7 +326,7 @@ export default function BillingPanel() {
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 750 }}>WiFi Analyzer Pro plans</div>
-                <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>Purchase from NetCore. Price and billing currency are shown by vendor Stripe Checkout.</div>
+                <div style={{ fontSize: 10, color: "#71829a", marginTop: 3 }}>Purchase from NetCore. Price and billing currency are shown by vendor Stripe Checkout.</div>
               </div>
               {productLicense.renewal_configured ? (
                 <button type="button" disabled={!!busy} onClick={syncVendorLicense} style={quietButton}>
@@ -338,12 +338,12 @@ export default function BillingPanel() {
               {plans.filter(plan => plan.plan_id !== "free").map(plan => {
                 const current = productLicense.active && productLicense.plan_id === plan.plan_id;
                 return (
-                  <div key={plan.plan_id} style={{ background: "#080d18", border: `1px solid ${current ? "#06d6f0" : "#1e2d47"}`, borderRadius: 9, padding: 13 }}>
+                  <div key={plan.plan_id} style={{ background: "#080d18", border: `1px solid ${current ? "#ff8359" : "#29374d"}`, borderRadius: 9, padding: 13 }}>
                     <div style={{ fontSize: 14, fontWeight: 750 }}>{plan.label}</div>
-                    <div style={{ color: "#64748b", fontSize: 10, margin: "5px 0 10px" }}>NetCore product subscription</div>
+                    <div style={{ color: "#71829a", fontSize: 10, margin: "5px 0 10px" }}>NetCore product subscription</div>
                     {Object.entries(plan.limits).map(([key, value]) => (
-                      <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e2d47" }}>
-                        <span>{{ users: "Users", agents: "Router agents", sites: "Managed sites", webhook_subscriptions: "Webhook subscriptions", feature_runs_monthly: "Diagnostic runs / month" }[key]}</span><strong style={{ color: "#e2e8f0" }}>{value}</strong>
+                      <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10, color: "#a8b6ca", padding: "4px 0", borderBottom: "1px solid #29374d" }}>
+                        <span>{{ users: "Users", agents: "Router agents", sites: "Managed sites", webhook_subscriptions: "Webhook subscriptions", feature_runs_monthly: "Diagnostic runs / month" }[key]}</span><strong style={{ color: "#f1f5fb" }}>{value}</strong>
                       </div>
                     ))}
                     <button type="button"
@@ -372,7 +372,7 @@ export default function BillingPanel() {
             <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 750 }}>Optional workspace billing</div>
-                <div style={{ fontSize: 10, color: "#64748b", marginTop: 3 }}>This uses the installation operator’s Stripe account. It is separate from paying NetCore for the product licence.</div>
+                <div style={{ fontSize: 10, color: "#71829a", marginTop: 3 }}>This uses the installation operator’s Stripe account. It is separate from paying NetCore for the product licence.</div>
               </div>
               {billing.portal_available ? (
                 <button type="button" disabled={!!busy} onClick={openPortal} style={quietButton}>
@@ -384,12 +384,12 @@ export default function BillingPanel() {
               {plans.filter(plan => plan.plan_id !== "free").map(plan => {
                 const current = activePlan === plan.plan_id && active;
                 return (
-                  <div key={plan.plan_id} style={{ background: "#080d18", border: `1px solid ${current ? "#06d6f0" : "#1e2d47"}`, borderRadius: 9, padding: 13 }}>
+                  <div key={plan.plan_id} style={{ background: "#080d18", border: `1px solid ${current ? "#ff8359" : "#29374d"}`, borderRadius: 9, padding: 13 }}>
                     <div style={{ fontSize: 14, fontWeight: 750 }}>{plan.label}</div>
-                    <div style={{ color: "#64748b", fontSize: 10, margin: "5px 0 10px" }}>Workspace subscription</div>
+                    <div style={{ color: "#71829a", fontSize: 10, margin: "5px 0 10px" }}>Workspace subscription</div>
                     {Object.entries(plan.limits).map(([key, value]) => (
-                      <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10, color: "#94a3b8", padding: "4px 0", borderBottom: "1px solid #1e2d47" }}>
-                        <span>{{ users: "Users", agents: "Router agents", sites: "Managed sites", webhook_subscriptions: "Webhook subscriptions", feature_runs_monthly: "Diagnostic runs / month" }[key]}</span><strong style={{ color: "#e2e8f0" }}>{value}</strong>
+                      <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 10, color: "#a8b6ca", padding: "4px 0", borderBottom: "1px solid #29374d" }}>
+                        <span>{{ users: "Users", agents: "Router agents", sites: "Managed sites", webhook_subscriptions: "Webhook subscriptions", feature_runs_monthly: "Diagnostic runs / month" }[key]}</span><strong style={{ color: "#f1f5fb" }}>{value}</strong>
                       </div>
                     ))}
                     <button type="button" disabled={!!busy || active || !plan.available_for_checkout || !billing.billing_configured || !billing.webhook_configured}

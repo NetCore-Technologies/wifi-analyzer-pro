@@ -11,11 +11,11 @@ const ROLES = [
 ];
 
 const styles = {
-  panel: { color: "#e2e8f0", display: "grid", gap: 16 },
-  card: { background: "#0c1120", border: "1px solid #1e2d47", borderRadius: 10, padding: 16 },
-  muted: { color: "#94a3b8", fontSize: 12 },
-  input: { boxSizing: "border-box", width: "100%", minWidth: 0, background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "9px 10px", fontSize: 12 },
-  button: { border: "1px solid #06d6f0", borderRadius: 7, background: "rgba(6,214,240,.12)", color: "#06d6f0", padding: "9px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer" },
+  panel: { color: "#f1f5fb", display: "grid", gap: 16 },
+  card: { background: "#111624", border: "1px solid #29374d", borderRadius: 10, padding: 16 },
+  muted: { color: "#a8b6ca", fontSize: 12 },
+  input: { boxSizing: "border-box", width: "100%", minWidth: 0, background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: "9px 10px", fontSize: 12 },
+  button: { border: "1px solid #ff8359", borderRadius: 7, background: "rgba(255,131,89,.12)", color: "#ff8359", padding: "9px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer" },
 };
 
 async function readResponse(response) {
@@ -131,9 +131,9 @@ export default function TeamAccessPanel() {
             ["Analyst", "Run diagnostics and review results"],
             ["Viewer", "Read-only access"],
           ].map(([name, description]) => (
-            <div key={name} style={{ flex: "1 1 145px", minWidth: 130, border: "1px solid #1e2d47", borderRadius: 8, padding: 10, background: "#070b14" }}>
-              <div style={{ color: "#06d6f0", fontSize: 11, fontWeight: 750 }}>{name}</div>
-              <div style={{ color: "#94a3b8", fontSize: 10, marginTop: 4 }}>{description}</div>
+            <div key={name} style={{ flex: "1 1 145px", minWidth: 130, border: "1px solid #29374d", borderRadius: 8, padding: 10, background: "#090c15" }}>
+              <div style={{ color: "#ff8359", fontSize: 11, fontWeight: 750 }}>{name}</div>
+              <div style={{ color: "#a8b6ca", fontSize: 10, marginTop: 4 }}>{description}</div>
             </div>
           ))}
         </div>
@@ -143,21 +143,21 @@ export default function TeamAccessPanel() {
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Add a team member</div>
         <p style={{ ...styles.muted, margin: "0 0 14px" }}>Each person has their own username, password verifier and revocable session.</p>
         <form onSubmit={createUser} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 10, alignItems: "end" }}>
-          <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 11 }}>
+          <label style={{ display: "grid", gap: 5, color: "#a8b6ca", fontSize: 11 }}>
             Username
             <input style={styles.input} value={username} onChange={event => setUsername(event.target.value)} minLength={3} maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,63}" autoComplete="off" required placeholder="e.g. alex.network"/>
           </label>
-          <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 11 }}>
+          <label style={{ display: "grid", gap: 5, color: "#a8b6ca", fontSize: 11 }}>
             Temporary password
             <input style={styles.input} value={password} onChange={event => setPassword(event.target.value)} minLength={12} maxLength={1024} autoComplete="new-password" type="password" required placeholder="At least 12 characters"/>
           </label>
-          <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 11 }}>
+          <label style={{ display: "grid", gap: 5, color: "#a8b6ca", fontSize: 11 }}>
             Role
             <select style={styles.input} value={role} onChange={event => setRole(event.target.value)}>
               {availableRoles.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
-          <div style={{ display: "grid", gap: 7, gridColumn: "1 / -1", borderTop: "1px solid #1e2d47", paddingTop: 10 }}>
+          <div style={{ display: "grid", gap: 7, gridColumn: "1 / -1", borderTop: "1px solid #29374d", paddingTop: 10 }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#cbd5e1", fontSize: 11 }}>
               <input type="checkbox" checked={allSites} onChange={event => {
                 setAllSites(event.target.checked);
@@ -165,7 +165,7 @@ export default function TeamAccessPanel() {
               }}/>
               Grant access to all sites
             </label>
-            <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 11 }}>
+            <label style={{ display: "grid", gap: 5, color: "#a8b6ca", fontSize: 11 }}>
               Assigned sites (new accounts have no site access until assigned)
               <select multiple size={Math.min(5, Math.max(2, siteIds.length))}
                 value={selectedSiteIds} disabled={allSites || siteIds.length === 0}
@@ -192,14 +192,14 @@ export default function TeamAccessPanel() {
         {notice ? <div role="status" style={{ color: "#4ade80", fontSize: 12, marginBottom: 10 }}>{notice}</div> : null}
         <div style={{ display: "grid", gap: 8 }}>
           {users.map(user => (
-            <div key={user.id} style={{ display: "grid", gridTemplateColumns: "minmax(110px,1fr) minmax(140px,1fr) auto", alignItems: "center", gap: 10, borderTop: "1px solid #1e2d47", padding: "11px 0" }}>
+            <div key={user.id} style={{ display: "grid", gridTemplateColumns: "minmax(110px,1fr) minmax(140px,1fr) auto", alignItems: "center", gap: 10, borderTop: "1px solid #29374d", padding: "11px 0" }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 650, fontSize: 12, overflowWrap: "anywhere" }}>{user.username}</div>
                 <div style={{ ...styles.muted, fontSize: 10 }}>{user.role === "owner" ? "Workspace owner · protected" : user.enabled ? "Enabled" : "Disabled"}</div>
               </div>
               <div>
                 {user.role === "owner" || (identity?.role !== "owner" && user.role === "admin") ? (
-                  <span style={{ color: "#06d6f0", fontSize: 11, fontWeight: 700 }}>
+                  <span style={{ color: "#ff8359", fontSize: 11, fontWeight: 700 }}>
                     {user.role === "owner" ? "Owner" : "Administrator · owner-managed"}
                   </span>
                 ) : (
@@ -209,7 +209,7 @@ export default function TeamAccessPanel() {
                 )}
               </div>
               {user.role !== "owner" ? (
-                <div style={{ gridColumn: "1 / -1", display: "grid", gap: 7, borderTop: "1px solid #1e2d47", paddingTop: 9 }}>
+                <div style={{ gridColumn: "1 / -1", display: "grid", gap: 7, borderTop: "1px solid #29374d", paddingTop: 9 }}>
                   <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#cbd5e1", fontSize: 11 }}>
                     <input type="checkbox" checked={Boolean(user.all_sites)}
                       disabled={saving || !user.enabled || (identity?.role !== "owner" && user.role === "admin")}
@@ -220,7 +220,7 @@ export default function TeamAccessPanel() {
                     All sites
                     <span style={styles.muted}>{user.all_sites ? "Unrestricted" : (user.site_ids || []).length + " assigned"}</span>
                   </label>
-                  <label style={{ display: "grid", gap: 5, color: "#94a3b8", fontSize: 10 }}>
+                  <label style={{ display: "grid", gap: 5, color: "#a8b6ca", fontSize: 10 }}>
                     Assigned sites
                     <select multiple size={Math.min(4, Math.max(2, siteIds.length))}
                       value={user.all_sites ? [] : (user.site_ids || [])}
@@ -239,10 +239,10 @@ export default function TeamAccessPanel() {
                   </label>
                 </div>
               ) : (
-                <div style={{ gridColumn: "1 / -1", color: "#06d6f0", fontSize: 10 }}>Workspace owner · all sites</div>
+                <div style={{ gridColumn: "1 / -1", color: "#ff8359", fontSize: 10 }}>Workspace owner · all sites</div>
               )}
               <button type="button" disabled={saving || user.role === "owner" || (identity?.role !== "owner" && user.role === "admin")} onClick={() => updateUser(user, { enabled: !user.enabled })}
-                style={{ ...styles.button, borderColor: user.enabled ? "#f59e0b" : "#22c55e", color: user.enabled ? "#f59e0b" : "#22c55e", background: "transparent", whiteSpace: "nowrap" }}>
+                style={{ ...styles.button, borderColor: user.enabled ? "#f2c36b" : "#56d6ae", color: user.enabled ? "#f2c36b" : "#56d6ae", background: "transparent", whiteSpace: "nowrap" }}>
                 {user.enabled ? "Disable" : "Enable"}
               </button>
             </div>

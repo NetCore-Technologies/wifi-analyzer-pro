@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { apiFetch, apiBase } from '../lib/api.js';
 import { Activity, AlertCircle, ShieldCheck } from 'lucide-react';
 
-const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
-const field = { width: '100%', boxSizing: 'border-box', background: '#070b14', color: '#e2e8f0', border: '1px solid #263956', borderRadius: 7, padding: '9px 10px', fontSize: 12 };
-const muted = { color: '#94a3b8', fontSize: 11, lineHeight: 1.55 };
-const metricCard = { background: '#070b14', border: '1px solid #1e2d47', borderRadius: 8, padding: 10 };
+const panel = { background: '#111624', border: '1px solid #29374d', borderRadius: 10, padding: 14 };
+const field = { width: '100%', boxSizing: 'border-box', background: '#090c15', color: '#f1f5fb', border: '1px solid #263956', borderRadius: 7, padding: '9px 10px', fontSize: 12 };
+const muted = { color: '#a8b6ca', fontSize: 11, lineHeight: 1.55 };
+const metricCard = { background: '#090c15', border: '1px solid #29374d', borderRadius: 8, padding: 10 };
 
 function Metric({ label, value, detail }) {
-  return <div style={metricCard}><div style={muted}>{label}</div><div style={{ color: '#e2e8f0', fontSize: 19, fontWeight: 750, marginTop: 4 }}>{value ?? '—'}</div>{detail ? <div style={{ ...muted, marginTop: 4 }}>{detail}</div> : null}</div>;
+  return <div style={metricCard}><div style={muted}>{label}</div><div style={{ color: '#f1f5fb', fontSize: 19, fontWeight: 750, marginTop: 4 }}>{value ?? '—'}</div>{detail ? <div style={{ ...muted, marginTop: 4 }}>{detail}</div> : null}</div>;
 }
 
 export default function ClientRoamTransactionAnalyzer() {
@@ -50,9 +50,9 @@ export default function ClientRoamTransactionAnalyzer() {
     <div style={{ display: 'grid', gap: 12 }}>
       <section style={{ ...panel, borderColor: '#24506a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
-          <Activity size={17} color="#06d6f0"/>
-          <strong style={{ color: '#e2e8f0', fontSize: 13 }}>Client roam transaction analyzer</strong>
-          <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: 10 }}>F291 · OFFLINE EVENT ANALYSIS</span>
+          <Activity size={17} color="#ff8359"/>
+          <strong style={{ color: '#f1f5fb', fontSize: 13 }}>Client roam transaction analyzer</strong>
+          <span style={{ marginLeft: 'auto', color: '#a8b6ca', fontSize: 10 }}>F291 · OFFLINE EVENT ANALYSIS</span>
         </div>
         <p style={{ ...muted, margin: 0 }}>Correlate explicit roam-start, roam-complete and roam-failure telemetry. Roam latency is calculated only from matched timestamps; incomplete event pairs are reported separately and never estimated from snapshot intervals.</p>
       </section>
@@ -72,15 +72,15 @@ export default function ClientRoamTransactionAnalyzer() {
           <div style={muted}>Use a consistent, report-local client reference. Returned client aliases are report-local; raw event and transaction IDs are not returned.</div>
         </div>
         {error ? <div role="alert" style={{ ...muted, color: '#fca5a5', marginTop: 9 }}><AlertCircle size={13} style={{ verticalAlign: 'middle', marginRight: 5 }}/>{error}</div> : null}
-        <button type="button" onClick={analyse} disabled={busy || !eventsText.trim()} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(6,214,240,.13)', color: '#06d6f0', border: '1px solid #06d6f0', borderRadius: 7, padding: '9px 14px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy || !eventsText.trim() ? .5 : 1 }}>
+        <button type="button" onClick={analyse} disabled={busy || !eventsText.trim()} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,131,89,.13)', color: '#ff8359', border: '1px solid #ff8359', borderRadius: 7, padding: '9px 14px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy || !eventsText.trim() ? .5 : 1 }}>
           {busy ? 'Analysing…' : 'Analyse roam transactions'}
         </button>
       </section>
       {summary ? <section style={panel}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <ShieldCheck size={15} color="#34d399"/>
-          <strong style={{ color: '#e2e8f0', fontSize: 12 }}>Roaming evidence summary</strong>
-          <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: 10 }}>{summary.event_count} input events</span>
+          <strong style={{ color: '#f1f5fb', fontSize: 12 }}>Roaming evidence summary</strong>
+          <span style={{ marginLeft: 'auto', color: '#a8b6ca', fontSize: 10 }}>{summary.event_count} input events</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(125px,1fr))', gap: 8 }}>
           <Metric label="Completed roams" value={summary.completed_roams}/>
@@ -94,8 +94,8 @@ export default function ClientRoamTransactionAnalyzer() {
         </div>
         {result.transactions?.length ? <div style={{ overflowX: 'auto', marginTop: 12 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, textAlign: 'left' }}>
-            <thead><tr>{['Client alias','Site','From AP','To AP','Status','Roam latency','Failure time'].map(item => <th key={item} style={{ padding: 8, color: '#94a3b8', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
-            <tbody>{result.transactions.map(row => <tr key={row.transaction_ref}>{[row.client_ref,row.site_id,row.from_ap_id || '—',row.to_ap_id || '—',row.status.replaceAll('_',' '),row.roam_latency_ms == null ? '—' : row.roam_latency_ms + ' ms',row.time_to_failure_ms == null ? '—' : row.time_to_failure_ms + ' ms'].map((value,index) => <td key={index} style={{ padding: 8, color: index === 4 && row.status !== 'completed' ? '#fbbf24' : '#cbd5e1', borderBottom: '1px solid #1e2d47', whiteSpace: 'nowrap' }}>{value}</td>)}</tr>)}</tbody>
+            <thead><tr>{['Client alias','Site','From AP','To AP','Status','Roam latency','Failure time'].map(item => <th key={item} style={{ padding: 8, color: '#a8b6ca', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
+            <tbody>{result.transactions.map(row => <tr key={row.transaction_ref}>{[row.client_ref,row.site_id,row.from_ap_id || '—',row.to_ap_id || '—',row.status.replaceAll('_',' '),row.roam_latency_ms == null ? '—' : row.roam_latency_ms + ' ms',row.time_to_failure_ms == null ? '—' : row.time_to_failure_ms + ' ms'].map((value,index) => <td key={index} style={{ padding: 8, color: index === 4 && row.status !== 'completed' ? '#fbbf24' : '#cbd5e1', borderBottom: '1px solid #29374d', whiteSpace: 'nowrap' }}>{value}</td>)}</tr>)}</tbody>
           </table>
         </div> : null}
         {result.details_truncated ? <p style={muted}>Transaction detail output was truncated to the first 500 records; summary metrics include all accepted events.</p> : null}
