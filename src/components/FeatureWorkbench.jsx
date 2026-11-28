@@ -12,7 +12,13 @@ import RadioRegulatoryEvidencePanel from './RadioRegulatoryEvidencePanel.jsx';
 import RadioCapabilityRegulatoryPlannerPanel from './RadioCapabilityRegulatoryPlannerPanel.jsx';
 import RfChangeApprovalPanel from './RfChangeApprovalPanel.jsx';
 import { Play, Search, RefreshCw, Braces, Wifi, AlertCircle } from 'lucide-react';
-import { buildFeaturePayloadTemplate, filterFeatureCatalog } from '../lib/featureWorkbench.js';
+import {
+  buildFeaturePayloadTemplate,
+  filterFeatureCatalog,
+  getFeatureParameterChoices,
+  getFeatureParameterKind,
+  parseFeatureParameterValue,
+} from '../lib/featureWorkbench.js';
 
 const panel = { background: '#111624', border: '1px solid #29374d', borderRadius: 10, padding: 14 };
 const input = { width: '100%', boxSizing: 'border-box', background: '#090c15', color: '#f1f5fb', border: '1px solid #29374d', borderRadius: 7, padding: '9px 10px', fontSize: 12 };
@@ -26,6 +32,9 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [showAdvancedJson, setShowAdvancedJson] = useState(false);
+  const [jsonFieldDrafts, setJsonFieldDrafts] = useState({});
+  const [jsonFieldErrors, setJsonFieldErrors] = useState({});
 
   const loadCatalog = async () => {
     setLoading(true); setError('');
@@ -52,6 +61,48 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
     [catalog, search, categoryTerms]
   );
   const current = catalog.find(feature => feature.slug === selected);
+  const payloadTemplate = useMemo(
+    () => buildFeaturePayloadTemplate(current?.parameters),
+    [current?.slug]
+  );
+  const payload = useMemo(() => {
+    try {
+      const parsed = JSON.parse(payloadText);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : payloadTemplate;
+    } catch {
+      return payloadTemplate;
+    }
+  }, [payloadText, payloadTemplate]);
+
+  const updateParameter = (name, value) => {
+    let base = payloadTemplate;
+    try {
+      const parsed = JSON.parse(payloadText);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) base = parsed;
+    } catch {
+      // Keep the generated template as the safe base while the raw editor is invalid.
+    }
+    setPayloadText(JSON.stringify({ ...base, [name]: value }, null, 2));
+    setResult(null);
+    setJsonFieldDrafts(previous => {
+      const next = { ...previous };
+      delete next[name];
+      return next;
+    });
+    setJsonFieldErrors(previous => {
+      const next = { ...previous };
+      delete next[name];
+      return next;
+    });
+  };
+
+  const applyJsonParameter = (name, kind, value) => {
+    try {
+      updateParameter(name, parseFeatureParameterValue(value, kind));
+    } catch (err) {
+      setJsonFieldErrors(previous => ({ ...previous, [name]: err.message }));
+    }
+  };
 
   const useLatestScan = async () => {
     setBusy(true); setError('');
@@ -60,6 +111,8 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
       if (!response.ok) throw new Error(`Scan returned HTTP ${response.status}`);
       const data = await response.json();
       setPayloadText(JSON.stringify({ networks: data.networks || [], timestamp: data.timestamp, source: data.source }, null, 2));
+      setJsonFieldDrafts({});
+      setJsonFieldErrors({});
     } catch (err) { setError(err.message || 'Could not load the latest scan.'); }
     finally { setBusy(false); }
   };
@@ -83,6 +136,7 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
     try {
       const body = JSON.parse(payloadText);
       if (!body || Array.isArray(body) || typeof body !== 'object') throw new Error('Input must be a JSON object.');
+      if (Object.keys(jsonFieldErrors).length) throw new Error('Correct the invalid structured input fields before running this tool.');
       const response = await apiFetch(`${apiBase()}/api/features/${encodeURIComponent(selected)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000),
       });
@@ -104,6 +158,9 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
           setPayloadText(JSON.stringify(buildFeaturePayloadTemplate(feature.parameters), null, 2));
           setResult(null);
           setError('');
+          setJsonFieldDrafts({});
+          setJsonFieldErrors({});
+          setShowAdvancedJson(false);
         }} aria-pressed={selected === feature.slug} style={{ width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 7, marginBottom: 5, border: `1px solid ${selected === feature.slug ? '#ff8359' : '#29374d'}`, background: selected === feature.slug ? 'rgba(255,131,89,.11)' : 'transparent', color: selected === feature.slug ? '#ff8359' : '#cbd5e1', cursor: 'pointer' }}><div style={{ fontSize: 11, fontWeight: 650 }}>{feature.id} · {feature.name}</div><div style={{ fontSize: 10, color: '#71829a', marginTop: 2 }}>{feature.category}</div></button>)}
         {!loading && filtered.length === 0 ? <p style={{ fontSize: 11, color: '#71829a' }}>No matching features.</p> : null}
       </section>
@@ -123,8 +180,69 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
               <button type="button" onClick={useLatestScan} disabled={busy} style={{ border: '1px solid #29374d', background: '#182235', color: '#ff8359', borderRadius: 7, padding: '7px 9px', fontSize: 11, cursor: 'pointer' }}><Wifi size={12} style={{ verticalAlign: 'middle', marginRight: 5 }}/>Use latest scan</button>
             </div>
           </div>
-          <textarea value={payloadText} onChange={e => setPayloadText(e.target.value)} rows={12} spellCheck="false" aria-label="Feature JSON input" style={{ ...input, resize: 'vertical', fontFamily: 'ui-monospace, monospace', lineHeight: 1.55 }}/>
-          <button onClick={run} disabled={busy || !current} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,131,89,.13)', color: '#ff8359', border: '1px solid #ff8359', borderRadius: 7, padding: '9px 15px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? .6 : 1 }}><Play size={13}/>{busy ? 'Running…' : 'Run feature'}</button>
+          {current?.parameters && Object.keys(current.parameters).length ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 11, marginBottom: 12 }}>
+              {Object.entries(current.parameters).map(([name, descriptor]) => {
+                const kind = getFeatureParameterKind(descriptor, name);
+                const value = Object.prototype.hasOwnProperty.call(payload, name) ? payload[name] : payloadTemplate[name];
+                const labelStyle = { display: 'block', color: '#f1f5fb', fontSize: 11, fontWeight: 650, marginBottom: 5 };
+                const helpStyle = { display: 'block', color: '#71829a', fontSize: 10, lineHeight: 1.45, marginTop: 5 };
+                const fieldId = 'feature-' + current.slug + '-' + name;
+                return (
+                  <div key={name} style={{ minWidth: 0, padding: 10, border: '1px solid #29374d', borderRadius: 8, background: 'rgba(9,12,21,.55)' }}>
+                    <label htmlFor={fieldId} style={labelStyle}>{name.replaceAll('_', ' ')}</label>
+                    {kind === 'boolean' ? (
+                      <label htmlFor={fieldId} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 34, color: '#a8b6ca', fontSize: 11 }}>
+                        <input id={fieldId} type="checkbox" checked={Boolean(value)} disabled={busy}
+                          onChange={event => updateParameter(name, event.target.checked)}/>
+                        {value ? 'Enabled' : 'Disabled'}
+                      </label>
+                    ) : kind === 'enum' ? (
+                      <select id={fieldId} value={typeof value === 'string' ? value : ''}
+                        disabled={busy} onChange={event => updateParameter(name, event.target.value)} style={input}>
+                        {getFeatureParameterChoices(descriptor).map(choice => <option key={choice} value={choice}>{choice}</option>)}
+                      </select>
+                    ) : kind === 'integer' || kind === 'number' ? (
+                      <input id={fieldId} type="number" step={kind === 'integer' ? '1' : 'any'}
+                        value={typeof value === 'number' && Number.isFinite(value) ? value : ''}
+                        disabled={busy} onChange={event => updateParameter(name, event.target.value === '' ? null : Number(event.target.value))}
+                        style={input}/>
+                    ) : kind === 'text' ? (
+                      <input id={fieldId} type="text" value={typeof value === 'string' ? value : ''}
+                        disabled={busy} onChange={event => updateParameter(name, event.target.value)} style={input}/>
+                    ) : (
+                      <textarea id={fieldId} value={jsonFieldDrafts[name] ?? JSON.stringify(value ?? (kind === 'array' ? [] : {}), null, 2)}
+                        disabled={busy} rows={4} spellCheck="false"
+                        onChange={event => {
+                          setJsonFieldDrafts(previous => ({ ...previous, [name]: event.target.value }));
+                          setJsonFieldErrors(previous => {
+                            const next = { ...previous };
+                            delete next[name];
+                            return next;
+                          });
+                        }}
+                        onBlur={event => applyJsonParameter(name, kind, event.target.value)}
+                        aria-invalid={Boolean(jsonFieldErrors[name])}
+                        style={{ ...input, resize: 'vertical', fontFamily: 'ui-monospace, monospace', lineHeight: 1.5 }}/>
+                    )}
+                    <span style={helpStyle}>{descriptor}</span>
+                    {jsonFieldErrors[name] ? <span role="alert" style={{ display: 'block', color: '#ff7185', fontSize: 10, marginTop: 5 }}>{jsonFieldErrors[name]}</span> : null}
+                  </div>
+                );
+              })}
+            </div>
+          ) : <p style={{ color: '#71829a', fontSize: 11 }}>This feature accepts an empty JSON object. Use advanced JSON to supply additional options only when documented.</p>}
+          <button type="button" onClick={() => setShowAdvancedJson(value => !value)} aria-expanded={showAdvancedJson}
+            style={{ background: '#182235', border: '1px solid #29374d', color: '#ff8359', borderRadius: 7, padding: '7px 9px', fontSize: 11, cursor: 'pointer', marginBottom: showAdvancedJson ? 8 : 0 }}>
+            {showAdvancedJson ? 'Hide advanced JSON' : 'Edit full JSON'}
+          </button>
+          {showAdvancedJson ? <textarea value={payloadText} onChange={e => {
+            setPayloadText(e.target.value);
+            setJsonFieldDrafts({});
+            setJsonFieldErrors({});
+          }} rows={14} spellCheck="false" aria-label="Advanced feature JSON input"
+            style={{ ...input, resize: 'vertical', fontFamily: 'ui-monospace, monospace', lineHeight: 1.55 }}/> : null}
+          <button onClick={run} disabled={busy || !current || Object.keys(jsonFieldErrors).length > 0} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,131,89,.13)', color: '#ff8359', border: '1px solid #ff8359', borderRadius: 7, padding: '9px 15px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? .6 : 1 }}><Play size={13}/>{busy ? 'Running…' : 'Run feature'}</button>
           {selected === 'site_to_site_change_report' ? <button onClick={loadStoredHistoryReport} disabled={busy} style={{ marginTop: 10, marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 7, background: '#111827', color: '#a5f3fc', border: '1px solid #256779', borderRadius: 7, padding: '9px 12px', fontSize: 11, cursor: busy ? 'wait' : 'pointer' }}>Build report from saved history</button> : null}
         </div>}
         {error && selected !== 'multi_ap_channel_reuse_planner' && selected !== 'client_roam_transaction_analyzer' && selected !== 'client_experience_slo_evaluator' && selected !== 'client_experience_slo_window_comparator' && selected !== 'floorplan_rf_survey_analyzer' && selected !== 'radio_regulatory_evidence_validator' && selected !== 'radio_capability_regulatory_channel_planner' && selected !== 'rf_change_approval_packet' ? <div role="alert" style={{ ...panel, borderColor: '#ef4444', color: '#fca5a5', fontSize: 12 }}><AlertCircle size={14} style={{ verticalAlign: 'middle', marginRight: 6 }}/>{error}</div> : null}
