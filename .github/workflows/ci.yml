@@ -89,6 +89,11 @@ jobs:
       - run: python -m pip install -r wifi_analyzer_backend/requirements.txt
       - run: python -m compileall -q wifi_analyzer_backend tests
       - run: python -m unittest discover -s tests -v
+      - name: Build and install the Python console application
+        run: |
+          python -m pip install --no-deps .
+          wifi-analyzer --help
+          python -c "from importlib.resources import files; assert files('wifi_analyzer_backend.feature_plugins').joinpath('FEATURES.json').is_file()"
 
   container:
     name: Docker image build (non-root runtime)
