@@ -3,10 +3,10 @@ import { apiFetch, apiBase } from '../lib/api.js';
 import { parseClientExperienceCsv } from '../lib/clientExperienceCsv.js';
 import { Activity, AlertCircle, Play, ShieldCheck } from 'lucide-react';
 
-const panel = { background: '#0c1120', border: '1px solid #1e2d47', borderRadius: 10, padding: 14 };
-const field = { width: '100%', minWidth: 0, boxSizing: 'border-box', background: '#070b14', color: '#e2e8f0', border: '1px solid #263956', borderRadius: 7, padding: '8px 9px', fontSize: 12 };
-const muted = { color: '#94a3b8', fontSize: 11, lineHeight: 1.55 };
-const labelStyle = { display: 'block', color: '#94a3b8', fontSize: 10, fontWeight: 650, marginBottom: 5 };
+const panel = { background: '#111624', border: '1px solid #29374d', borderRadius: 10, padding: 14 };
+const field = { width: '100%', minWidth: 0, boxSizing: 'border-box', background: '#090c15', color: '#f1f5fb', border: '1px solid #263956', borderRadius: 7, padding: '8px 9px', fontSize: 12 };
+const muted = { color: '#a8b6ca', fontSize: 11, lineHeight: 1.55 };
+const labelStyle = { display: 'block', color: '#a8b6ca', fontSize: 10, fontWeight: 650, marginBottom: 5 };
 const METRICS = [
   ['rssi_dbm', 'RSSI'],
   ['snr_db', 'SNR'],
@@ -31,9 +31,9 @@ const THRESHOLDS = [
 
 function MetricCard({ label, value, detail }) {
   return (
-    <div style={{ background: '#070b14', border: '1px solid #1e2d47', borderRadius: 8, padding: 10 }}>
+    <div style={{ background: '#090c15', border: '1px solid #29374d', borderRadius: 8, padding: 10 }}>
       <div style={muted}>{label}</div>
-      <div style={{ color: '#e2e8f0', fontSize: 19, fontWeight: 750, marginTop: 4 }}>{value}</div>
+      <div style={{ color: '#f1f5fb', fontSize: 19, fontWeight: 750, marginTop: 4 }}>{value}</div>
       {detail ? <div style={{ ...muted, marginTop: 4 }}>{detail}</div> : null}
     </div>
   );
@@ -118,15 +118,15 @@ export default function ClientExperienceSloPanel() {
     ? 'Within thresholds'
     : result?.status === 'threshold_breaches' ? 'Threshold breaches' : 'Insufficient evidence';
   const statusColor = result?.status === 'within_thresholds' ? '#34d399'
-    : result?.status === 'threshold_breaches' ? '#fbbf24' : '#94a3b8';
+    : result?.status === 'threshold_breaches' ? '#fbbf24' : '#a8b6ca';
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <section style={{ ...panel, borderColor: '#24506a' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
-          <Activity size={17} color="#06d6f0"/>
-          <strong style={{ color: '#e2e8f0', fontSize: 13 }}>Client experience SLO evaluator</strong>
-          <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: 10 }}>F292 · MEASURED DATA ONLY</span>
+          <Activity size={17} color="#ff8359"/>
+          <strong style={{ color: '#f1f5fb', fontSize: 13 }}>Client experience SLO evaluator</strong>
+          <span style={{ marginLeft: 'auto', color: '#a8b6ca', fontSize: 10 }}>F292 · MEASURED DATA ONLY</span>
         </div>
         <p style={{ ...muted, margin: 0 }}>Paste timestamped per-client measurements from a controller, managed agent, client telemetry export or active probe. Missing required metrics are excluded from the SLA denominator, not counted as healthy.</p>
       </section>
@@ -160,10 +160,10 @@ export default function ClientExperienceSloPanel() {
       </section>
 
       <section style={panel}>
-        <div style={{ color: '#e2e8f0', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>SLO eligibility and thresholds</div>
+        <div style={{ color: '#f1f5fb', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>SLO eligibility and thresholds</div>
         <div style={{ color: '#cbd5e1', fontSize: 11, marginBottom: 7 }}>Required metrics: a sample missing any selected metric is incomplete and excluded from SLA attainment.</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(145px,1fr))', gap: 7 }}>
-          {METRICS.map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#94a3b8', fontSize: 11 }}>
+          {METRICS.map(([key, label]) => <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#a8b6ca', fontSize: 11 }}>
             <input type="checkbox" checked={requiredMetrics.includes(key)} onChange={event => toggleMetric(key, event.target.checked)}/>
             {label}
           </label>)}
@@ -176,7 +176,7 @@ export default function ClientExperienceSloPanel() {
           <p style={{ ...muted, marginBottom: 0 }}>Blank fields use the evaluator defaults. Throughput remains unscored unless a minimum throughput threshold is supplied.</p>
         </details>
         {error ? <div role="alert" style={{ ...muted, color: '#fca5a5', marginTop: 10 }}><AlertCircle size={13} style={{ verticalAlign: 'middle', marginRight: 5 }}/>{error}</div> : null}
-        <button type="button" onClick={evaluate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 12, border: '1px solid #06d6f0', background: 'rgba(6,214,240,.13)', color: '#06d6f0', borderRadius: 7, padding: '9px 13px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.5 : 1 }}>
+        <button type="button" onClick={evaluate} disabled={busy} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 12, border: '1px solid #ff8359', background: 'rgba(255,131,89,.13)', color: '#ff8359', borderRadius: 7, padding: '9px 13px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.5 : 1 }}>
           <Play size={13}/>{busy ? 'Evaluating…' : 'Evaluate client SLOs'}
         </button>
       </section>
@@ -184,7 +184,7 @@ export default function ClientExperienceSloPanel() {
       {summary ? <section style={panel}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           <ShieldCheck size={15} color={statusColor}/>
-          <strong style={{ color: '#e2e8f0', fontSize: 12 }}>Client experience report</strong>
+          <strong style={{ color: '#f1f5fb', fontSize: 12 }}>Client experience report</strong>
           <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: statusColor }}>{statusText.toUpperCase()}</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(125px,1fr))', gap: 8 }}>
@@ -196,13 +196,13 @@ export default function ClientExperienceSloPanel() {
         <div style={{ overflowX: 'auto', marginTop: 13 }}>
           <strong style={{ color: '#cbd5e1', fontSize: 11 }}>Metric coverage and distribution</strong>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, textAlign: 'left', marginTop: 6 }}>
-            <thead><tr>{['Metric','Samples','Coverage','Median','P95','Threshold','Breaches'].map(item => <th key={item} style={{ padding: 7, color: '#94a3b8', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
+            <thead><tr>{['Metric','Samples','Coverage','Median','P95','Threshold','Breaches'].map(item => <th key={item} style={{ padding: 7, color: '#a8b6ca', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
             <tbody>{METRICS.map(([key, label]) => {
               const stat = summary.metric_summary[key];
               const suffix = key.endsWith('_pct') ? '%' : key.endsWith('_ms') ? ' ms' : key.endsWith('_mbps') ? ' Mbps' : key === 'rssi_dbm' ? ' dBm' : ' dB';
               const threshold = stat.threshold == null ? 'disabled' : (stat.direction === 'min' ? '≥ ' : '≤ ') + stat.threshold;
               return <tr key={key}>
-                {[label, stat.sample_count, stat.coverage_pct == null ? '—' : stat.coverage_pct + '%', stat.median == null ? '—' : stat.median + suffix, stat.p95 == null ? '—' : stat.p95 + suffix, threshold, stat.breach_count].map((value, index) => <td key={index} style={{ padding: 7, color: '#cbd5e1', borderBottom: '1px solid #1e2d47', whiteSpace: 'nowrap' }}>{value}</td>)}
+                {[label, stat.sample_count, stat.coverage_pct == null ? '—' : stat.coverage_pct + '%', stat.median == null ? '—' : stat.median + suffix, stat.p95 == null ? '—' : stat.p95 + suffix, threshold, stat.breach_count].map((value, index) => <td key={index} style={{ padding: 7, color: '#cbd5e1', borderBottom: '1px solid #29374d', whiteSpace: 'nowrap' }}>{value}</td>)}
               </tr>;
             })}</tbody>
           </table>
@@ -210,9 +210,9 @@ export default function ClientExperienceSloPanel() {
         <div style={{ overflowX: 'auto', marginTop: 13 }}>
           <strong style={{ color: '#cbd5e1', fontSize: 11 }}>Client SLO results</strong>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, textAlign: 'left', marginTop: 6 }}>
-            <thead><tr>{['Client alias','Site','Status','Attainment','Eligible','Incomplete','Median RTT','P95 RTT'].map(item => <th key={item} style={{ padding: 7, color: '#94a3b8', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
+            <thead><tr>{['Client alias','Site','Status','Attainment','Eligible','Incomplete','Median RTT','P95 RTT'].map(item => <th key={item} style={{ padding: 7, color: '#a8b6ca', borderBottom: '1px solid #263956', whiteSpace: 'nowrap' }}>{item}</th>)}</tr></thead>
             <tbody>{result.clients.map(client => <tr key={client.site_id + '-' + client.client_ref}>
-              {[client.client_ref,client.site_id,client.status.replaceAll('_',' '),client.sla_attainment_pct == null ? 'n/a' : client.sla_attainment_pct + '%',client.eligible_slo_sample_count,client.incomplete_required_sample_count,client.metric_summary.rtt_ms.median == null ? '—' : client.metric_summary.rtt_ms.median + ' ms',client.metric_summary.rtt_ms.p95 == null ? '—' : client.metric_summary.rtt_ms.p95 + ' ms'].map((value,index) => <td key={index} style={{ padding: 7, color: index === 2 && client.status === 'threshold_breaches' ? '#fbbf24' : '#cbd5e1', borderBottom: '1px solid #1e2d47', whiteSpace: 'nowrap' }}>{value}</td>)}
+              {[client.client_ref,client.site_id,client.status.replaceAll('_',' '),client.sla_attainment_pct == null ? 'n/a' : client.sla_attainment_pct + '%',client.eligible_slo_sample_count,client.incomplete_required_sample_count,client.metric_summary.rtt_ms.median == null ? '—' : client.metric_summary.rtt_ms.median + ' ms',client.metric_summary.rtt_ms.p95 == null ? '—' : client.metric_summary.rtt_ms.p95 + ' ms'].map((value,index) => <td key={index} style={{ padding: 7, color: index === 2 && client.status === 'threshold_breaches' ? '#fbbf24' : '#cbd5e1', borderBottom: '1px solid #29374d', whiteSpace: 'nowrap' }}>{value}</td>)}
             </tr>)}</tbody>
           </table>
         </div>

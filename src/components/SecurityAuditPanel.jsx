@@ -8,11 +8,11 @@ const colours = {
   failure: { color: "#f87171", border: "rgba(248,113,113,.35)", background: "rgba(248,113,113,.08)" },
 };
 const styles = {
-  panel: { color: "#e2e8f0", display: "grid", gap: 14 },
-  card: { background: "#0c1120", border: "1px solid #1e2d47", borderRadius: 10, padding: 16 },
-  muted: { color: "#94a3b8", fontSize: 11 },
-  button: { border: "1px solid #06d6f0", borderRadius: 7, background: "rgba(6,214,240,.1)", color: "#06d6f0", padding: "8px 11px", fontWeight: 700, fontSize: 11, cursor: "pointer" },
-  select: { background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 10px", fontSize: 11 },
+  panel: { color: "#f1f5fb", display: "grid", gap: 14 },
+  card: { background: "#111624", border: "1px solid #29374d", borderRadius: 10, padding: 16 },
+  muted: { color: "#a8b6ca", fontSize: 11 },
+  button: { border: "1px solid #ff8359", borderRadius: 7, background: "rgba(255,131,89,.1)", color: "#ff8359", padding: "8px 11px", fontWeight: 700, fontSize: 11, cursor: "pointer" },
+  select: { background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: "8px 10px", fontSize: 11 },
 };
 async function readResponse(response) {
   const data = await response.json().catch(() => ({}));
@@ -116,7 +116,7 @@ export default function SecurityAuditPanel() {
     }
   }, [loadEvents]); // Filter changes require explicit Apply.
 
-  const outcomeStyle = value => colours[value] || { color: "#94a3b8", border: "#334155", background: "transparent" };
+  const outcomeStyle = value => colours[value] || { color: "#a8b6ca", border: "#334155", background: "transparent" };
 
   return (
     <div style={styles.panel}>
@@ -135,15 +135,15 @@ export default function SecurityAuditPanel() {
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(130px,1fr))", gap: 9, marginTop: 16 }}>
-          <div style={{ background: "#070b14", border: "1px solid #1e2d47", borderRadius: 8, padding: 11 }}>
+          <div style={{ background: "#090c15", border: "1px solid #29374d", borderRadius: 8, padding: 11 }}>
             <div style={styles.muted}>Stored events</div>
             <div style={{ fontSize: 22, fontWeight: 750, marginTop: 4 }}>{summary?.event_count ?? "—"}</div>
           </div>
-          <div style={{ background: "#070b14", border: "1px solid #1e2d47", borderRadius: 8, padding: 11 }}>
+          <div style={{ background: "#090c15", border: "1px solid #29374d", borderRadius: 8, padding: 11 }}>
             <div style={styles.muted}>Successful actions</div>
             <div style={{ fontSize: 22, fontWeight: 750, color: "#4ade80", marginTop: 4 }}>{summary?.counts_by_outcome?.success ?? 0}</div>
           </div>
-          <div style={{ background: "#070b14", border: "1px solid #1e2d47", borderRadius: 8, padding: 11 }}>
+          <div style={{ background: "#090c15", border: "1px solid #29374d", borderRadius: 8, padding: 11 }}>
             <div style={styles.muted}>Denied / failed</div>
             <div style={{ fontSize: 22, fontWeight: 750, color: "#fbbf24", marginTop: 4 }}>{(summary?.counts_by_outcome?.denied ?? 0) + (summary?.counts_by_outcome?.failure ?? 0)}</div>
           </div>
@@ -154,16 +154,16 @@ export default function SecurityAuditPanel() {
           </div>
         ) : null}
         {checkpointFingerprint ? (
-          <div role="status" style={{ marginTop: 10, padding: 10, borderRadius: 8, border: "1px solid #1e2d47", background: "#070b14", color: "#cbd5e1", fontSize: 10, overflowWrap: "anywhere" }}>
+          <div role="status" style={{ marginTop: 10, padding: 10, borderRadius: 8, border: "1px solid #29374d", background: "#090c15", color: "#cbd5e1", fontSize: 10, overflowWrap: "anywhere" }}>
             Checkpoint signing identity · Ed25519 · Pin this public-key fingerprint outside this host:
-            <div style={{ color: "#06d6f0", fontFamily: "monospace", marginTop: 5 }}>{checkpointFingerprint}</div>
+            <div style={{ color: "#ff8359", fontFamily: "monospace", marginTop: 5 }}>{checkpointFingerprint}</div>
           </div>
         ) : null}
       </section>
 
       <section style={styles.card}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#94a3b8", fontSize: 11 }}>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#a8b6ca", fontSize: 11 }}>
             Outcome
             <select aria-label="Filter audit outcome" style={styles.select} value={outcome} onChange={event => setOutcome(event.target.value)}>
               <option value="">All outcomes</option>
@@ -172,7 +172,7 @@ export default function SecurityAuditPanel() {
               <option value="failure">Failure</option>
             </select>
           </label>
-          <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#94a3b8", fontSize: 11 }}>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#a8b6ca", fontSize: 11 }}>
             Action
             <input aria-label="Filter audit action" style={{ ...styles.select, width: 190 }} value={action} maxLength={96} onChange={event => setAction(event.target.value)} placeholder="e.g. user.created"/>
           </label>
@@ -182,7 +182,7 @@ export default function SecurityAuditPanel() {
         {error ? <div role="alert" style={{ color: "#f87171", fontSize: 12, marginTop: 10 }}>{error}</div> : null}
         <div style={{ display: "grid", gap: 0, marginTop: 14 }}>
           {events.map(event => (
-            <article key={event.event_id} style={{ display: "grid", gridTemplateColumns: "minmax(130px,1.3fr) minmax(130px,1fr) auto", gap: 12, alignItems: "start", borderTop: "1px solid #1e2d47", padding: "12px 0" }}>
+            <article key={event.event_id} style={{ display: "grid", gridTemplateColumns: "minmax(130px,1.3fr) minmax(130px,1fr) auto", gap: 12, alignItems: "start", borderTop: "1px solid #29374d", padding: "12px 0" }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, overflowWrap: "anywhere" }}>{event.action}</div>
                 <div style={{ ...styles.muted, marginTop: 4 }}>{formatTime(event.occurred_at)}</div>

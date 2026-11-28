@@ -17,17 +17,17 @@ const DEFAULT_CAPABILITIES = [
 ];
 
 const COLORS = {
-  card: "#0c1120",
-  cardAlt: "#111827",
-  border: "#1e2d47",
-  text: "#e2e8f0",
-  secondary: "#94a3b8",
-  muted: "#64748b",
-  cyan: "#06d6f0",
-  green: "#22c55e",
-  yellow: "#f59e0b",
-  red: "#ef4444",
-  purple: "#a855f7",
+  card: "#111624",
+  cardAlt: "#182235",
+  border: "#29374d",
+  text: "#f1f5fb",
+  secondary: "#a8b6ca",
+  muted: "#71829a",
+  cyan: "#ff8359",
+  green: "#56d6ae",
+  yellow: "#f2c36b",
+  red: "#ff7185",
+  purple: "#a78bfa",
 };
 
 async function requestJSON(path, options = {}) {
@@ -360,8 +360,8 @@ export default function RouterAgentConsole() {
         </button>
       </div>
 
-      {error && <div role="alert" style={{ padding: "10px 12px", borderRadius: 8, background: "#ef444418", border: "1px solid #ef444455", color: "#fca5a5", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}><AlertCircle size={14} />{error}</div>}
-      {notice && <div role="status" style={{ padding: "10px 12px", borderRadius: 8, background: "#22c55e14", border: "1px solid #22c55e44", color: "#86efac", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle2 size={14} />{notice}</div>}
+      {error && <div role="alert" style={{ padding: "10px 12px", borderRadius: 8, background: "#ff718518", border: "1px solid #ff718555", color: "#fca5a5", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}><AlertCircle size={14} />{error}</div>}
+      {notice && <div role="status" style={{ padding: "10px 12px", borderRadius: 8, background: "#56d6ae14", border: "1px solid #56d6ae44", color: "#86efac", fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}><CheckCircle2 size={14} />{notice}</div>}
 
       {issuedCredential && (
         <Panel title="One-time agent credential" subtitle={`${issuedCredential.action} · ${issuedCredential.agent_id} · expires ${timestamp(issuedCredential.expires_at)}`}>
@@ -391,7 +391,7 @@ export default function RouterAgentConsole() {
                   const selected = selectedAgentId === agent.agent_id;
                   return (
                     <button key={agent.agent_id} onClick={() => setSelectedAgentId(agent.agent_id)}
-                      style={{ width: "100%", textAlign: "left", cursor: "pointer", background: selected ? "#06d6f018" : COLORS.cardAlt, border: `1px solid ${selected ? COLORS.cyan + "77" : COLORS.border}`, borderRadius: 8, padding: "10px 11px", color: COLORS.text }}>
+                      style={{ width: "100%", textAlign: "left", cursor: "pointer", background: selected ? "#ff835918" : COLORS.cardAlt, border: `1px solid ${selected ? COLORS.cyan + "77" : COLORS.border}`, borderRadius: 8, padding: "10px 11px", color: COLORS.text }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                         <span style={{ fontWeight: 700, fontSize: 12 }}>{agent.agent_id}</span>
                         <StatusPill value={status} />
@@ -439,7 +439,7 @@ export default function RouterAgentConsole() {
                   </label>
                 ))}
               </div>
-              <button className="agent-console-button" type="submit" disabled={saving || !selectedCapabilities.includes("system.board") || !selectedCapabilities.includes("inventory.snapshot")} style={{ background: "#06d6f01b", borderColor: "#06d6f066", color: COLORS.cyan, marginTop: 3 }}>
+              <button className="agent-console-button" type="submit" disabled={saving || !selectedCapabilities.includes("system.board") || !selectedCapabilities.includes("inventory.snapshot")} style={{ background: "#ff83591b", borderColor: "#ff835966", color: COLORS.cyan, marginTop: 3 }}>
                 <KeyRound size={13} />{saving ? "Enrolling…" : "Enrol agent"}
               </button>
               <div style={{ color: COLORS.muted, fontSize: 10 }}>Only read permission is available. The token is returned once and is never listed again.</div>
@@ -461,7 +461,7 @@ export default function RouterAgentConsole() {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {(activeAgent.capabilities || activeAgent.credential?.allowed_capabilities || []).map((capability) => (
-                  <span key={capability} style={{ padding: "4px 7px", borderRadius: 6, background: "#06d6f012", border: "1px solid #06d6f033", color: COLORS.cyan, fontSize: 10 }}>{capability}</span>
+                  <span key={capability} style={{ padding: "4px 7px", borderRadius: 6, background: "#ff835912", border: "1px solid #ff835933", color: COLORS.cyan, fontSize: 10 }}>{capability}</span>
                 ))}
               </div>
               {activeAgent.credential && <div style={{ color: COLORS.muted, fontSize: 10, marginTop: 11 }}>

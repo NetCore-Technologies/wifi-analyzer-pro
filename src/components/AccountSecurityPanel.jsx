@@ -4,11 +4,11 @@ import { useAuth } from "../auth/AuthContext.jsx";
 
 const API_BASE = window.location.protocol + "//" + window.location.hostname + ":199";
 const styles = {
-  panel: { color: "#e2e8f0", display: "grid", gap: 14 },
-  card: { background: "#0c1120", border: "1px solid #1e2d47", borderRadius: 10, padding: 16 },
-  muted: { color: "#94a3b8", fontSize: 11, lineHeight: 1.6 },
-  input: { boxSizing: "border-box", width: "100%", minWidth: 0, background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "10px 11px", fontSize: 12 },
-  button: { border: "1px solid #06d6f0", borderRadius: 7, background: "rgba(6,214,240,.1)", color: "#06d6f0", padding: "9px 12px", fontWeight: 700, fontSize: 11, cursor: "pointer" },
+  panel: { color: "#f1f5fb", display: "grid", gap: 14 },
+  card: { background: "#111624", border: "1px solid #29374d", borderRadius: 10, padding: 16 },
+  muted: { color: "#a8b6ca", fontSize: 11, lineHeight: 1.6 },
+  input: { boxSizing: "border-box", width: "100%", minWidth: 0, background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: "10px 11px", fontSize: 12 },
+  button: { border: "1px solid #ff8359", borderRadius: 7, background: "rgba(255,131,89,.1)", color: "#ff8359", padding: "9px 12px", fontWeight: 700, fontSize: 11, cursor: "pointer" },
 };
 async function readResponse(response) {
   const data = await response.json().catch(() => ({}));
@@ -115,11 +115,11 @@ export default function AccountSecurityPanel() {
             <div style={{ fontSize: 16, fontWeight: 750 }}>Account security</div>
             <p style={{ ...styles.muted, margin: "5px 0 0" }}>Protect this account with an authenticator app and one-time recovery codes.</p>
           </div>
-          <span style={{ border: `1px solid ${mfaEnabled ? "rgba(74,222,128,.45)" : "#334155"}`, background: mfaEnabled ? "rgba(74,222,128,.08)" : "transparent", color: mfaEnabled ? "#4ade80" : "#94a3b8", borderRadius: 999, padding: "5px 9px", fontSize: 10, fontWeight: 750 }}>
+          <span style={{ border: `1px solid ${mfaEnabled ? "rgba(74,222,128,.45)" : "#334155"}`, background: mfaEnabled ? "rgba(74,222,128,.08)" : "transparent", color: mfaEnabled ? "#4ade80" : "#a8b6ca", borderRadius: 999, padding: "5px 9px", fontSize: 10, fontWeight: 750 }}>
             {mfaEnabled ? "MFA ENABLED" : "MFA NOT ENABLED"}
           </span>
         </div>
-        <div style={{ ...styles.muted, marginTop: 12 }}>Signed in as <strong style={{ color: "#e2e8f0" }}>{identity?.username || "current user"}</strong>. {mfaEnabled ? `${recoveryRemaining} unused recovery code(s) remain.` : "Password-only sign-in is active."}</div>
+        <div style={{ ...styles.muted, marginTop: 12 }}>Signed in as <strong style={{ color: "#f1f5fb" }}>{identity?.username || "current user"}</strong>. {mfaEnabled ? `${recoveryRemaining} unused recovery code(s) remain.` : "Password-only sign-in is active."}</div>
       </section>
 
       {error ? <div role="alert" style={{ color: "#f87171", border: "1px solid rgba(248,113,113,.3)", padding: 10, borderRadius: 8, fontSize: 12 }}>{error}</div> : null}
@@ -137,10 +137,10 @@ export default function AccountSecurityPanel() {
         ) : (
           <form onSubmit={confirmSetup} style={{ display: "grid", gap: 9, marginTop: 12 }}>
             <div style={styles.muted}>Add this account using the URI or enter the manual key in your authenticator application.</div>
-            <a href={setupUri} style={{ color: "#06d6f0", fontSize: 11, overflowWrap: "anywhere" }}>Open authenticator setup link</a>
-            <div style={{ padding: 12, borderRadius: 8, border: "1px solid #2a3f65", background: "#070b14" }}>
-              <div style={{ color: "#94a3b8", fontSize: 10, marginBottom: 6 }}>MANUAL SECRET · BASE32</div>
-              <div style={{ fontFamily: "monospace", fontSize: 13, color: "#e2e8f0", overflowWrap: "anywhere", letterSpacing: 1 }}>{setupSecret}</div>
+            <a href={setupUri} style={{ color: "#ff8359", fontSize: 11, overflowWrap: "anywhere" }}>Open authenticator setup link</a>
+            <div style={{ padding: 12, borderRadius: 8, border: "1px solid #435775", background: "#090c15" }}>
+              <div style={{ color: "#a8b6ca", fontSize: 10, marginBottom: 6 }}>MANUAL SECRET · BASE32</div>
+              <div style={{ fontFamily: "monospace", fontSize: 13, color: "#f1f5fb", overflowWrap: "anywhere", letterSpacing: 1 }}>{setupSecret}</div>
             </div>
             <label style={styles.muted} htmlFor="account-mfa-confirm-code">Current six-digit authenticator code</label>
             <input id="account-mfa-confirm-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required style={styles.input} value={confirmCode} onChange={event => setConfirmCode(event.target.value.replace(/\D/g, "").slice(0, 6))} />
@@ -168,7 +168,7 @@ export default function AccountSecurityPanel() {
         </div>
         <p style={styles.muted}>Each code works once. Save these separately from your authenticator device; they cannot be displayed again after leaving this page.</p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))", gap: 7, marginTop: 10 }}>
-          {recoveryCodes.map(code => <code key={code} style={{ background: "#070b14", border: "1px solid #1e2d47", borderRadius: 6, padding: 9, fontSize: 12, letterSpacing: 1, textAlign: "center" }}>{code}</code>)}
+          {recoveryCodes.map(code => <code key={code} style={{ background: "#090c15", border: "1px solid #29374d", borderRadius: 6, padding: 9, fontSize: 12, letterSpacing: 1, textAlign: "center" }}>{code}</code>)}
         </div>
       </section> : null}
       <p style={styles.muted}>TOTP uses a 30-second SHA-1 time step with a one-step clock-skew window. MFA secrets are encrypted at rest using password-derived AES-256-GCM key material. Password resets clear MFA and recovery codes, requiring fresh enrolment.</p>

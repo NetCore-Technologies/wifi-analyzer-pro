@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { apiBase, apiFetch } from "../lib/api.js";
 import { CheckCircle2, CircleAlert, Package, RefreshCw, ShieldCheck, ShieldX, ToggleLeft, ToggleRight } from "lucide-react";
 
-const panel = { background:"#0c1120", border:"1px solid #1e2d47", borderRadius:10, padding:16 };
+const panel = { background:"#111624", border:"1px solid #29374d", borderRadius:10, padding:16 };
 const button = { border:"1px solid #29405f", borderRadius:7, padding:"7px 10px", fontSize:11, fontWeight:700, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:6 };
-const muted = "#94a3b8";
+const muted = "#a8b6ca";
 
 export default function PluginManagerPanel() {
   const [plugins, setPlugins] = useState([]);
@@ -71,15 +71,15 @@ export default function PluginManagerPanel() {
       <section style={panel}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ width:36, height:36, borderRadius:9, background:"rgba(6,214,240,0.10)", color:"#06d6f0", display:"grid", placeItems:"center" }}>
+            <div style={{ width:36, height:36, borderRadius:9, background:"rgba(255,131,89,0.10)", color:"#ff8359", display:"grid", placeItems:"center" }}>
               <Package size={19}/>
             </div>
             <div>
-              <div style={{ color:"#e2e8f0", fontWeight:800, fontSize:15 }}>Third-party feature plugins</div>
+              <div style={{ color:"#f1f5fb", fontWeight:800, fontSize:15 }}>Third-party feature plugins</div>
               <div style={{ color:muted, fontSize:11, marginTop:3 }}>Publisher-signed extensions installed on this host</div>
             </div>
           </div>
-          <button type="button" onClick={() => load()} disabled={loading || !!busyId} style={{ ...button, color:"#cbd5e1", background:"#111827", opacity:loading ? 0.6 : 1 }}>
+          <button type="button" onClick={() => load()} disabled={loading || !!busyId} style={{ ...button, color:"#cbd5e1", background:"#182235", opacity:loading ? 0.6 : 1 }}>
             <RefreshCw size={13}/> Refresh
           </button>
         </div>
@@ -87,9 +87,9 @@ export default function PluginManagerPanel() {
         {summary && (
           <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:16 }}>
             {[
-              ["Verified", summary.plugin_count ?? 0, "#22c55e"],
-              ["Enabled", summary.enabled_count ?? 0, "#06d6f0"],
-              ["Rejected", summary.rejected_count ?? 0, "#f59e0b"],
+              ["Verified", summary.plugin_count ?? 0, "#56d6ae"],
+              ["Enabled", summary.enabled_count ?? 0, "#ff8359"],
+              ["Rejected", summary.rejected_count ?? 0, "#f2c36b"],
             ].map(([label, value, color]) => (
               <div key={label} style={{ border:"1px solid #263956", background:"#080d18", borderRadius:8, padding:"8px 11px", minWidth:88 }}>
                 <div style={{ color:muted, fontSize:10, textTransform:"uppercase", letterSpacing:0.6 }}>{label}</div>
@@ -98,16 +98,16 @@ export default function PluginManagerPanel() {
             ))}
           </div>
         )}
-        {error && <div role="alert" style={{ display:"flex", gap:8, color:"#fca5a5", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, padding:10, fontSize:12, marginTop:14 }}><CircleAlert size={15}/>{error}</div>}
-        {notice && <div role="status" style={{ display:"flex", gap:8, color:"#86efac", background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.25)", borderRadius:8, padding:10, fontSize:12, marginTop:14 }}><CheckCircle2 size={15}/>{notice}</div>}
+        {error && <div role="alert" style={{ display:"flex", gap:8, color:"#fca5a5", background:"rgba(255,113,133,0.08)", border:"1px solid rgba(255,113,133,0.3)", borderRadius:8, padding:10, fontSize:12, marginTop:14 }}><CircleAlert size={15}/>{error}</div>}
+        {notice && <div role="status" style={{ display:"flex", gap:8, color:"#86efac", background:"rgba(86,214,174,0.08)", border:"1px solid rgba(86,214,174,0.25)", borderRadius:8, padding:10, fontSize:12, marginTop:14 }}><CheckCircle2 size={15}/>{notice}</div>}
       </section>
 
       {loading ? (
         <div style={{ ...panel, color:muted, fontSize:12 }}>Loading the local signed-plugin directory…</div>
       ) : plugins.length === 0 ? (
         <div style={{ ...panel, textAlign:"center", padding:28 }}>
-          <Package size={30} color="#64748b"/>
-          <div style={{ color:"#e2e8f0", fontWeight:700, marginTop:10 }}>No third-party plugins installed</div>
+          <Package size={30} color="#71829a"/>
+          <div style={{ color:"#f1f5fb", fontWeight:700, marginTop:10 }}>No third-party plugins installed</div>
           <div style={{ color:muted, fontSize:12, lineHeight:1.65, maxWidth:540, margin:"7px auto 0" }}>
             Install a reviewed, publisher-signed package on the host and add its publisher public key to the local trust store. The API intentionally does not accept plugin uploads.
           </div>
@@ -119,21 +119,21 @@ export default function PluginManagerPanel() {
             const enabled = plugin.enabled === true;
             const rejected = plugin.status === "rejected" || !verified;
             return (
-              <section key={plugin.plugin_id || ("rejected-" + index)} style={{ ...panel, borderColor:rejected ? "rgba(245,158,11,0.35)" : "#1e2d47" }}>
+              <section key={plugin.plugin_id || ("rejected-" + index)} style={{ ...panel, borderColor:rejected ? "rgba(242,195,107,0.35)" : "#29374d" }}>
                 <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, flexWrap:"wrap" }}>
                   <div style={{ minWidth:0, flex:"1 1 280px" }}>
                     <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                      <div style={{ color:"#e2e8f0", fontWeight:800, fontSize:13 }}>{plugin.name || plugin.plugin_id || "Unidentified package"}</div>
+                      <div style={{ color:"#f1f5fb", fontWeight:800, fontSize:13 }}>{plugin.name || plugin.plugin_id || "Unidentified package"}</div>
                       {verified ? (
-                        <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 6px", borderRadius:5, color:"#86efac", background:"rgba(34,197,94,0.10)", fontSize:9, fontWeight:800, letterSpacing:0.5 }}>
+                        <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 6px", borderRadius:5, color:"#86efac", background:"rgba(86,214,174,0.10)", fontSize:9, fontWeight:800, letterSpacing:0.5 }}>
                           <ShieldCheck size={11}/> SIGNATURE VERIFIED
                         </span>
                       ) : (
-                        <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 6px", borderRadius:5, color:"#fbbf24", background:"rgba(245,158,11,0.10)", fontSize:9, fontWeight:800, letterSpacing:0.5 }}>
+                        <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 6px", borderRadius:5, color:"#fbbf24", background:"rgba(242,195,107,0.10)", fontSize:9, fontWeight:800, letterSpacing:0.5 }}>
                           <ShieldX size={11}/> REJECTED
                         </span>
                       )}
-                      {verified && <span style={{ padding:"3px 6px", borderRadius:5, color:enabled ? "#67e8f9" : muted, background:enabled ? "rgba(6,214,240,0.09)" : "rgba(148,163,184,0.08)", fontSize:9, fontWeight:800 }}>{enabled ? "ENABLED" : "DISABLED"}</span>}
+                      {verified && <span style={{ padding:"3px 6px", borderRadius:5, color:enabled ? "#67e8f9" : muted, background:enabled ? "rgba(255,131,89,0.09)" : "rgba(148,163,184,0.08)", fontSize:9, fontWeight:800 }}>{enabled ? "ENABLED" : "DISABLED"}</span>}
                     </div>
                     <div style={{ color:muted, fontSize:10, marginTop:6, overflowWrap:"anywhere" }}>
                       {plugin.plugin_id || "Invalid package"}{plugin.version ? " · v" + plugin.version : ""}{plugin.publisher ? " · " + plugin.publisher : ""}
@@ -147,15 +147,15 @@ export default function PluginManagerPanel() {
                   {verified && (
                     <div style={{ display:"flex", gap:7, flexWrap:"wrap" }}>
                       {!enabled ? (
-                        <button type="button" disabled={!!busyId} onClick={() => perform(plugin, "enable")} style={{ ...button, background:"rgba(34,197,94,0.10)", borderColor:"rgba(34,197,94,0.35)", color:"#86efac" }}>
+                        <button type="button" disabled={!!busyId} onClick={() => perform(plugin, "enable")} style={{ ...button, background:"rgba(86,214,174,0.10)", borderColor:"rgba(86,214,174,0.35)", color:"#86efac" }}>
                           <ToggleRight size={13}/> Enable
                         </button>
                       ) : (
                         <>
-                          <button type="button" disabled={!!busyId} onClick={() => perform(plugin, "reload")} style={{ ...button, background:"#111827", color:"#cbd5e1" }}>
+                          <button type="button" disabled={!!busyId} onClick={() => perform(plugin, "reload")} style={{ ...button, background:"#182235", color:"#cbd5e1" }}>
                             <RefreshCw size={13} style={busyId === plugin.plugin_id ? { animation:"spin 1s linear infinite" } : {}}/> Reload
                           </button>
-                          <button type="button" disabled={!!busyId} onClick={() => perform(plugin, "disable")} style={{ ...button, background:"rgba(239,68,68,0.08)", borderColor:"rgba(239,68,68,0.3)", color:"#fca5a5" }}>
+                          <button type="button" disabled={!!busyId} onClick={() => perform(plugin, "disable")} style={{ ...button, background:"rgba(255,113,133,0.08)", borderColor:"rgba(255,113,133,0.3)", color:"#fca5a5" }}>
                             <ToggleLeft size={13}/> Disable
                           </button>
                         </>
@@ -169,7 +169,7 @@ export default function PluginManagerPanel() {
         </div>
       )}
 
-      <section style={{ ...panel, borderColor:"rgba(245,158,11,0.3)", background:"rgba(245,158,11,0.035)" }}>
+      <section style={{ ...panel, borderColor:"rgba(242,195,107,0.3)", background:"rgba(242,195,107,0.035)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, color:"#fbbf24", fontSize:11, fontWeight:800 }}>
           <ShieldCheck size={14}/> TRUST BOUNDARY
         </div>
