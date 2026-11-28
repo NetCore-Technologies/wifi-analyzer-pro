@@ -12,6 +12,7 @@ import RadioRegulatoryEvidencePanel from './RadioRegulatoryEvidencePanel.jsx';
 import RadioCapabilityRegulatoryPlannerPanel from './RadioCapabilityRegulatoryPlannerPanel.jsx';
 import RfChangeApprovalPanel from './RfChangeApprovalPanel.jsx';
 import { Play, Search, RefreshCw, Braces, Wifi, AlertCircle } from 'lucide-react';
+import { buildFeaturePayloadTemplate, filterFeatureCatalog } from '../lib/featureWorkbench.js';
 
 const panel = { background: '#111624', border: '1px solid #29374d', borderRadius: 10, padding: 14 };
 const input = { width: '100%', boxSizing: 'border-box', background: '#090c15', color: '#f1f5fb', border: '1px solid #29374d', borderRadius: 7, padding: '9px 10px', fontSize: 12 };
@@ -34,24 +35,22 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
       const data = await response.json();
       const nextCatalog = Array.isArray(data.features) ? data.features : [];
       setCatalog(nextCatalog);
-      const scoped = categoryTerms.length
-        ? nextCatalog.filter(feature => categoryTerms.includes(feature.category))
-        : nextCatalog;
-      setSelected(current => scoped.some(feature => feature.slug === current)
-        ? current
-        : (scoped[0]?.slug || nextCatalog[0]?.slug || ''));
+      const scoped = filterFeatureCatalog(nextCatalog, { categoryTerms });
+      if (!scoped.some(feature => feature.slug === selected)) {
+        const first = scoped[0] || nextCatalog[0];
+        setSelected(first?.slug || '');
+        setPayloadText(JSON.stringify(buildFeaturePayloadTemplate(first?.parameters), null, 2));
+      }
     } catch (err) { setError(err.message || 'Unable to load feature catalog.'); }
     finally { setLoading(false); }
   };
 
   useEffect(() => { loadCatalog(); }, []);
 
-  const filtered = useMemo(() => catalog.filter(feature => {
-    const inCategory = !categoryTerms.length || categoryTerms.includes(feature.category);
-    const query = search.trim().toLowerCase();
-    const searchable = `${feature.name} ${feature.slug} ${feature.category} ${feature.description}`.toLowerCase();
-    return inCategory && (!query || searchable.includes(query));
-  }), [catalog, search, categoryTerms]);
+  const filtered = useMemo(
+    () => filterFeatureCatalog(catalog, { categoryTerms, query: search }),
+    [catalog, search, categoryTerms]
+  );
   const current = catalog.find(feature => feature.slug === selected);
 
   const useLatestScan = async () => {
@@ -100,7 +99,12 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: '#f1f5fb' }}>{title}</div>
         <div style={{ fontSize: 11, color: '#71829a', marginBottom: 12 }}>{loading ? 'Loading catalogue…' : `${filtered.length} of ${catalog.length} callable tools`}</div>
         <div style={{ position: 'relative', marginBottom: 10 }}><Search size={13} color="#71829a" style={{ position: 'absolute', top: 10, left: 9 }}/><input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search features…" aria-label="Search features" style={{ ...input, paddingLeft: 29 }}/></div>
-        {filtered.map(feature => <button key={feature.slug} onClick={() => { setSelected(feature.slug); setResult(null); }} style={{ width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 7, marginBottom: 5, border: `1px solid ${selected === feature.slug ? '#ff8359' : '#29374d'}`, background: selected === feature.slug ? 'rgba(255,131,89,.11)' : 'transparent', color: selected === feature.slug ? '#ff8359' : '#cbd5e1', cursor: 'pointer' }}><div style={{ fontSize: 11, fontWeight: 650 }}>{feature.id} · {feature.name}</div><div style={{ fontSize: 10, color: '#71829a', marginTop: 2 }}>{feature.category}</div></button>)}
+        {filtered.map(feature => <button key={feature.slug} onClick={() => {
+          setSelected(feature.slug);
+          setPayloadText(JSON.stringify(buildFeaturePayloadTemplate(feature.parameters), null, 2));
+          setResult(null);
+          setError('');
+        }} aria-pressed={selected === feature.slug} style={{ width: '100%', textAlign: 'left', padding: '9px 10px', borderRadius: 7, marginBottom: 5, border: `1px solid ${selected === feature.slug ? '#ff8359' : '#29374d'}`, background: selected === feature.slug ? 'rgba(255,131,89,.11)' : 'transparent', color: selected === feature.slug ? '#ff8359' : '#cbd5e1', cursor: 'pointer' }}><div style={{ fontSize: 11, fontWeight: 650 }}>{feature.id} · {feature.name}</div><div style={{ fontSize: 10, color: '#71829a', marginTop: 2 }}>{feature.category}</div></button>)}
         {!loading && filtered.length === 0 ? <p style={{ fontSize: 11, color: '#71829a' }}>No matching features.</p> : null}
       </section>
       <section style={{ display: 'grid', gap: 12, minWidth: 0 }}>
@@ -112,7 +116,13 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
           {current?.parameters && Object.keys(current.parameters).length ? <div style={{ marginTop: 10, fontSize: 11, color: '#71829a' }}>Inputs: {Object.entries(current.parameters).map(([k,v]) => `${k} (${v})`).join(' · ')}</div> : null}
         </div>
         {selected === 'rf_change_approval_packet' ? <RfChangeApprovalPanel /> : selected === 'radio_capability_regulatory_channel_planner' ? <RadioCapabilityRegulatoryPlannerPanel /> : selected === 'radio_regulatory_evidence_validator' ? <RadioRegulatoryEvidencePanel /> : selected === 'floorplan_rf_survey_analyzer' ? <FloorplanRfSurveyPanel /> : selected === 'multi_ap_channel_reuse_planner' ? <MultiApChannelPlanner /> : selected === 'client_roam_transaction_analyzer' ? <ClientRoamTransactionAnalyzer /> : selected === 'client_experience_slo_evaluator' ? <ClientExperienceSloPanel /> : selected === 'client_experience_slo_window_comparator' ? <ClientExperienceSloWindowComparator /> : <div style={panel}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}><div style={{ fontSize: 12, fontWeight: 700 }}>JSON input</div><button onClick={useLatestScan} disabled={busy} style={{ border: '1px solid #29374d', background: '#111827', color: '#ff8359', borderRadius: 7, padding: '7px 9px', fontSize: 11, cursor: 'pointer' }}><Wifi size={12} style={{ verticalAlign: 'middle', marginRight: 5 }}/>Use latest scan</button></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>Tool input</div>
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setPayloadText(JSON.stringify(buildFeaturePayloadTemplate(current?.parameters), null, 2))} disabled={busy} style={{ border: '1px solid #29374d', background: '#182235', color: '#a8b6ca', borderRadius: 7, padding: '7px 9px', fontSize: 11, cursor: 'pointer' }}>Generate input template</button>
+              <button type="button" onClick={useLatestScan} disabled={busy} style={{ border: '1px solid #29374d', background: '#182235', color: '#ff8359', borderRadius: 7, padding: '7px 9px', fontSize: 11, cursor: 'pointer' }}><Wifi size={12} style={{ verticalAlign: 'middle', marginRight: 5 }}/>Use latest scan</button>
+            </div>
+          </div>
           <textarea value={payloadText} onChange={e => setPayloadText(e.target.value)} rows={12} spellCheck="false" aria-label="Feature JSON input" style={{ ...input, resize: 'vertical', fontFamily: 'ui-monospace, monospace', lineHeight: 1.55 }}/>
           <button onClick={run} disabled={busy || !current} style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,131,89,.13)', color: '#ff8359', border: '1px solid #ff8359', borderRadius: 7, padding: '9px 15px', fontSize: 12, fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? .6 : 1 }}><Play size={13}/>{busy ? 'Running…' : 'Run feature'}</button>
           {selected === 'site_to_site_change_report' ? <button onClick={loadStoredHistoryReport} disabled={busy} style={{ marginTop: 10, marginLeft: 8, display: 'inline-flex', alignItems: 'center', gap: 7, background: '#111827', color: '#a5f3fc', border: '1px solid #256779', borderRadius: 7, padding: '9px 12px', fontSize: 11, cursor: busy ? 'wait' : 'pointer' }}>Build report from saved history</button> : null}
