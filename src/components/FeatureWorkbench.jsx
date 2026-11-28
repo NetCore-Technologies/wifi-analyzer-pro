@@ -95,7 +95,7 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) minmax(0, 1fr)', gap: 12, alignItems: 'start' }}>
+    <div className="feature-workbench" style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) minmax(0, 1fr)', gap: 12, alignItems: 'start' }}>
       <section style={{ ...panel, maxHeight: 'calc(100vh - 150px)', overflow: 'auto' }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: '#f1f5fb' }}>{title}</div>
         <div style={{ fontSize: 11, color: '#71829a', marginBottom: 12 }}>{loading ? 'Loading catalogue…' : `${filtered.length} of ${catalog.length} callable tools`}</div>
