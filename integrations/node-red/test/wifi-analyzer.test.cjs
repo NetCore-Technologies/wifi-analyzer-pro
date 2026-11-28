@@ -76,7 +76,8 @@ test("requestJson reports non-success status without exposing authorization valu
     await assert.rejects(
       requestJson({baseUrl,bearerToken:"super-secret-token"},"GET","/api/scan"),
       (error) => {
-        assert.match(error.message,/HTTP 403/);
+        assert.match(error.message,/\\(403\\)/);
+        assert.equal(error.statusCode, 403);
         assert.match(error.message,/site access denied/);
         assert.doesNotMatch(error.message,/super-secret-token/);
         return true;
