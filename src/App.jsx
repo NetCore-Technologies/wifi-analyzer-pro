@@ -37,15 +37,15 @@ import SiteAlertRulesPanel from "./components/SiteAlertRulesPanel.jsx";
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
 
 const C = {
-  bg: "#070b14", card: "#0c1120", card2: "#111827",
-  border: "#1e2d47", borderHov: "#2a3f65",
-  cyan: "#06d6f0", cyanFaint: "rgba(6,214,240,0.1)", cyanMid: "rgba(6,214,240,0.22)",
-  purple: "#a855f7", purpleFaint: "rgba(168,85,247,0.12)",
-  green: "#22c55e", greenFaint: "rgba(34,197,94,0.1)",
-  yellow: "#f59e0b", yellowFaint: "rgba(245,158,11,0.1)",
-  red: "#ef4444", redFaint: "rgba(239,68,68,0.1)",
-  blue: "#3b82f6",
-  text: "#e2e8f0", textSec: "#94a3b8", muted: "#64748b",
+  bg: "#090c15", card: "#111624", card2: "#182235",
+  border: "#29374d", borderHov: "#435775",
+  cyan: "#ff8359", cyanFaint: "rgba(255,131,89,0.11)", cyanMid: "rgba(255,131,89,0.23)",
+  purple: "#a78bfa", purpleFaint: "rgba(167,139,250,0.12)",
+  green: "#56d6ae", greenFaint: "rgba(86,214,174,0.1)",
+  yellow: "#f2c36b", yellowFaint: "rgba(242,195,107,0.1)",
+  red: "#ff7185", redFaint: "rgba(255,113,133,0.1)",
+  blue: "#79a9ff",
+  text: "#f1f5fb", textSec: "#a8b6ca", muted: "#71829a",
 };
 
 const ANIM = `
@@ -69,8 +69,8 @@ const ANIM = `
     100% { transform: scale(2.4); opacity: 0; }
   }
   @keyframes glow {
-    0%, 100% { box-shadow: 0 0 6px rgba(6,214,240,0.4); }
-    50%       { box-shadow: 0 0 18px rgba(6,214,240,0.8); }
+    0%, 100% { box-shadow: 0 0 6px rgba(255,131,89,0.4); }
+    50%       { box-shadow: 0 0 18px rgba(255,131,89,0.8); }
   }
   @keyframes scanLine {
     0%   { transform: translateY(0); opacity: 0.9; }
@@ -85,8 +85,8 @@ const ANIM = `
     to   { opacity: 1; transform: scale(1); }
   }
   @keyframes borderPulse {
-    0%, 100% { border-color: rgba(6,214,240,0.3); }
-    50%       { border-color: rgba(6,214,240,0.8); }
+    0%, 100% { border-color: rgba(255,131,89,0.3); }
+    50%       { border-color: rgba(255,131,89,0.8); }
   }
   .anim-fade { animation: fadeSlideIn 0.35s ease both; }
   .anim-fade-d1 { animation: fadeSlideIn 0.35s 0.04s ease both; }
@@ -100,8 +100,8 @@ const ANIM = `
     transform: translateY(-1px);
     transition: all 0.18s;
   }
-  .nav-btn:hover { background: rgba(6,214,240,0.06) !important; }
-  .nav-btn.active { background: rgba(6,214,240,0.12) !important; border-left-color: ${C.cyan} !important; color: ${C.cyan} !important; }
+  .nav-btn:hover { background: rgba(255,131,89,0.06) !important; }
+  .nav-btn.active { background: rgba(255,131,89,0.12) !important; border-left-color: ${C.cyan} !important; color: ${C.cyan} !important; }
 `;
 
 const NETWORKS = [
@@ -815,30 +815,6 @@ function AiPanel({ networks: netsProp, devices: devsProp, diag, sysInfo, isLive 
   );
 }
 
-function FeatureGrid({ title, features, col=C.cyan }) {
-  return (
-    <div style={{...s.col,gap:14}}>
-      <div className="anim-fade" style={{...s.card,border:`1px solid ${col}33`,background:col+"08"}}>
-        <p style={{fontSize:11,color:C.muted,lineHeight:1.6,margin:"0 0 12px"}}>These are planned capability labels only. They are not active controls or completed integrations; use the Feature Workbench for the callable tools available in this build.</p>
-        <div style={{...s.row,gap:10,marginBottom:14}}>
-          <span style={{fontSize:15,fontWeight:700,color:col}}>{title}</span>
-          <Tag text="CAPABILITY PREVIEW · NOT WIRED" col={C.muted}/>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-          {features.map((f,i)=>(
-            <div key={i} className="hover-card"
-              style={{...s.row,gap:8,padding:"8px 10px",background:C.card,borderRadius:7,
-                border:`1px solid ${C.border}`,animation:`fadeSlideIn 0.3s ${i*0.025}s ease both`}}>
-              <Info size={11} color={C.muted}/>
-              <span style={{fontSize:11,color:C.textSec}}>{f}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 const NAV=[
   {g:"ANALYSIS", items:[
     {id:"dashboard",label:"Dashboard",     Icon:LayoutDashboard},
@@ -1270,20 +1246,13 @@ export default function App() {
     ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem} isLive={liveMode}/>,
     phy:         <PhyTelemetryPanel data={livePhy} interfaceName={liveSystem?.wifi_interface}/>,
     interface:   <InterfaceTelemetryPanel data={liveLink} rates={linkRates} interfaceName={liveSystem?.wifi_interface}/>,
-    diagnostics: <FeatureGrid title="Network Diagnostics" badge="v1.0.5" col={C.green}
-      features={["Gateway latency","Internet latency","DNS lookup timing","Packet loss %","MTU path discovery","Traceroute","Route visualisation","IPv4 analysis","IPv6 analysis","DNS benchmarking","Gateway health","Bufferbloat test"]} />,
-    router:      <FeatureGrid title="Router Support" badge="v1.0.5" col={C.blue}
-      features={["OpenWrt LuCI API","DD-WRT SSH","pfSense XML-RPC","OPNsense API","UniFi Controller","MikroTik RouterOS","TP-Link Omada","ASUSWRT-Merlin","GL.iNet API","Tomato","Real-time stats pull","Config backup"]} />,
-    viz:         <FeatureGrid title="Visualisation" badge="v1.0.5" col={C.yellow}
-      features={["Live dashboard","Channel heatmap","Signal coverage map","Timeline graphs","Interactive charts","Topology graph","Device relationship","Geographic maps","Frequency spectrum","Band utilisation","Client density","Animation everywhere"]} />,
-    export:      <FeatureGrid title="Export & Reports" badge="v1.0.5" col={C.green}
-      features={["CSV export","JSON export","PDF reports (ReportLab)","HTML reports","Scheduled reports","Email delivery","Screenshot export","Config backup","Session history","Grafana dashboard","Prometheus metrics","Plugin SDK"]} />,
-    remote:      <FeatureGrid title="Remote Monitoring" badge="v1.0.5" col={C.blue}
-      features={["Multi-site dashboard","Pi agent (headless)","Remote web UI","API key auth","Role-based access","Cloud sync optional","Self-hosted mode","VPN-safe tunnel","Site comparison","Centralized alerts","Agent auto-update","WebSocket push"]} />,
-    advanced:    <FeatureGrid title="Advanced Networking" badge="v1.0.5" col={C.yellow}
-      features={["Wake-on-LAN","ARP table viewer","DHCP lease table","DNS cache viewer","TCP connectivity test","UDP test","Service detection","SSL cert expiry","Port scanner","nftables viewer","VLAN analysis","Interface config"]} />,
-    api:         <FeatureGrid title="API & Integrations" badge="v1.0.5" col={C.cyan}
-      features={["REST API (OpenAPI 3.0)","Interactive docs /docs","WebSocket ws/live","Prometheus /metrics","Grafana dashboard JSON","Home Assistant MQTT","Node-RED templates","Webhooks","Plugin SDK","Mobile app API","OAuth2 auth","Rate limiting"]} />,
+    diagnostics: <FeatureWorkbench title="Network diagnostics" categoryTerms={["Diagnostics","Discovery","Parsers","Data quality","Utilities","Network operations"]}/>,
+    router:      <FeatureWorkbench title="Router and site operations" categoryTerms={["Router integrations","Router operations","Site inventory","Client operations","Client QoS"]}/>,
+    viz:         <FeatureWorkbench title="RF visualisation and planning" categoryTerms={["RF analysis","RF planning","RF assurance","PHY analysis","Roaming"]}/>,
+    export:      <FeatureWorkbench title="Reports and exports" categoryTerms={["Reports","History","Scan history"]}/>,
+    remote:      <FeatureWorkbench title="Remote sites and integrations" categoryTerms={["Site inventory","Router integrations","Integrations","Network operations"]}/>,
+    advanced:    <FeatureWorkbench title="Advanced security and assurance" categoryTerms={["Security","RF assurance","RF change management","Packet analysis"]}/>,
+    api:         <FeatureWorkbench title="API and integration tools" categoryTerms={["Integrations","Router integrations","System"]}/>,
   };
 
   const allItems=NAV.flatMap(g=>g.items);
@@ -1467,7 +1436,7 @@ export default function App() {
                 title="Authenticated, site-scoped live event stream"
                 style={{display:"flex",alignItems:"center",gap:5,fontSize:9,fontWeight:700,
                   padding:"3px 7px",borderRadius:5,letterSpacing:0.5,
-                  background:liveStreamStatus==="connected"?"rgba(6,214,240,0.10)":"rgba(168,85,247,0.10)",
+                  background:liveStreamStatus==="connected"?"rgba(255,131,89,0.10)":"rgba(168,85,247,0.10)",
                   border:`1px solid ${liveStreamStatus==="connected"?C.cyan+"44":C.purple+"44"}`,
                   color:liveStreamStatus==="connected"?C.cyan:C.purple}}>
                 <span style={{width:5,height:5,borderRadius:"50%",
