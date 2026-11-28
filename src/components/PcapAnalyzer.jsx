@@ -8,13 +8,13 @@ import { apiFetch } from "../lib/api.js";
 const API_BASE = `${window.location.protocol}//${window.location.hostname}:199`;
 const MAX_CAPTURE_BYTES = 512 * 1024;
 const PANEL = {
-  background: "#0c1120",
-  border: "1px solid #1e2d47",
+  background: "#111624",
+  border: "1px solid #29374d",
   borderRadius: 12,
   padding: 16,
 };
-const MUTED = { color: "#94a3b8", fontSize: 11 };
-const TITLE = { color: "#e2e8f0", fontSize: 12, fontWeight: 700 };
+const MUTED = { color: "#a8b6ca", fontSize: 11 };
+const TITLE = { color: "#f1f5fb", fontSize: 12, fontWeight: 700 };
 const number = value => new Intl.NumberFormat().format(Number(value) || 0);
 const bytes = value => {
   const amount = Number(value) || 0;
@@ -95,7 +95,7 @@ function Metric({ label, value, detail }) {
   return (
     <div style={{ ...PANEL, padding: 13 }}>
       <div style={{ ...MUTED, marginBottom: 7 }}>{label}</div>
-      <div style={{ color: "#e2e8f0", fontSize: 21, fontWeight: 750, fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ color: "#f1f5fb", fontSize: 21, fontWeight: 750, fontVariantNumeric: "tabular-nums" }}>{value}</div>
       {detail && <div style={{ ...MUTED, marginTop: 4 }}>{detail}</div>}
     </div>
   );
@@ -112,8 +112,8 @@ function CountList({ title, rows, emptyLabel }) {
         <div style={{ display: "grid", gap: 8 }}>
           {entries.map(([name, count]) => (
             <div key={name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <span style={{ ...MUTED, color: "#cbd5e1" }}>{name}</span>
-              <strong style={{ color: "#50e3d2", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>{number(count)}</strong>
+              <span style={{ ...MUTED, color: "#a8b6ca" }}>{name}</span>
+              <strong style={{ color: "#ff8359", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>{number(count)}</strong>
             </div>
           ))}
         </div>
@@ -307,7 +307,7 @@ export default function PcapAnalyzer() {
     <div style={{ display: "grid", gap: 16, maxWidth: 1120, margin: "0 auto" }}>
       <section style={{
         ...PANEL, padding: 20,
-        background: "linear-gradient(145deg, #102d3d, #0c1120)",
+        background: "linear-gradient(145deg, #29374d, #111624)",
         borderColor: "#2a596b",
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
@@ -316,16 +316,16 @@ export default function PcapAnalyzer() {
               width: 42, height: 42, borderRadius: 12, display: "grid", placeItems: "center",
               background: "rgba(80,227,210,.12)", border: "1px solid rgba(80,227,210,.25)",
             }}>
-              <FileSearch size={20} color="#50e3d2"/>
+              <FileSearch size={20} color="#ff8359"/>
             </div>
             <div>
-              <div style={{ color: "#e2e8f0", fontSize: 16, fontWeight: 800 }}>Packet capture analysis</div>
+              <div style={{ color: "#f1f5fb", fontSize: 16, fontWeight: 800 }}>Packet capture analysis</div>
               <div style={MUTED}>Offline PCAP / PCAPNG inspection · F191</div>
             </div>
           </div>
           <span style={{
             border: "1px solid rgba(80,227,210,.3)", borderRadius: 99,
-            padding: "5px 9px", color: "#50e3d2", fontSize: 10, fontWeight: 700,
+            padding: "5px 9px", color: "#ff8359", fontSize: 10, fontWeight: 700,
           }}>LOCAL ANALYSIS</span>
         </div>
 
@@ -335,10 +335,10 @@ export default function PcapAnalyzer() {
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
-              <div style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 750 }}>Live interface capture</div>
+              <div style={{ color: "#f1f5fb", fontSize: 12, fontWeight: 750 }}>Live interface capture</div>
               <div style={{ ...MUTED, marginTop: 4 }}>Explicit, local capture via tcpdump / libpcap · no monitor-mode changes</div>
             </div>
-            <span style={{ color: captureInventory.available ? "#4ade80" : "#fbbf24", fontSize: 10, fontWeight: 750 }}>
+            <span style={{ color: captureInventory.available ? "#56d6ae" : "#f2c36b", fontSize: 10, fontWeight: 750 }}>
               {captureInventory.available ? "CAPTURE SUPPORT AVAILABLE" : "CAPTURE SUPPORT UNAVAILABLE"}
             </span>
           </div>
@@ -349,7 +349,7 @@ export default function PcapAnalyzer() {
                   Interface
                   <select aria-label="Capture network interface" value={selectedInterface} onChange={event => setSelectedInterface(event.target.value)}
                     disabled={startingCapture || liveCapture?.state === "running"}
-                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    style={{ background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
                     {captureInventory.interfaces.map(item => <option key={item.name} value={item.name}>{item.description}</option>)}
                   </select>
                 </label>
@@ -357,7 +357,7 @@ export default function PcapAnalyzer() {
                   Capture filter
                   <select aria-label="Capture filter profile" value={filterProfile} onChange={event => setFilterProfile(event.target.value)}
                     disabled={startingCapture || liveCapture?.state === "running"}
-                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    style={{ background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
                     <option value="all">All traffic</option>
                     <option value="dns">DNS</option>
                     <option value="dhcp">DHCP</option>
@@ -371,7 +371,7 @@ export default function PcapAnalyzer() {
                   Duration
                   <select aria-label="Capture duration" value={durationSeconds} onChange={event => setDurationSeconds(Number(event.target.value))}
                     disabled={startingCapture || liveCapture?.state === "running"}
-                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    style={{ background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
                     <option value={5}>5 seconds</option>
                     <option value={15}>15 seconds</option>
                     <option value={30}>30 seconds</option>
@@ -382,7 +382,7 @@ export default function PcapAnalyzer() {
                   Packet limit
                   <select aria-label="Capture packet limit" value={packetLimit} onChange={event => setPacketLimit(Number(event.target.value))}
                     disabled={startingCapture || liveCapture?.state === "running"}
-                    style={{ background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
+                    style={{ background: "#090c15", color: "#f1f5fb", border: "1px solid #435775", borderRadius: 7, padding: "8px 9px", fontSize: 11 }}>
                     <option value={100}>100 packets</option>
                     <option value={250}>250 packets</option>
                     <option value={500}>500 packets</option>
@@ -390,32 +390,32 @@ export default function PcapAnalyzer() {
                   </select>
                 </label>
               </div>
-              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "#fbbf24", fontSize: 10, lineHeight: 1.55 }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "flex-start", color: "#f2c36b", fontSize: 10, lineHeight: 1.55 }}>
                 <input type="checkbox" checked={captureConsent} onChange={event => setCaptureConsent(event.target.checked)} disabled={liveCapture?.state === "running"} style={{ marginTop: 2 }}/>
                 I am authorised to capture traffic on this interface and network. Captures can contain sensitive data.
               </label>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {liveCapture?.state === "running" ? (
-                  <button type="button" onClick={stopLiveCapture} style={{ border: "1px solid #f59e0b", borderRadius: 8, padding: "8px 11px", background: "rgba(245,158,11,.12)", color: "#fbbf24", fontSize: 11, fontWeight: 750, cursor: "pointer" }}>
+                  <button type="button" onClick={stopLiveCapture} style={{ border: "1px solid #f2c36b", borderRadius: 8, padding: "8px 11px", background: "rgba(245,158,11,.12)", color: "#f2c36b", fontSize: 11, fontWeight: 750, cursor: "pointer" }}>
                     Stop capture
                   </button>
                 ) : (
                   <button type="button" onClick={startLiveCapture} disabled={!captureConsent || !selectedInterface || startingCapture}
-                    style={{ border: "1px solid #50e3d2", borderRadius: 8, padding: "8px 11px", background: captureConsent && selectedInterface && !startingCapture ? "#50e3d2" : "#24404a", color: captureConsent && selectedInterface && !startingCapture ? "#07111d" : "#94a3b8", fontSize: 11, fontWeight: 800, cursor: captureConsent && !startingCapture ? "pointer" : "not-allowed" }}>
+                    style={{ border: "1px solid #ff8359", borderRadius: 8, padding: "8px 11px", background: captureConsent && selectedInterface && !startingCapture ? "#ff8359" : "#29374d", color: captureConsent && selectedInterface && !startingCapture ? "#090c15" : "#a8b6ca", fontSize: 11, fontWeight: 800, cursor: captureConsent && !startingCapture ? "pointer" : "not-allowed" }}>
                     {startingCapture ? "Starting…" : liveCapture?.state === "completed" ? "Start another capture" : "Start live capture"}
                   </button>
                 )}
                 {liveCapture?.state === "completed" ? (
                   <button type="button" onClick={loadLiveCaptureForAnalysis} disabled={busy}
-                    style={{ border: "1px solid #2a3f65", borderRadius: 8, padding: "8px 11px", background: "#111827", color: "#cbd5e1", fontSize: 11, fontWeight: 750, cursor: "pointer" }}>
+                    style={{ border: "1px solid #435775", borderRadius: 8, padding: "8px 11px", background: "#182235", color: "#a8b6ca", fontSize: 11, fontWeight: 750, cursor: "pointer" }}>
                     {busy ? "Analysing…" : "Load & analyse PCAP"}
                   </button>
                 ) : null}
-                {liveCapture ? <span style={{ ...MUTED, color: liveCapture.state === "failed" ? "#f87171" : liveCapture.state === "running" ? "#50e3d2" : "#94a3b8" }}>
+                {liveCapture ? <span style={{ ...MUTED, color: liveCapture.state === "failed" ? "#ff7185" : liveCapture.state === "running" ? "#ff8359" : "#a8b6ca" }}>
                   {liveCapture.state.toUpperCase()} · {liveCapture.interface} · {bytes(liveCapture.captured_bytes || 0)}
                 </span> : null}
               </div>
-              {liveCapture?.error ? <div role="alert" style={{ color: "#f87171", fontSize: 10 }}>{liveCapture.error}</div> : null}
+              {liveCapture?.error ? <div role="alert" style={{ color: "#ff7185", fontSize: 10 }}>{liveCapture.error}</div> : null}
               <div style={MUTED}>Hard limits: 60 seconds · 1,000 packets · 256-byte snap length · 512 KiB file. Only one capture runs at a time.</div>
             </>
           ) : (
@@ -427,7 +427,7 @@ export default function PcapAnalyzer() {
         </div>
 
         <div style={{
-          marginTop: 18, padding: 16, border: "1px dashed #3b6677", borderRadius: 10,
+          marginTop: 18, padding: 16, border: "1px dashed #435775", borderRadius: 10,
           background: "rgba(4,14,24,.35)",
         }}>
           <input
@@ -441,23 +441,23 @@ export default function PcapAnalyzer() {
           {!file ? (
             <button type="button" onClick={() => inputRef.current?.click()} style={{
               display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
-              border: "1px solid #2a3f65", borderRadius: 9, padding: "10px 13px",
-              color: "#e2e8f0", background: "#111827", fontSize: 12, fontWeight: 700,
+              border: "1px solid #435775", borderRadius: 9, padding: "10px 13px",
+              color: "#f1f5fb", background: "#182235", fontSize: 12, fontWeight: 700,
             }}>
-              <Upload size={15} color="#50e3d2"/> Choose PCAP / PCAPNG file
+              <Upload size={15} color="#ff8359"/> Choose PCAP / PCAPNG file
             </button>
           ) : (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                <Radio size={18} color="#50e3d2"/>
+                <Radio size={18} color="#ff8359"/>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "#e2e8f0", fontSize: 12, fontWeight: 700, overflowWrap: "anywhere" }}>{file.name}</div>
+                  <div style={{ color: "#f1f5fb", fontSize: 12, fontWeight: 700, overflowWrap: "anywhere" }}>{file.name}</div>
                   <div style={MUTED}>{bytes(file.size)} · ready for analysis</div>
                 </div>
               </div>
               <button type="button" onClick={clearFile} aria-label="Remove selected capture" style={{
-                background: "transparent", border: "1px solid #2a3f65", borderRadius: 7,
-                color: "#94a3b8", padding: 7, cursor: "pointer",
+                background: "transparent", border: "1px solid #435775", borderRadius: 7,
+                color: "#a8b6ca", padding: 7, cursor: "pointer",
               }}><X size={14}/></button>
             </div>
           )}
@@ -468,7 +468,7 @@ export default function PcapAnalyzer() {
             Maximum packets
             <select value={maximumPackets} onChange={event => setMaximumPackets(Number(event.target.value))}
               style={{
-                background: "#070b14", color: "#e2e8f0", border: "1px solid #2a3f65",
+                background: "#090c15", color: "#f1f5fb", border: "1px solid #435775",
                 borderRadius: 7, padding: "7px 9px", fontSize: 11,
               }}>
               <option value={250}>250</option>
@@ -479,9 +479,9 @@ export default function PcapAnalyzer() {
           </label>
           <button type="button" onClick={analyze} disabled={!file || busy} style={{
             display: "inline-flex", alignItems: "center", gap: 8, cursor: file && !busy ? "pointer" : "not-allowed",
-            border: "1px solid #50e3d2", borderRadius: 8, padding: "9px 13px",
-            background: file && !busy ? "#50e3d2" : "#24404a",
-            color: file && !busy ? "#07111d" : "#94a3b8",
+            border: "1px solid #ff8359", borderRadius: 8, padding: "9px 13px",
+            background: file && !busy ? "#ff8359" : "#29374d",
+            color: file && !busy ? "#090c15" : "#a8b6ca",
             fontSize: 12, fontWeight: 800,
           }}>
             <Activity size={14}/>{busy ? "Analysing…" : "Analyse capture"}
@@ -496,7 +496,7 @@ export default function PcapAnalyzer() {
         <div role="alert" style={{
           display: "flex", alignItems: "center", gap: 9, padding: 12,
           borderRadius: 9, border: "1px solid rgba(255,115,132,.35)",
-          background: "rgba(255,115,132,.08)", color: "#ff9aa6", fontSize: 12,
+          background: "rgba(255,115,132,.08)", color: "#ff9eac", fontSize: 12,
         }}>
           <AlertTriangle size={15}/>{error}
         </div>
@@ -506,12 +506,12 @@ export default function PcapAnalyzer() {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <div>
-              <div style={{ color: "#e2e8f0", fontSize: 14, fontWeight: 800 }}>Capture summary</div>
+              <div style={{ color: "#f1f5fb", fontSize: 14, fontWeight: 800 }}>Capture summary</div>
               <div style={MUTED}>{String(capture.format || "pcap").toUpperCase()} · {capture.link_type_name} · {capture.byte_order}-endian · {capture.timestamp_resolution} timestamps · {number(capture.interface_count || 1)} interface{capture.interface_count === 1 || !capture.interface_count ? "" : "s"}{capture.section_count ? ` · ${number(capture.section_count)} sections` : ""}</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <div style={{ ...MUTED, display: "flex", alignItems: "center", gap: 6 }}>
-                <CheckCircle2 size={14} color="#50e3d2"/> Analysis complete
+                <CheckCircle2 size={14} color="#ff8359"/> Analysis complete
               </div>
               <button type="button" onClick={() => downloadReport(
                 JSON.stringify({ schema_version: "1.0", generated_at: new Date().toISOString(), analysis }, null, 2),
@@ -519,8 +519,8 @@ export default function PcapAnalyzer() {
                 `${safeCaptureName(file?.name)}-analysis.json`,
               )} style={{
                 display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-                border: "1px solid #2a3f65", borderRadius: 7, padding: "6px 9px",
-                color: "#cbd5e1", background: "#111827", fontSize: 10, fontWeight: 700,
+                border: "1px solid #435775", borderRadius: 7, padding: "6px 9px",
+                color: "#a8b6ca", background: "#182235", fontSize: 10, fontWeight: 700,
               }}>
                 <Download size={12}/> JSON
               </button>
@@ -530,8 +530,8 @@ export default function PcapAnalyzer() {
                 `${safeCaptureName(file?.name)}-analysis.csv`,
               )} style={{
                 display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer",
-                border: "1px solid #2a3f65", borderRadius: 7, padding: "6px 9px",
-                color: "#cbd5e1", background: "#111827", fontSize: 10, fontWeight: 700,
+                border: "1px solid #435775", borderRadius: 7, padding: "6px 9px",
+                color: "#a8b6ca", background: "#182235", fontSize: 10, fontWeight: 700,
               }}>
                 <Download size={12}/> CSV
               </button>
@@ -564,9 +564,9 @@ export default function PcapAnalyzer() {
             {analysis.top_destination_ports?.length ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 9 }}>
                 {analysis.top_destination_ports.map(item => (
-                  <div key={item.port} style={{ background: "#111827", border: "1px solid #1e2d47", borderRadius: 8, padding: 10 }}>
+                  <div key={item.port} style={{ background: "#182235", border: "1px solid #29374d", borderRadius: 8, padding: 10 }}>
                     <div style={{ ...MUTED }}>Port {item.port}</div>
-                    <div style={{ color: "#50e3d2", fontWeight: 800, fontSize: 16 }}>{number(item.count)}</div>
+                    <div style={{ color: "#ff8359", fontWeight: 800, fontSize: 16 }}>{number(item.count)}</div>
                   </div>
                 ))}
               </div>
@@ -575,18 +575,18 @@ export default function PcapAnalyzer() {
 
           <section style={{ ...PANEL, display: "grid", gap: 8 }}>
             <div style={{ ...TITLE, display: "flex", alignItems: "center", gap: 7 }}>
-              <Clock3 size={14} color="#50e3d2"/> Capture time range
+              <Clock3 size={14} color="#ff8359"/> Capture time range
             </div>
             <div style={MUTED}>First packet: {summary.first_packet_at || "—"}</div>
             <div style={MUTED}>Last packet: {summary.last_packet_at || "—"}</div>
-            <div style={MUTED}>SHA-256: <span style={{ color: "#cbd5e1", overflowWrap: "anywhere" }}>{capture.capture_sha256}</span></div>
+            <div style={MUTED}>SHA-256: <span style={{ color: "#a8b6ca", overflowWrap: "anywhere" }}>{capture.capture_sha256}</span></div>
           </section>
 
           <div style={{
             ...PANEL, display: "flex", alignItems: "flex-start", gap: 10,
             borderColor: "rgba(80,227,210,.25)", background: "rgba(80,227,210,.05)",
           }}>
-            <ShieldCheck size={17} color="#50e3d2" style={{ flexShrink: 0, marginTop: 1 }}/>
+            <ShieldCheck size={17} color="#ff8359" style={{ flexShrink: 0, marginTop: 1 }}/>
             <div style={{ ...MUTED, lineHeight: 1.65, color: "#b6c8d0" }}>
               Privacy-preserving output: packet payloads, source and destination addresses, SSIDs and BSSIDs are not returned. The capture is processed by your authenticated local analyzer.
             </div>
