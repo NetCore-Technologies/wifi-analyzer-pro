@@ -37,6 +37,8 @@ test("parameter metadata recognises primitive types, enums and structured payloa
   assert.equal(getFeatureParameterKind("object[]"), "array");
   assert.equal(getFeatureParameterKind("object"), "object");
   assert.equal(getFeatureParameterKind("Up to 2048 AP records with BSSID and site evidence"), "array");
+  assert.equal(getFeatureParameterKind("One to six F194-F199 audit result objects"), "array");
+  assert.equal(getFeatureParameterKind("number of active alerts"), "number");
   assert.equal(getFeatureParameterKind("Baseline window object with timestamped samples"), "object");
   assert.equal(getFeatureParameterKind("system_profiler JSON", "text"), "text");
   assert.equal(getFeatureParameterKind("opaque vendor-specific structure"), "json");

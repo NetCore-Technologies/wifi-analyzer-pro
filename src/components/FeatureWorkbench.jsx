@@ -63,7 +63,7 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
   const current = catalog.find(feature => feature.slug === selected);
   const payloadTemplate = useMemo(
     () => buildFeaturePayloadTemplate(current?.parameters),
-    [current?.slug]
+    [current]
   );
   const payload = useMemo(() => {
     try {

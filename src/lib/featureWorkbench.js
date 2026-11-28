@@ -1,5 +1,5 @@
 const isRecord = value => value !== null && typeof value === "object" && !Array.isArray(value);
-const COLLECTION_WORDS = /\b(?:arrays?|lists?|records?|radios|entries|observations|samples|edges|profiles|assets|services|switches|firewalls|events|links|candidates|rules|deliveries|reports|networks|devices|interfaces|channels|clients|sites|options|measurements|metrics|snapshots|ports|vlans|routes|peers|policies|alerts|findings|dependencies|domains|certificates|subnets|leases|flows|packets|frames|results|windows|segments|subscriptions|endpoints|applications|requirements|capabilities|transitions|counters|rollups|access points)\b/i;
+const BOUNDED_COLLECTION_WORDS = /\b(?:records?|radios|entries|observations|samples|edges|profiles|assets|services|switches|firewalls|events|links|candidates|rules|deliveries|reports|networks|devices|interfaces|channels|clients|sites|options|measurements|metrics|snapshots|ports|vlans|routes|peers|policies|alerts|findings|dependencies|domains|certificates|subnets|leases|flows|packets|frames|results|objects|windows|segments|subscriptions|endpoints|applications|requirements|capabilities|transitions|counters|rollups|access points)\b/i;
 
 export function filterFeatureCatalog(features, { categoryTerms = [], query = "" } = {}) {
   if (!Array.isArray(features)) return [];
@@ -20,13 +20,15 @@ export function getFeatureParameterKind(descriptor, parameterName = "") {
   const normalised = description.toLocaleLowerCase();
   const name = String(parameterName ?? "").trim().toLocaleLowerCase();
   if (description.includes("|")) return "enum";
-  if (/\[\]|\barray\b|\blist\b/.test(normalised) || COLLECTION_WORDS.test(normalised)) return "array";
+  if (/\[\]|\barray\b|\blist\b|\bcollection\b/.test(normalised)) return "array";
   if (/\bboolean\b|\bbool\b|\btrue\/false\b/.test(normalised)) return "boolean";
   if (/\bobject\b|\bdict\b|\bdictionary\b|\bjson\b|\bmap\b|\bkey-value\b/.test(normalised)) return "object";
   if (/\binteger\b/.test(normalised)) return "integer";
   if (/\bnumber\b|\bnumeric\b|\bfloat\b|\bdouble\b/.test(normalised)) return "number";
   if (/\bstring\b|\btext\b|\bidentifier\b|\burl\b|\buri\b/.test(normalised)) return "text";
   if (name === "text" || name.endsWith("_text") || name.endsWith("_query")) return "text";
+  const boundedCollection = /\b(?:up to|at most|no more than|one to|between)\s+\d+|\b\d+\s*[-–]\s*\d+\b/i.test(description);
+  if (boundedCollection && BOUNDED_COLLECTION_WORDS.test(normalised)) return "array";
   return "json";
 }
 
