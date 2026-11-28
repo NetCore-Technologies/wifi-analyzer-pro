@@ -16,6 +16,7 @@ from wifi_analyzer_backend.cli import (
     build_parser,
     format_table,
     load_token,
+    query_path,
     save_token,
     scan_csv,
     validate_base_url,
