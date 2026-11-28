@@ -1246,12 +1246,12 @@ export default function App() {
     ai:          <AiPanel networks={networks} devices={devices} diag={liveDiag} sysInfo={liveSystem} isLive={liveMode}/>,
     phy:         <PhyTelemetryPanel data={livePhy} interfaceName={liveSystem?.wifi_interface}/>,
     interface:   <InterfaceTelemetryPanel data={liveLink} rates={linkRates} interfaceName={liveSystem?.wifi_interface}/>,
-    diagnostics: <FeatureWorkbench title="Network diagnostics" categoryTerms={["Diagnostics","Discovery","Parsers","Data quality","Utilities","Network operations"]}/>,
+    diagnostics: <FeatureWorkbench title="Network diagnostics" categoryTerms={["Diagnostics","Discovery","Parsers","Data quality","Utilities","Network operations","Alerts","Scan data"]}/>,
     router:      <FeatureWorkbench title="Router and site operations" categoryTerms={["Router integrations","Router operations","Site inventory","Client operations","Client QoS"]}/>,
     viz:         <FeatureWorkbench title="RF visualisation and planning" categoryTerms={["RF analysis","RF planning","RF assurance","PHY analysis","Roaming"]}/>,
     export:      <FeatureWorkbench title="Reports and exports" categoryTerms={["Reports","History","Scan history"]}/>,
     remote:      <FeatureWorkbench title="Remote sites and integrations" categoryTerms={["Site inventory","Router integrations","Integrations","Network operations"]}/>,
-    advanced:    <FeatureWorkbench title="Advanced security and assurance" categoryTerms={["Security","RF assurance","RF change management","Packet analysis"]}/>,
+    advanced:    <FeatureWorkbench title="Advanced security and assurance" categoryTerms={["Security","RF assurance","RF change management","Packet analysis","Privacy"]}/>,
     api:         <FeatureWorkbench title="API and integration tools" categoryTerms={["Integrations","Router integrations","System"]}/>,
   };
 
