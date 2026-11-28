@@ -1471,7 +1471,14 @@ export default function App() {
 
         <main className="wa-main" style={{flex:1,overflowY:"auto",padding:14}}>
           <div key={tab} style={{animation:"fadeSlideIn 0.28s ease both"}}>
-            {panels[tab]||<div style={{color:C.muted,display:"flex",alignItems:"center",justifyContent:"center",height:"60vh"}}>Coming soon</div>}
+            {panels[tab] || <section role="alert" style={{ ...s.card, maxWidth: 560, margin: "12vh auto", padding: 24 }}>
+              <div style={{ ...s.row, gap: 9, color: C.red, fontWeight: 700, marginBottom: 8 }}>
+                <AlertTriangle size={16}/> Workspace route error
+              </div>
+              <p style={{ color: C.textSec, fontSize: 12, lineHeight: 1.65 }}>
+                The navigation entry “{String(tab)}” is not registered. Reload the application; if the problem persists, report this broken route.
+              </p>
+            </section>}
           </div>
         </main>
       </div>
