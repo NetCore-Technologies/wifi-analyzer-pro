@@ -22,11 +22,11 @@ export function getFeatureParameterKind(descriptor, parameterName = "") {
   if (description.includes("|")) return "enum";
   if (/\[\]|\barray\b|\blist\b|\bcollection\b/.test(normalised)) return "array";
   if (/\bboolean\b|\bbool\b|\btrue\/false\b/.test(normalised)) return "boolean";
-  if (/\bobject\b|\bdict\b|\bdictionary\b|\bjson\b|\bmap\b|\bkey-value\b/.test(normalised)) return "object";
+  if (name === "text" || name.endsWith("_text") || name.endsWith("_query")) return "text";
   if (/\binteger\b/.test(normalised)) return "integer";
   if (/\bnumber\b|\bnumeric\b|\bfloat\b|\bdouble\b/.test(normalised)) return "number";
   if (/\bstring\b|\btext\b|\bidentifier\b|\burl\b|\buri\b/.test(normalised)) return "text";
-  if (name === "text" || name.endsWith("_text") || name.endsWith("_query")) return "text";
+  if (/\bobject\b|\bdict\b|\bdictionary\b|\bjson\b|\bmap\b|\bkey-value\b/.test(normalised)) return "object";
   const boundedCollection = /\b(?:up to|at most|no more than)\s+\d+|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+to\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)|\bbetween\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+and\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)|\b\d+\s*[-–]\s*\d+\b/i.test(description);
   if (boundedCollection && BOUNDED_COLLECTION_WORDS.test(normalised)) return "array";
   return "json";
