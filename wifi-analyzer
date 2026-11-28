@@ -6,6 +6,10 @@ PYTHON_BIN=python3
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   PYTHON_BIN=python
 fi
-export PYTHONPATH="$ROOT_DIR:$PYTHONPATH"
+if [ -n "${PYTHONPATH:-}" ]; then
+  export PYTHONPATH="$ROOT_DIR:$PYTHONPATH"
+else
+  export PYTHONPATH="$ROOT_DIR"
+fi
 
 exec "$PYTHON_BIN" -m wifi_analyzer_backend.cli "$@"
