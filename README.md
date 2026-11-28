@@ -86,6 +86,41 @@ The app can be explored with sample data. To run the backend in explicit demo mo
 WIFI_ANALYZER_DEMO=1 python3 wifi_analyzer_backend/server.py
 ```
 
+## Command-line interface
+
+The `wifi-analyzer` CLI is an authenticated client for the same local API used by the dashboard. It uses the installed Wi-Fi Analyzer Pro server and feature registry; it does not create synthetic observations or silently switch to demo measurements.
+
+From the repository root:
+
+```bash
+python -m wifi_analyzer_backend.cli --help
+# Or use the launcher:
+sh ./wifi-analyzer --help
+```
+
+Start the server first using the source or packaged installation instructions above. On first run, create the local owner account and store a CLI session:
+
+```bash
+python -m wifi_analyzer_backend.cli setup
+python -m wifi_analyzer_backend.cli status
+```
+
+For an existing account, use `login`; the CLI prompts for the password (and an authenticator or recovery code when MFA is enabled). Session tokens are written to the per-user configuration directory with owner-only file permissions on POSIX systems. Use `logout` to revoke the current session.
+
+Common commands:
+
+```bash
+python -m wifi_analyzer_backend.cli scan
+python -m wifi_analyzer_backend.cli scan --format csv > scan.csv
+python -m wifi_analyzer_backend.cli devices
+python -m wifi_analyzer_backend.cli diagnostics --format json
+python -m wifi_analyzer_backend.cli features list --query roaming
+python -m wifi_analyzer_backend.cli features run signal_quality --input signal.json
+python -m wifi_analyzer_backend.cli report --pretty --output report.json
+```
+
+Set `WIFI_ANALYZER_URL` when the local API is not at `http://127.0.0.1:199`. For automation, `WIFI_ANALYZER_TOKEN` supplies a bearer token without an interactive login; `WIFI_ANALYZER_TOKEN_FILE` changes the local session file location. Global options `--url`, `--token`, `--token-file` and `--timeout` are also available before the subcommand. Feature runs are authenticated and use the same server-side permissions, rate limits and subscription metering as the GUI.
+
 ## Docker deployment
 
 The recommended single-host deployment is Docker Compose:
