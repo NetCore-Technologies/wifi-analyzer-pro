@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { setImmediate } from "node:timers";
 import { createLiveStream, validateEvent } from "./liveStream.js";
 
 class FakeWebSocket {
