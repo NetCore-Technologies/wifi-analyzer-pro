@@ -27,7 +27,7 @@ export function getFeatureParameterKind(descriptor, parameterName = "") {
   if (/\bnumber\b|\bnumeric\b|\bfloat\b|\bdouble\b/.test(normalised)) return "number";
   if (/\bstring\b|\btext\b|\bidentifier\b|\burl\b|\buri\b/.test(normalised)) return "text";
   if (name === "text" || name.endsWith("_text") || name.endsWith("_query")) return "text";
-  const boundedCollection = /\b(?:up to|at most|no more than|one to|between)\s+\d+|\b\d+\s*[-–]\s*\d+\b/i.test(description);
+  const boundedCollection = /\b(?:up to|at most|no more than)\s+\d+|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+to\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)|\bbetween\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+and\s+(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)|\b\d+\s*[-–]\s*\d+\b/i.test(description);
   if (boundedCollection && BOUNDED_COLLECTION_WORDS.test(normalised)) return "array";
   return "json";
 }
