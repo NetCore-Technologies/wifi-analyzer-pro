@@ -15,6 +15,7 @@ import { Play, Search, RefreshCw, Braces, Wifi, AlertCircle, Star, Clock3 } from
 import {
   buildFeaturePayloadTemplate,
   filterFeatureCatalog,
+  getFeatureCategoryCounts,
   getFeatureParameterChoices,
   getFeatureParameterKind,
   parseFeatureParameterValue,
@@ -52,6 +53,7 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
   const [favorites, setFavorites] = useState(() => loadStoredToolIds(FAVORITES_STORAGE_KEY));
   const [recent, setRecent] = useState(() => loadStoredToolIds(RECENT_STORAGE_KEY));
   const [libraryView, setLibraryView] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [executionMs, setExecutionMs] = useState(null);
 
   const loadCatalog = async () => {
@@ -82,9 +84,16 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
     try { window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recent)); } catch { /* Storage may be disabled. */ }
   }, [recent]);
 
+  const categoryCounts = useMemo(
+    () => getFeatureCategoryCounts(catalog, { categoryTerms }),
+    [catalog, categoryTerms]
+  );
   const filtered = useMemo(
-    () => filterFeatureCatalog(catalog, { categoryTerms, query: search }),
-    [catalog, search, categoryTerms]
+    () => filterFeatureCatalog(catalog, {
+      categoryTerms: selectedCategory === 'all' ? categoryTerms : [selectedCategory],
+      query: search,
+    }),
+    [catalog, search, categoryTerms, selectedCategory]
   );
   const visibleFeatures = useMemo(() => {
     if (libraryView === 'starred') return filtered.filter(feature => favorites.includes(feature.slug));
@@ -205,6 +214,16 @@ export default function FeatureWorkbench({ title = 'Feature library', categoryTe
             {item.label} <span style={{ opacity: .72 }}>{item.count}</span>
           </button>)}
         </div>
+        <label htmlFor="feature-category-filter" style={{ display: 'block', color: '#71829a', fontSize: 10, fontWeight: 650, margin: '0 0 5px 2px' }}>CATEGORY</label>
+        <select id="feature-category-filter" value={selectedCategory}
+          onChange={event => setSelectedCategory(event.target.value)}
+          aria-label="Filter features by category"
+          style={{ ...input, marginBottom: 10, fontSize: 11 }}>
+          <option value="all">All categories · {filtered.length}</option>
+          {categoryCounts.map(item => <option key={item.category} value={item.category}>
+            {item.category} · {item.count}
+          </option>)}
+        </select>
         {visibleFeatures.map(feature => <div key={feature.slug} style={{ display: 'flex', alignItems: 'stretch', gap: 4, marginBottom: 5 }}>
           <button onClick={() => {
             setSelected(feature.slug);

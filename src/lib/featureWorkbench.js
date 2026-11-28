@@ -15,6 +15,22 @@ export function filterFeatureCatalog(features, { categoryTerms = [], query = "" 
   });
 }
 
+export function getFeatureCategoryCounts(features, { categoryTerms = [] } = {}) {
+  if (!Array.isArray(features)) return [];
+  const allowed = new Set(Array.isArray(categoryTerms) ? categoryTerms : []);
+  const counts = new Map();
+
+  for (const feature of features) {
+    if (!isRecord(feature) || typeof feature.category !== "string") continue;
+    if (allowed.size && !allowed.has(feature.category)) continue;
+    counts.set(feature.category, (counts.get(feature.category) || 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([category, count]) => ({ category, count }))
+    .sort((left, right) => left.category.localeCompare(right.category));
+}
+
 export function getFeatureParameterKind(descriptor, parameterName = "") {
   const description = String(descriptor ?? "").trim();
   const normalised = description.toLocaleLowerCase();

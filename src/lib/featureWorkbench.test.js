@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildFeaturePayloadTemplate,
   filterFeatureCatalog,
+  getFeatureCategoryCounts,
   getFeatureParameterChoices,
   getFeatureParameterKind,
   parseFeatureParameterValue,
@@ -18,6 +19,21 @@ test("feature catalogue filters by exact categories and retains stable ordering"
   const rows = filterFeatureCatalog(catalogue, { categoryTerms: ["RF planning", "Security"] });
   assert.deepEqual(rows.map(row => row.slug), ["recommend_channel", "security_rank"]);
 });
+test("category counts are stable, scoped to the workspace and ignore malformed rows", () => {
+  assert.deepEqual(getFeatureCategoryCounts(catalogue), [
+    { category: "Discovery", count: 1 },
+    { category: "RF planning", count: 1 },
+    { category: "Security", count: 1 },
+  ]);
+  assert.deepEqual(getFeatureCategoryCounts([null, "bad", ...catalogue], {
+    categoryTerms: ["Security", "RF planning"],
+  }), [
+    { category: "RF planning", count: 1 },
+    { category: "Security", count: 1 },
+  ]);
+  assert.deepEqual(getFeatureCategoryCounts(null), []);
+});
+
 test("feature catalogue search covers names, slugs, IDs, categories and descriptions", () => {
   assert.deepEqual(filterFeatureCatalog(catalogue, { query: "f030" }).map(row => row.slug), ["recommend_channel"]);
   assert.deepEqual(filterFeatureCatalog(catalogue, { query: "nearby access points" }).map(row => row.slug), ["wifi_scan"]);
